@@ -250,10 +250,17 @@ function setupAutoUpdate() {
 
   // 前端可主动触发检查
   ipcMain.on('check-for-update', () => {
-    autoUpdater.checkForUpdates()
+    autoUpdater.checkForUpdates().catch((e) => {
+      fwLog('[updater] check 失败(ipc):', e && e.message || e)
+    })
   })
 
-  setTimeout(() => autoUpdater.checkForUpdates(), 5000)  // 启动 5 秒后检查
+  // 启动 5 秒后检查（无网/更新源不通时静默失败，不再产生 unhandledRejection）
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((e) => {
+      fwLog('[updater] check 失败:', e && e.message || e)
+    })
+  }, 5000)
 }
 
 app.on('window-all-closed', () => {
