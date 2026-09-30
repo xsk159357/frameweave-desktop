@@ -33,7 +33,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "拾帧 FrameWeave",
-      "perMachine": false
+      "perMachine": false,
+      "include": "nsis-fixes.nsh"
     },
     "npmRebuild": false,
     "buildDependenciesFromSource": false,
