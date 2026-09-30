@@ -1,5 +1,6 @@
 // 左侧节点面板：搜索 + 分类 + 收藏
 import { useMemo, useState } from 'react'
+import { Star, Puzzle } from 'lucide-react'
 import { useAppStore } from './store'
 
 export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) {
@@ -81,7 +82,7 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
               onMouseEnter={(e) => { e.currentTarget.style.color = '#f5a524' }}
               onMouseLeave={(e) => { e.currentTarget.style.color = favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0') }}
               title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
-            >★</button>
+            ><Star size={13} fill={favs.includes(s.type_id) ? '#f5a524' : 'none'} color={favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0')} /></button>
           </div>
           <div style={{ fontSize: 10.5, color: dark ? '#5d6579' : '#9aa2b5', marginTop: 2, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</div>
         </div>
@@ -103,7 +104,7 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       boxShadow: 'var(--glass-inner)', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative', zIndex: 5 }}>
       <div style={{ padding: '12px 12px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontWeight: 700, fontSize: 13.5 }}>🧩 节点库</span>
+          <span style={{ fontWeight: 700, fontSize: 13.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Puzzle size={14} color="var(--accent)" /> 节点库</span>
           <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{specs.length}</span>
         </div>
         <input
@@ -117,7 +118,7 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       <div className="fw-scroll" style={{ overflow: 'auto', padding: '0 12px 14px', flex: 1 }}>
         {favs.length > 0 && (
           <div>
-            <SectionTitle>★ 常用节点</SectionTitle>
+            <SectionTitle><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Star size={10} fill="#f5a524" /> 常用节点</span></SectionTitle>
             {specs.filter(s => favs.includes(s.type_id)).map(renderItem)}
           </div>
         )}

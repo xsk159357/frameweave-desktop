@@ -1,5 +1,6 @@
 // 主应用：登录门禁 -> 工作区
 import { useEffect, useState } from 'react'
+import { FileText, Sun, Moon, RefreshCw, Store, Crown, Sparkles } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -117,7 +118,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
           border: 'var(--glass-border)', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
           boxShadow: 'var(--glass-inner)', maxWidth: 240, overflow: 'hidden' }}>
-          <span style={{ fontSize: 12 }}>📄</span>
+          <FileText size={13} style={{ color: dark ? '#8b93a9' : '#7a8499', flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: dark ? '#c6cbd8' : '#4a5264', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {workflowId}
           </span>
@@ -125,27 +126,27 @@ export default function App() {
         <span style={{ flex: 1 }} />
         {/* 右侧操作 */}
         <button className="fw-btn fw-btn-ghost" onClick={toggleDark} title="切换主题">
-          {dark ? '☀️ 亮色' : '🌙 暗色'}
+          {dark ? <><Sun size={14} /> 亮色</> : <><Moon size={14} /> 暗色</>}
         </button>
         <button className="fw-btn fw-btn-ghost"
           onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
-          🔄 更新
+          <><RefreshCw size={13} /> 更新</>
         </button>
         <button className="fw-btn fw-btn-primary" onClick={() => setShowMarket(true)}>
-          🛒 商城
+          <><Store size={14} /> 商城</>
         </button>
         {session.plan === 'member' ? (
           <span className="fw-pill" style={{
             color: dark ? '#ffd47e' : '#a06a00',
             border: '1px solid ' + (dark ? '#5a4a1a' : '#e8d48b'),
             background: dark ? '#2a2410' : '#fff8e1',
-          }}>⭐ 会员</span>
+          }}><Crown size={12} style={{ verticalAlign: '-2px' }} /> 会员</span>
         ) : (
           <span className="fw-pill" style={{
             color: dark ? '#9fb4ff' : '#3a5bd9',
             border: '1px solid ' + (dark ? '#2c3a5c' : '#c9d6f9'),
             background: dark ? '#1a2138' : '#edf2ff',
-          }}>✨ 试用 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天</span>
+          }}><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> 试用 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天</span>
         )}
         <span style={{ fontSize: 12, color: dark ? '#8b93a9' : '#7a8499', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
         <button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().setSession(null)}>退出</button>

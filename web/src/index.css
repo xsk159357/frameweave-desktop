@@ -56,7 +56,7 @@
   --border-strong: rgba(180, 195, 250, 0.36);
   --text: #e8eaf6;
   --text-dim: #a6afc9;
-  --text-faint: #5f6885;
+  --text-faint: #6d7696;
   --accent: #7b8cff;
   --accent-strong: #9aa8ff;
   --accent-soft: rgba(123, 140, 255, 0.16);
@@ -283,12 +283,34 @@ input, select, textarea { font-family: inherit; }
 .react-flow__controls { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-md); border: 1px solid var(--border); }
 .react-flow__controls button { border-bottom: var(--glass-border); background: var(--glass); color: var(--text-dim); }
 .react-flow__controls button:hover { background: var(--hover-bg); color: var(--text); }
-.react-flow__minimap {
+.react-flow__panel.react-flow__minimap {
   border-radius: var(--radius-md); overflow: hidden;
+  background: var(--glass);
   box-shadow: var(--glass-inner), var(--shadow-md);
   border: var(--glass-border); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
   position: absolute; left: auto; bottom: auto; right: 14px; top: 14px;
+  max-height: 210px;
 }
 .react-flow__minimap-mask { fill: rgba(120,130,200,.12); }
 .react-flow__edge-path { stroke-linecap: round; }
 .react-flow__attribution { display: none; }
+
+/* 通用旋转（加载/执行中） */
+.fw-spin { animation: lp-rot .9s linear infinite; }
+
+/* 键盘焦点可见（impeccable production floor） */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 减少动效偏好（taste 6.B / impeccable：mandatory） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

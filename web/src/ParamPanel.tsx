@@ -1,5 +1,6 @@
 // 右侧参数面板：参数表单 + 执行状态 + 输出资产预览
 import { useState } from 'react'
+import { Lock, Check, Zap, X, Eye } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import type { NodeSpec } from './types'
@@ -100,7 +101,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
                      marginTop: -4, textAlign: 'center', fontSize: 12, width: '100%', fontWeight: 600,
                      borderColor: dark ? '#3a4260' : '#d4d9e4', transition: 'all .18s' }}
           >
-            🔐 加密存入本机保险箱
+            <><Lock size={12} /> 加密存入本机保险箱</>
           </button>
         </div>
       )
@@ -173,7 +174,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: hColor, fontWeight: 600 }}>
-                      {h.status === 'success' ? '✓ 成功' : h.status === 'cached' ? '⚡ 缓存命中' : '✗ ' + (h.status || '失败')}
+                      {h.status === 'success' ? <><Check size={11} style={{ verticalAlign: '-2px' }} /> 成功</> : h.status === 'cached' ? <><Zap size={11} style={{ verticalAlign: '-2px' }} /> 缓存命中</> : <><X size={11} style={{ verticalAlign: '-2px' }} /> {h.status || '失败'}</>}
                     </span>
                     <span style={{ color: '#8b93a9' }}>{t}</span>
                   </div>
@@ -200,7 +201,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
               color: dark ? '#e8eaf2' : '#1f2430', fontSize: 12, transition: 'all .18s',
             }}
           >
-            👁 预览 {port}（{aid.slice(0, 8)}）
+            <><Eye size={13} style={{ verticalAlign: '-2px', marginRight: 2 }} /> 预览 {port}（{aid.slice(0, 8)}）</>
           </button>
         </div>
       ))}

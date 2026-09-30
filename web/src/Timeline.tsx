@@ -1,6 +1,7 @@
 // 时间线 v0：多轨（视频/音频/字幕）+ 缩放 + 播放头联动
 // 数据源：选中节点的 SEGMENTS 资产（片段列表），M0 以只读预览为主
 import { useEffect, useRef, useState } from 'react'
+import { Play, Pause } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -52,12 +53,12 @@ export function Timeline({ nodeId }: { nodeId: string }) {
       display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       {/* 工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
-        borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), background: dark ? '#161a26' : '#fff' }}>
+        borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), background: 'transparent' }}>
         <button onClick={togglePlay} style={{
           padding: '4px 12px', borderRadius: 9, border: '1px solid ' + (dark ? '#333a50' : '#dde2ec'),
           background: dark ? '#1e2230' : '#f5f6fb', color: dark ? '#e8eaf2' : '#1f2430', cursor: 'pointer',
           fontSize: 12, transition: 'all .18s',
-        }}>{playingRef.current ? '⏸ 暂停' : '▶ 播放'}</button>
+        }}>{playingRef.current ? <><Pause size={12} /> 暂停</> : <><Play size={12} /> 播放</>}</button>
         <input type="range" min={10} max={80} value={scale}
           onChange={(e) => setScale(+e.target.value)}
           style={{ width: 120, accentColor: 'var(--accent)' }} />
@@ -73,7 +74,7 @@ export function Timeline({ nodeId }: { nodeId: string }) {
         <div style={{ width: px(seconds) + 40, minWidth: '100%', position: 'relative' }}>
           {/* 标尺 */}
           <div style={{ height: 20, borderBottom: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-            display: 'flex', position: 'sticky', top: 0, background: dark ? '#12141c' : '#f8f9fb', zIndex: 2 }}>
+            display: 'flex', position: 'sticky', top: 0, background: 'var(--bg-panel-2)', zIndex: 2 }}>
             {Array.from({ length: seconds }).map((_, i) => (
               <div key={i} style={{ position: 'absolute', left: px(i), fontSize: 9, color: '#8b93a9' }}>
                 {i}s
@@ -106,7 +107,7 @@ export function Timeline({ nodeId }: { nodeId: string }) {
           </div>
 
           {/* 字幕轨 */}
-          <div style={{ height: 30, position: 'relative', background: dark ? '#1a1d29' : '#fff',
+          <div style={{ height: 30, position: 'relative', background: 'var(--bg-panel-2)',
             border: '1px dashed ' + (dark ? '#2c3142' : '#e2e6ee'), borderRadius: 4,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 11, color: '#8b93a9' }}>

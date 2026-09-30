@@ -1,5 +1,6 @@
 // 自定义画布节点组件
 import { Fragment, memo } from 'react'
+import { AlertTriangle, PencilLine } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FlowNodeData } from '../types'
 import { useAppStore } from '../store'
@@ -66,12 +67,12 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       </div>
       {hasDiff && (
         <div style={{ fontSize: 10, color: '#b8860b', marginBottom: 4, wordBreak: 'break-all', lineHeight: 1.5 }}>
-          ⚑ 已改: {diffKeys.join(', ')}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><PencilLine size={10} /> 已改</span>: {diffKeys.join(', ')}
         </div>
       )}
       {error && (
         <div style={{ color: '#e5484d', fontSize: 11, marginBottom: 4, wordBreak: 'break-all' }}>
-          ⚠ {error}
+          <><AlertTriangle size={11} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</>
         </div>
       )}
       {status === 'running' && progress !== undefined && (

@@ -1,5 +1,6 @@
 // 批量结果面板：读取 batch_render 的 results 资产，展示成功/失败 + 重试 + 打开文件
 import { useEffect, useState } from 'react'
+import { Package, Loader2, RotateCcw, X, FolderOpen, AlertCircle, Check, XCircle } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -61,21 +62,21 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
       maxHeight: 210, overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>📦 批量结果</span>
+        <span style={{ fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Package size={14} /> 批量结果</span>
         {items.length > 0 && (
           <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
             {okCount}/{items.length} 成功{failed.length > 0 ? ' · ' + failed.length + ' 失败' : ''}
           </span>
         )}
-        {isRunning && <span style={{ fontSize: 12, color: '#f5a524' }}>⏳ 批量执行中…</span>}
+        {isRunning && <span style={{ fontSize: 12, color: '#f5a524', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Loader2 size={12} className="fw-spin" /> 批量执行中…</span>}
         <span style={{ flex: 1 }} />
         {failed.length > 0 && batchNodeId && (
-          <button onClick={() => onRetry(batchNodeId)} className="fw-btn fw-btn-danger" style={{ padding: '5px 12px', fontSize: 12 }}>🔄 重试失败项</button>
+          <button onClick={() => onRetry(batchNodeId)} className="fw-btn fw-btn-danger" style={{ padding: '5px 12px', fontSize: 12 }}><><RotateCcw size={12} /> 重试失败项</></button>
         )}
-        <button onClick={onClose} className="fw-btn fw-btn-ghost" style={{ padding: '5px 9px', fontSize: 13 }}>✕</button>
+        <button onClick={onClose} className="fw-btn fw-btn-ghost" style={{ padding: '5px 9px', fontSize: 13 }}><X size={14} /></button>
       </div>
       {loading && <div style={{ fontSize: 12, color: '#8b93a9' }}>读取结果…</div>}
-      {error && <div style={{ fontSize: 12, color: '#e5484d' }}>⚠ {error}</div>}
+      {error && <div style={{ fontSize: 12, color: '#e5484d' }}><><AlertCircle size={12} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</></div>}
       {!loading && !error && items.length === 0 && !isRunning && (
         <div style={{ fontSize: 12, color: '#8b93a9' }}>暂无结果（连接批量出片节点并执行后展示）</div>
       )}
@@ -86,7 +87,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
           background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
           border: 'var(--glass-border)', transition: 'all .15s',
         }}>
-          <span style={{ color: it.ok ? '#30a46c' : '#e5484d', width: 18 }}>{it.ok ? '✓' : '✗'}</span>
+          <span style={{ color: it.ok ? '#30a46c' : '#e5484d', width: 18, display: 'inline-flex', justifyContent: 'center' }}>{it.ok ? <Check size={13} /> : <XCircle size={13} />}</span>
           <span style={{ fontWeight: 600 }}>{it.name}</span>
           {it.ok ? (
             <>
@@ -101,7 +102,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
                   padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
                   border: '1px solid ' + (dark ? '#3a4157' : '#dfe4ee'), background: dark ? '#2c3142' : '#fff',
                   color: dark ? '#e8eaf2' : '#1f2430', flexShrink: 0,
-                }}>📂 定位</button>
+                }}><><FolderOpen size={11} /> 定位</></button>
               )}
             </>
           ) : (

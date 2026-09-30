@@ -4,6 +4,7 @@ import {
   ReactFlow, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, type Connection, type Edge,
 } from '@xyflow/react'
+import { Play, Loader2, ArrowDown, Save, AlertTriangle, RotateCcw } from 'lucide-react'
 import { api, connectWS } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData } from './types'
@@ -287,10 +288,10 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             boxShadow: running ? '0 2px 10px rgba(245,165,36,.35)' : '0 2px 10px rgba(79,110,247,.35)',
           }}
         >
-          {running ? '⏳ 执行中…' : '▶ 一键出片'}
+          {running ? <><Loader2 size={15} className="fw-spin" /> 执行中…</> : <><Play size={15} /> 一键出片</>}
         </button>
-        <button style={btn} onClick={() => run('downstream')}>⬇ 仅下游</button>
-        <button style={btn} onClick={save}>{saving ? '保存中…' : '💾 保存'}</button>
+        <button style={btn} onClick={() => run('downstream')}><ArrowDown size={13} /> 仅下游</button>
+        <button style={btn} onClick={save}>{saving ? '保存中…' : <><Save size={13} /> 保存</>}</button>
         {running && (() => {
           const vals = Object.values(nodeProgress).filter((v) => v !== undefined && v !== null)
           const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
@@ -306,7 +307,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
         })()}
         {lastError && (
           <span style={{ fontSize: 11, color: '#e5484d', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: dark ? 'rgba(229,72,77,.12)' : '#fdecec', padding: '3px 9px', borderRadius: 999 }} title={lastError}>
-            ⚠ {lastError}
+            <><AlertTriangle size={12} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {lastError}</>
           </span>
         )}
         <div style={sep} />
@@ -335,7 +336,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
           >
             <Background gap={20} color={dark ? '#2c3142' : '#e2e6ee'} />
             <Controls />
-            <MiniMap pannable zoomable style={{ background: dark ? '#1a1d29' : '#fff' }} />
+            <MiniMap pannable zoomable style={{ background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
           </ReactFlow>
         </div>
         {selectedNodeId && (() => {
@@ -363,20 +364,20 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             <div style={{ padding: '4px 12px', fontSize: 11, color: '#8b93a9' }}>{n?.data?.title || menu.nodeId}</div>
             <div style={{ height: 1, background: dark ? '#2c3142' : '#e2e6ee', margin: '2px 0' }} />
             <div style={{ ...itemStyle, ...itemHover }} onClick={() => { setMenu(null); run('selection', [menu.nodeId]) }}>
-              ▶ 单独运行
+              <><Play size={13} /> 单独运行</>
               <span style={{ fontSize: 10, color: '#8b93a9', marginLeft: 6 }}>仅重跑此节点</span>
             </div>
             <div style={itemStyle} onClick={() => { setMenu(null); run('downstream', [menu.nodeId]) }}
               onMouseEnter={(e) => { e.currentTarget.style.background = itemHover.background }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
-              ⬇ 运行下游
+              <><ArrowDown size={13} /> 运行下游</>
               <span style={{ fontSize: 10, color: '#8b93a9', marginLeft: 6 }}>从该节点向后</span>
             </div>
             <div style={itemStyle}
               onClick={() => { setMenu(null); resetNode(menu.nodeId) }}
               onMouseEnter={(e) => { e.currentTarget.style.background = itemHover.background }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
-              ↺ 重置状态
+              <><RotateCcw size={13} /> 重置状态</>
               <span style={{ fontSize: 10, color: '#8b93a9', marginLeft: 6 }}>强制下次重算</span>
             </div>
           </div>
