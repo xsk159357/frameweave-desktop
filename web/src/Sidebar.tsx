@@ -75,8 +75,8 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
 
   return (
     <div style={{ width: 264, borderRight: 'var(--glass-border)',
-      background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative', zIndex: 5 }}>
+      background: 'linear-gradient(180deg, var(--glass-strong), var(--glass))', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      boxShadow: 'var(--glass-inner)', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative', zIndex: 5 }}>
       <div style={{ padding: '12px 12px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <span style={{ fontWeight: 700, fontSize: 13.5 }}>🧩 节点库</span>

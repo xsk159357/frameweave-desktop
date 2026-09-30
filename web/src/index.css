@@ -1,13 +1,13 @@
 :root {
   /* 玻璃拟态 token（浅色） */
-  --bg: #eef0fa;
-  --bg-grad: radial-gradient(1200px 700px at 12% 0%, #e9ecff 0%, transparent 55%), radial-gradient(1000px 700px at 95% 15%, #fdf0ff 0%, transparent 50%), linear-gradient(160deg, #eef0fa, #e7e9f7);
-  --bg-panel: rgba(255, 255, 255, 0.62);
-  --bg-panel-2: rgba(255, 255, 255, 0.44);
-  --glass: rgba(255, 255, 255, 0.5);
-  --glass-strong: rgba(255, 255, 255, 0.72);
-  --border: rgba(255, 255, 255, 0.55);
-  --border-strong: rgba(140, 150, 190, 0.35);
+  --bg: #dfe4f8;
+  --bg-grad: radial-gradient(1100px 650px at 8% 0%, #c3ccff 0%, rgba(195,204,255,0) 52%), radial-gradient(900px 620px at 96% 10%, #f3c4ff 0%, rgba(243,196,255,0) 48%), radial-gradient(800px 600px at 55% 108%, #bfe0ff 0%, rgba(191,224,255,0) 50%), linear-gradient(160deg, #dfe4f8, #d5daf3);
+  --bg-panel: rgba(255, 255, 255, 0.5);
+  --bg-panel-2: rgba(255, 255, 255, 0.36);
+  --glass: rgba(255, 255, 255, 0.42);
+  --glass-strong: rgba(255, 255, 255, 0.6);
+  --border: rgba(255, 255, 255, 0.75);
+  --border-strong: rgba(120, 130, 180, 0.45);
   --text: #232a3d;
   --text-dim: #6b7490;
   --text-faint: #9aa3bd;
@@ -32,12 +32,12 @@
   /* 玻璃专用 */
   --glass-blur: blur(18px) saturate(160%);
   --glass-border: 1px solid rgba(255, 255, 255, 0.55);
-  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.72), inset 0 -1px 0 rgba(120, 130, 200, 0.1);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-pill: 999px;
-  --shadow-sm: 0 2px 6px rgba(80, 90, 140, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --shadow-sm: 0 2px 8px rgba(80, 90, 140, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --shadow-md: 0 8px 24px rgba(80, 90, 140, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --shadow-lg: 0 24px 64px rgba(80, 90, 140, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --hover-bg: rgba(255, 255, 255, 0.5);
@@ -46,14 +46,14 @@
   --focus-ring: 0 0 0 3px rgba(91, 108, 247, 0.22);
 }
 .dark {
-  --bg: #0d1020;
-  --bg-grad: radial-gradient(1200px 700px at 12% 0%, rgba(88, 108, 255, 0.16) 0%, transparent 55%), radial-gradient(1000px 700px at 95% 15%, rgba(180, 100, 255, 0.12) 0%, transparent 50%), linear-gradient(160deg, #0d1020, #10131f);
-  --bg-panel: rgba(26, 30, 48, 0.55);
-  --bg-panel-2: rgba(30, 34, 54, 0.5);
-  --glass: rgba(28, 32, 52, 0.6);
-  --glass-strong: rgba(32, 37, 60, 0.78);
-  --border: rgba(150, 165, 220, 0.18);
-  --border-strong: rgba(160, 175, 235, 0.28);
+  --bg: #0a0d1e;
+  --bg-grad: radial-gradient(1100px 650px at 8% 0%, rgba(96, 116, 255, 0.32) 0%, rgba(96,116,255,0) 52%), radial-gradient(900px 620px at 96% 10%, rgba(196, 108, 255, 0.26) 0%, rgba(196,108,255,0) 48%), radial-gradient(800px 600px at 55% 108%, rgba(70, 140, 255, 0.22) 0%, rgba(70,140,255,0) 50%), linear-gradient(160deg, #0a0d1e, #0e1223);
+  --bg-panel: rgba(30, 34, 56, 0.5);
+  --bg-panel-2: rgba(34, 38, 62, 0.42);
+  --glass: rgba(44, 50, 84, 0.5);
+  --glass-strong: rgba(40, 46, 78, 0.66);
+  --border: rgba(170, 185, 240, 0.26);
+  --border-strong: rgba(180, 195, 250, 0.36);
   --text: #e8eaf6;
   --text-dim: #a6afc9;
   --text-faint: #5f6885;
@@ -77,7 +77,7 @@
   --toast-ok-bg: rgba(47, 162, 107, 0.16);
   --glass-blur: blur(20px) saturate(150%);
   --glass-border: 1px solid rgba(150, 165, 220, 0.18);
-  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
@@ -146,7 +146,8 @@ input, select, textarea { font-family: inherit; }
 .lp-btn-theme:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
 .lp-card-wrap { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; padding: 48px 24px; }
 .lp-card {
-  width: 400px; max-width: 92vw; background: var(--bg-panel); border: 1px solid var(--border);
+  width: 400px; max-width: 92vw; background: var(--glass-strong); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border); box-shadow: var(--glass-inner), var(--card-shadow);
   border-radius: 18px; padding: 34px 32px;
   box-shadow: var(--card-shadow);
 }
@@ -155,7 +156,8 @@ input, select, textarea { font-family: inherit; }
 .lp-card-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; }
 .lp-seg {
   display: flex; margin-bottom: 22px; border-radius: 10px; padding: 4px;
-  background: var(--bg-panel-2); border: 1px solid var(--border); position: relative;
+  background: var(--glass); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border); box-shadow: var(--glass-inner); position: relative;
 }
 .lp-seg-btn {
   flex: 1; padding: 8px 0; border: none; background: transparent; border-radius: 7px;
@@ -271,7 +273,7 @@ input, select, textarea { font-family: inherit; }
 
 /* ReactFlow 画布背景更精致 */
 .react-flow__controls { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-md); border: 1px solid var(--border); }
-.react-flow__controls button { border-bottom: 1px solid var(--border); background: var(--bg-panel); color: var(--text-dim); }
+.react-flow__controls button { border-bottom: var(--glass-border); background: var(--glass); color: var(--text-dim); }
 .react-flow__controls button:hover { background: var(--hover-bg); color: var(--text); }
 .react-flow__minimap { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-md); border: 1px solid var(--border); }
 .react-flow__edge-path { stroke-linecap: round; }
