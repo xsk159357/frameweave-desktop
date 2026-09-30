@@ -13,12 +13,24 @@ from typing import Optional
 
 CLOUD_URL = os.environ.get("FRAMEWEAVE_CLOUD_URL", "").rstrip("/")
 
+def _dbg(msg: str) -> None:
+    try:
+        import os as _os
+        _log = _os.environ.get("FRAMEWEAVE_DEBUG_LOG", "")
+        if _log:
+            import datetime
+            with open(_log, "a", encoding="utf-8") as _f:
+                _f.write(datetime.datetime.now().isoformat() + " " + msg + "\n")
+    except Exception:
+        pass
+
 
 def cloud_enabled() -> bool:
     return bool(CLOUD_URL)
 
 
 def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
+    _dbg("CLOUD_URL=%r enabled=%s path=%s" % (CLOUD_URL, cloud_enabled(), path))
     if not cloud_enabled():
         return None
     try:
@@ -27,8 +39,11 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
                                      headers={"Content-Type": "application/json"},
                                      method="POST")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode() or "{}")
-    except Exception:  # noqa: BLE001
+            _body = json.loads(resp.read().decode() or "{}")
+            _dbg("CLOUD_OK path=%s resp=%s" % (path, str(_body)[:200]))
+            return _body
+    except Exception as _e:  # noqa: BLE001
+        _dbg("CLOUD_ERR path=%s err=%s" % (path, repr(_e)))
         return None  # 云端不可达：本地桩回落（正式版这里应视为离线不允许使用）
 
 

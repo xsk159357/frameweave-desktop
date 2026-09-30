@@ -16,6 +16,7 @@ release/
 
 # ===== 运行数据（本地桩用户数据：账号/卡密/工作流/资产/缓存索引） =====
 backend/data/
+backend/cloud.db
 
 # ===== 缓存目录 =====
 .cache/
