@@ -1,0 +1,50 @@
+# ===== 依赖 =====
+node_modules/
+backend/.venv/
+
+# ===== 运行资产（大模型权重，运行期下载/生成，不进版本库） =====
+backend/models/
+
+# ===== 构建产物 =====
+web/dist/
+desktop/dist/
+backend/packaging/build/
+backend/packaging/dist/
+
+# ===== 发布包（安装包/blockmap/更新源） =====
+release/
+
+# ===== 运行数据（本地桩用户数据：账号/卡密/工作流/资产/缓存索引） =====
+backend/data/
+
+# ===== 缓存目录 =====
+.cache/
+.dl/
+.electron-cache/
+.npm-cache/
+.pipcache/
+.uvcache/
+.wheels/
+.tmp/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 日志 =====
+*.log
+
+# ===== 系统 / IDE =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ===== 根目录一次性环境/下载脚本（保留历史即可，不进版本库） =====
+.dl_torch.py
+.download_*.cjs
+.infer_test.py
+.pip_verbose.py
+.test_popen.py
+.vt.py
