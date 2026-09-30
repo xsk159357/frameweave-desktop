@@ -34,15 +34,16 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
 
   const styles = {
     panel: {
-      width: 320, borderLeft: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-      background: dark ? '#1a1d29' : '#fff', padding: 14, overflow: 'auto', flexShrink: 0,
+      width: 324, borderLeft: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
+      background: dark ? '#161a26' : '#fff', padding: 16, overflowY: 'auto', flexShrink: 0,
     },
-    label: { fontSize: 12, color: '#8b93a9', marginBottom: 4 },
+    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: dark ? '#8b93a9' : '#7a8499', margin: '14px 0 7px', textTransform: 'uppercase' as const },
     input: {
-      width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 13,
-      border: '1px solid ' + (dark ? '#39415a' : '#d4d9e4'),
-      background: dark ? '#22263a' : '#f8f9fb', color: dark ? '#e8eaf2' : '#1f2430',
-      marginBottom: 10, boxSizing: 'border-box' as const,
+      width: '100%', padding: '7px 10px', borderRadius: 9, fontSize: 13,
+      border: '1px solid ' + (dark ? '#333a50' : '#d4d9e4'),
+      background: dark ? '#10131d' : '#f8f9fb', color: dark ? '#e8eaf2' : '#1f2430',
+      marginBottom: 10, boxSizing: 'border-box' as const, outline: 'none',
+      transition: 'border-color .18s, box-shadow .18s',
     },
   }
 
@@ -94,8 +95,9 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
                 alert('已加密存入本机保险箱，参数已改为引用 ' + '@secret:' + secName)
               } catch (e: any) { alert('存入失败: ' + e.message) }
             }}
-            style={{ ...styles.input, background: dark ? '#2c3142' : '#eef1f8', cursor: 'pointer',
-                     marginTop: -4, textAlign: 'center', fontSize: 12, width: '100%' }}
+            style={{ ...styles.input, background: dark ? '#262c3d' : '#eef1f8', cursor: 'pointer',
+                     marginTop: -4, textAlign: 'center', fontSize: 12, width: '100%', fontWeight: 600,
+                     borderColor: dark ? '#3a4260' : '#d4d9e4', transition: 'all .18s' }}
           >
             🔐 加密存入本机保险箱
           </button>
@@ -113,24 +115,30 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
 
   return (
     <div style={styles.panel}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-        {spec?.title || '节点'} <span style={{ fontSize: 12, color: '#8b93a9', fontWeight: 400 }}>#{nodeId}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>{spec?.title || '节点'}</span>
+        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
       </div>
-      <div style={{ fontSize: 11, color: '#8b93a9', marginBottom: 12 }}>
-        {spec?.type_id} · {spec?.description || ''}
+      <div style={{ fontSize: 11, color: dark ? '#5d6579' : '#9aa2b5', marginBottom: 4, lineHeight: 1.5 }}>
+        {spec?.type_id}
       </div>
+      {spec?.description && (
+        <div style={{ fontSize: 11.5, color: dark ? '#8b93a9' : '#7a8499', marginBottom: 12, lineHeight: 1.55 }}>{spec.description}</div>
+      )}
 
       {/* 执行状态 */}
       <div style={styles.label}>执行状态</div>
-      <div style={{
-        fontSize: 13, marginBottom: 8, padding: '2px 0',
-        color: status === 'success' ? '#2e9e5b' : status === 'failed' ? '#e5484d'
-          : status === 'running' ? '#4f6ef7' : dark ? '#e8eaf2' : '#1f2430',
-      }}>
-        {status}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%',
+          background: status === 'success' ? '#30a46c' : status === 'failed' ? '#e5484d'
+            : status === 'running' ? '#f5a524' : status === 'cached' ? '#6d8aff' : dark ? '#5d6579' : '#a2aabd',
+          boxShadow: '0 0 0 3px ' + (status === 'success' ? 'rgba(48,164,108,.18)' : status === 'failed' ? 'rgba(229,72,77,.18)' : 'transparent') }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: status === 'success' ? '#30a46c' : status === 'failed' ? '#e5484d' : status === 'running' ? '#f5a524' : status === 'cached' ? '#6d8aff' : dark ? '#e8eaf2' : '#1f2430' }}>
+          {status}
+        </span>
       </div>
       {error && (
-        <div style={{ color: '#e5484d', fontSize: 12, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{error}</div>
+        <div style={{ color: '#e5484d', fontSize: 12, marginBottom: 10, whiteSpace: 'pre-wrap', background: dark ? 'rgba(229,72,77,.1)' : '#fdecec', borderRadius: 9, padding: '8px 10px', lineHeight: 1.5 }}>{error}</div>
       )}
 
       {/* 参数表单 */}
@@ -186,9 +194,9 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
           <button
             onClick={() => loadPreview(aid)}
             style={{
-              padding: '6px 10px', borderRadius: 6, width: '100%', textAlign: 'left', cursor: 'pointer',
-              border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'), background: dark ? '#22263a' : '#f4f6fb',
-              color: dark ? '#e8eaf2' : '#1f2430', fontSize: 12,
+              padding: '8px 10px', borderRadius: 9, width: '100%', textAlign: 'left', cursor: 'pointer',
+              border: '1px solid ' + (dark ? '#333a50' : '#e2e6ee'), background: dark ? '#1e2230' : '#f5f6fb',
+              color: dark ? '#e8eaf2' : '#1f2430', fontSize: 12, transition: 'all .18s',
             }}
           >
             👁 预览 {port}（{aid.slice(0, 8)}）

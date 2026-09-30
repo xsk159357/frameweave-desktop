@@ -31,54 +31,83 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       key={s.type_id}
       onClick={() => onAddNode(s.type_id)}
       style={{
-        padding: '8px 10px', marginBottom: 4, borderRadius: 6, cursor: 'pointer',
-        background: dark ? '#22263a' : '#f4f6fb', border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-        transition: 'all .15s',
+        padding: '8px 10px', marginBottom: 5, borderRadius: 10, cursor: 'pointer',
+        background: dark ? '#1a1e2c' : '#ffffff',
+        border: '1px solid ' + (dark ? '#262c3d' : '#e6eaf2'),
+        boxShadow: dark ? 'none' : '0 1px 2px rgba(31,36,48,.04)',
+        transition: 'all .18s ease',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4f6ef7' }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = dark ? '#2c3142' : '#e2e6ee' }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--accent)'
+        e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+        e.currentTarget.style.transform = 'translateY(-1px)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = dark ? '#262c3d' : '#e6eaf2'
+        e.currentTarget.style.boxShadow = dark ? 'none' : '0 1px 2px rgba(31,36,48,.04)'
+        e.currentTarget.style.transform = 'translateY(0)'
+      }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600 }}>{s.title}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>{s.title}</span>
         <button
           onClick={(e) => { e.stopPropagation(); toggleFav(s.type_id) }}
-          style={{ background: 'none', border: 'none', fontSize: 14, color: favs.includes(s.type_id) ? '#f5a524' : '#8b93a9' }}
-          title="收藏"
+          style={{
+            background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', flexShrink: 0,
+            color: favs.includes(s.type_id) ? '#f5a524' : dark ? '#4a5264' : '#b6bdd0',
+            transition: 'color .15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#f5a524' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0') }}
+          title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
         >★</button>
       </div>
-      <div style={{ fontSize: 11, color: '#8b93a9', marginTop: 2 }}>{s.type_id}</div>
+      <div style={{ fontSize: 11, color: dark ? '#5d6579' : '#9aa2b5', marginTop: 3, fontFamily: 'Consolas, monospace' }}>{s.type_id}</div>
+    </div>
+  )
+
+  const SectionTitle = ({ children, extra }: { children: React.ReactNode; extra?: string }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 2px 8px' }}>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .5, color: dark ? '#8b93a9' : '#7a8499', textTransform: 'uppercase' }}>{children}</span>
+      {extra && <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{extra}</span>}
+      <span style={{ flex: 1, height: 1, background: dark ? '#1d2130' : '#e8ebf3' }} />
     </div>
   )
 
   return (
-    <div style={{ width: 260, borderRight: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-      background: dark ? '#12141c' : '#f8f9fb', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <div style={{ padding: 12 }}>
+    <div style={{ width: 264, borderRight: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
+      background: dark ? '#12141c' : '#f6f7fb', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{ padding: '12px 12px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <span style={{ fontWeight: 700, fontSize: 13.5 }}>🧩 节点库</span>
+          <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{specs.length}</span>
+        </div>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="🔍 搜索节点..."
-          style={{
-            width: '100%', padding: '8px 10px', borderRadius: 6,
-            border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-            background: dark ? '#1a1d29' : '#fff', color: dark ? '#e8eaf2' : '#1f2430',
-          }}
+          placeholder="搜索节点…"
+          className="fw-input"
+          style={{ paddingLeft: 30, backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2214%22 height=%2214%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%238b93a9%22 stroke-width=%222%22><circle cx=%2211%22 cy=%2211%22 r=%227%22/><path d=%22M21 21l-4.3-4.3%22/></svg>')", backgroundRepeat: 'no-repeat', backgroundPosition: '10px center' }}
         />
       </div>
-      <div style={{ overflow: 'auto', padding: '0 12px 12px', flex: 1 }}>
+      <div className="fw-scroll" style={{ overflow: 'auto', padding: '0 12px 14px', flex: 1 }}>
         {favs.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: '#8b93a9', fontWeight: 600, marginBottom: 6 }}>★ 常用节点</div>
+          <div>
+            <SectionTitle>★ 常用节点</SectionTitle>
             {specs.filter(s => favs.includes(s.type_id)).map(renderItem)}
           </div>
         )}
         {categories.map(([cat, items]) => (
-          <div key={cat} style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: '#8b93a9', fontWeight: 600, marginBottom: 6 }}>{cat}</div>
+          <div key={cat}>
+            <SectionTitle extra={String(items.length)}>{cat}</SectionTitle>
             {items.map(renderItem)}
           </div>
         ))}
-        {categories.length === 0 && <div style={{ color: '#8b93a9', fontSize: 12, padding: 12 }}>无匹配节点</div>}
+        {categories.length === 0 && (
+          <div style={{ color: dark ? '#5d6579' : '#9aa2b5', fontSize: 12, padding: '20px 4px', textAlign: 'center' }}>
+            无匹配节点
+          </div>
+        )}
       </div>
     </div>
   )

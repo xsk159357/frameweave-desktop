@@ -47,21 +47,22 @@ export function Timeline({ nodeId }: { nodeId: string }) {
   const seconds = Math.ceil(totalDur || 60)
 
   return (
-    <div style={{ height: 200, borderTop: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-      background: dark ? '#12141c' : '#f8f9fb', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+    <div style={{ height: 200, borderTop: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
+      background: dark ? '#12141c' : '#f6f7fb', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       {/* 工具栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px',
-        borderBottom: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee') }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
+        borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), background: dark ? '#161a26' : '#fff' }}>
         <button onClick={togglePlay} style={{
-          padding: '4px 10px', borderRadius: 4, border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-          background: dark ? '#22263a' : '#fff', color: dark ? '#e8eaf2' : '#1f2430', cursor: 'pointer',
+          padding: '4px 12px', borderRadius: 9, border: '1px solid ' + (dark ? '#333a50' : '#dde2ec'),
+          background: dark ? '#1e2230' : '#f5f6fb', color: dark ? '#e8eaf2' : '#1f2430', cursor: 'pointer',
+          fontSize: 12, transition: 'all .18s',
         }}>{playingRef.current ? '⏸ 暂停' : '▶ 播放'}</button>
         <input type="range" min={10} max={80} value={scale}
           onChange={(e) => setScale(+e.target.value)}
-          style={{ width: 120 }} />
-        <span style={{ fontSize: 11, color: '#8b93a9' }}>{scale}px/s</span>
+          style={{ width: 120, accentColor: 'var(--accent)' }} />
+        <span style={{ fontSize: 11, color: dark ? '#5d6579' : '#9aa2b5' }}>{scale}px/s</span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: '#8b93a9' }}>
+        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
           {nodeId} · {clips.length} 片段 · {totalDur.toFixed(1)}s
         </span>
       </div>
@@ -80,16 +81,17 @@ export function Timeline({ nodeId }: { nodeId: string }) {
           </div>
 
           {/* 视频轨 */}
-          <div style={{ height: 54, margin: '4px 0', position: 'relative', background: dark ? '#1a1d29' : '#fff',
-            border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'), borderRadius: 4 }}>
+          <div style={{ height: 54, margin: '4px 0', position: 'relative', background: dark ? '#181c29' : '#fff',
+            border: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), borderRadius: 10, boxShadow: 'var(--shadow-sm)' }}>
             {clips.map((c) => (
               <div key={c.index} title={`#${c.index} ${c.start}s-${c.end}s`}
                 style={{
                   position: 'absolute', left: px(c.start), width: Math.max(px(c.duration), 8),
-                  top: 8, bottom: 8, borderRadius: 3, cursor: 'pointer',
-                  background: dark ? 'rgba(79,110,247,.25)' : 'rgba(79,110,247,.12)',
-                  border: '1px solid #4f6ef7', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: 10, color: '#4f6ef7', overflow: 'hidden',
+                  top: 7, bottom: 7, borderRadius: 6, cursor: 'pointer',
+                  background: 'linear-gradient(180deg, rgba(109,138,255,.34), rgba(79,110,247,.18))',
+                  border: '1px solid rgba(109,138,255,.55)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: 10, color: dark ? '#a9b8ff' : '#3a5bd9', overflow: 'hidden',
+                  fontWeight: 600, boxShadow: '0 1px 3px rgba(31,36,48,.08)', transition: 'filter .15s',
                 }}>
                 #{c.index}
               </div>

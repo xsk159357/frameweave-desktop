@@ -43,13 +43,15 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       }}
       onDoubleClick={(e) => { e.stopPropagation(); dbl(id) }}
       style={{
-        position: 'relative', width: 200, background: dark ? '#1a1d29' : '#fff',
-        border: '1px solid ' + (selected ? '#4f6ef7' : (dark ? '#2c3142' : '#e2e6ee')),
-        borderTop: '3px solid ' + color,
-        borderRadius: 8, boxShadow: selected ? '0 0 0 2px rgba(79,110,247,.25)' : '0 1px 3px rgba(0,0,0,.08)',
-        padding: 10, fontSize: 12, color: dark ? '#e8eaf2' : '#1f2430',
+        position: 'relative', width: 200, background: dark ? '#181c29' : '#fff',
+        border: '1px solid ' + (selected ? 'var(--accent)' : (dark ? '#2c3142' : '#e4e8f0')),
+        borderRadius: 12, boxShadow: selected ? '0 0 0 2px var(--input-focus-ring)' : 'var(--shadow-sm)',
+        padding: '11px 11px 13px', fontSize: 12, color: dark ? '#e8eaf2' : '#1f2430',
+        overflow: 'hidden', transition: 'box-shadow .18s, border-color .18s',
       }}
     >
+      {/* 顶部渐变状态条 */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, ' + color + ' 0%, ' + color + '88 100%)', opacity: .9, pointerEvents: 'none' }} />
       <div style={{ fontWeight: 600, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
         <span>{title}
           {hasDiff && (
@@ -60,7 +62,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             </span>
           )}
         </span>
-        <span style={{ fontSize: 10, color: '#8b93a9' }}>{category}</span>
+        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{category}</span>
       </div>
       {hasDiff && (
         <div style={{ fontSize: 10, color: '#b8860b', marginBottom: 4, wordBreak: 'break-all', lineHeight: 1.5 }}>
@@ -78,9 +80,14 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         </div>
       )}
       {status !== 'pending' && status !== 'running' && (
-        <div style={{ fontSize: 10, color: '#8b93a9' }}>
-          {statusText[status] || status}
-          {Object.keys(asset_ids).length > 0 ? ' · ' + Object.keys(asset_ids).length + ' 输出' : ''}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: dark ? '#8b93a9' : '#7a8499' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+          <span>{statusText[status] || status}</span>
+          {Object.keys(asset_ids).length > 0 && (
+            <span className="fw-badge" style={{ marginLeft: 'auto', background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
+              {Object.keys(asset_ids).length} 输出
+            </span>
+          )}
         </div>
       )}
       {/* 输入端口：多端口垂直分布 + 名称标签 + hover 放大 + 类型提示 */}

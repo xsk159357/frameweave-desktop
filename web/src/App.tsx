@@ -93,47 +93,61 @@ export default function App() {
       background: dark ? '#12141c' : '#f8f9fb', color: dark ? '#e8eaf2' : '#1f2430' }}>
       {/* 顶栏 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
-        borderBottom: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-        background: dark ? '#1a1d29' : '#fff', flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 52,
+        borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
+        background: dark ? '#161a26' : '#ffffff', flexShrink: 0,
+        boxShadow: '0 1px 0 rgba(0,0,0,.02)',
       }}>
-        <span style={{ fontWeight: 700, fontSize: 16 }}>拾帧 FrameWeave</span>
-        <span style={{ fontSize: 12, color: '#8b93a9' }}>工作流 · {workflowId}</span>
-        <span style={{ flex: 1 }} />
-        <button onClick={toggleDark} style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-          border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-          background: dark ? '#22263a' : '#f4f6fb', color: dark ? '#e8eaf2' : '#1f2430',
-        }}>{dark ? '☀ 亮色' : '🌙 暗色'}</button>
-        <button
-          onClick={() => setShowMarket(true)}
-          style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-            border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-            background: dark ? '#22263a' : '#f4f6fb', color: dark ? '#e8eaf2' : '#1f2430',
-          }}>🛒 商城</button>
-        <button
-          onClick={() => {
-            try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式忽略 */ }
-          }}
-          style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-            border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-            background: dark ? '#22263a' : '#f4f6fb', color: dark ? '#e8eaf2' : '#1f2430',
-          }}>🔄 检查更新</button>
-        {session.plan === 'member' ? (
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#b8860b', border: '1px solid ' + (dark ? '#5a4a1a' : '#e8d48b'), background: dark ? '#2a2410' : '#fff8e1', borderRadius: 999, padding: '2px 9px' }}>⭐ 会员</span>
-        ) : (
-          <span style={{ fontSize: 12, fontWeight: 600, color: dark ? '#9fb4ff' : '#3a5bd9', border: '1px solid ' + (dark ? '#2c3a5c' : '#c9d6f9'), background: dark ? '#1a2138' : '#edf2ff', borderRadius: 999, padding: '2px 9px' }}>
-            ✨ 试用中 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天
+        {/* 品牌区 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginRight: 6 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, background: 'var(--accent-grad)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, fontWeight: 800, color: '#fff',
+            boxShadow: '0 2px 8px rgba(79,110,247,.4)',
+          }}>帧</div>
+          <span style={{ fontWeight: 750, fontSize: 15.5, letterSpacing: .2 }}>拾帧 FrameWeave</span>
+          <span className="fw-pill" style={{
+            border: '1px solid ' + (dark ? '#333a50' : '#e2e6ee'),
+            color: dark ? '#8b93a9' : '#7a8499', background: 'transparent', fontWeight: 500,
+          }}>v0.2.8</span>
+        </div>
+        {/* 工作流 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+          border: '1px solid ' + (dark ? '#262c3d' : '#e2e6ee'), background: dark ? '#10131d' : '#f6f7fb',
+          maxWidth: 240, overflow: 'hidden' }}>
+          <span style={{ fontSize: 12 }}>📄</span>
+          <span style={{ fontSize: 12, color: dark ? '#c6cbd8' : '#4a5264', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {workflowId}
           </span>
+        </div>
+        <span style={{ flex: 1 }} />
+        {/* 右侧操作 */}
+        <button className="fw-btn fw-btn-ghost" onClick={toggleDark} title="切换主题">
+          {dark ? '☀️ 亮色' : '🌙 暗色'}
+        </button>
+        <button className="fw-btn fw-btn-ghost"
+          onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
+          🔄 更新
+        </button>
+        <button className="fw-btn fw-btn-primary" onClick={() => setShowMarket(true)}>
+          🛒 商城
+        </button>
+        {session.plan === 'member' ? (
+          <span className="fw-pill" style={{
+            color: dark ? '#ffd47e' : '#a06a00',
+            border: '1px solid ' + (dark ? '#5a4a1a' : '#e8d48b'),
+            background: dark ? '#2a2410' : '#fff8e1',
+          }}>⭐ 会员</span>
+        ) : (
+          <span className="fw-pill" style={{
+            color: dark ? '#9fb4ff' : '#3a5bd9',
+            border: '1px solid ' + (dark ? '#2c3a5c' : '#c9d6f9'),
+            background: dark ? '#1a2138' : '#edf2ff',
+          }}>✨ 试用 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天</span>
         )}
-        <span style={{ fontSize: 12, color: '#8b93a9' }}>{session.email}</span>
-        <button onClick={() => useAppStore.getState().setSession(null)} style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
-          border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-          background: dark ? '#22263a' : '#f4f6fb', color: dark ? '#e8eaf2' : '#1f2430',
-        }}>退出</button>
+        <span style={{ fontSize: 12, color: dark ? '#8b93a9' : '#7a8499', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
+        <button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().setSession(null)}>退出</button>
       </div>
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}

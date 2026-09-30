@@ -258,47 +258,57 @@ export function Canvas({ workflowId }: { workflowId: string }) {
   }, [running])
 
   const toolbar = {
-    display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px',
-    borderBottom: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-    background: dark ? '#1a1d29' : '#fff', flexShrink: 0,
+    display: 'flex', gap: 8, alignItems: 'center', padding: '9px 14px',
+    borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
+    background: dark ? '#161a26' : '#ffffff', flexShrink: 0,
   }
   const btn = {
-    padding: '6px 12px', borderRadius: 6, border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-    background: dark ? '#22263a' : '#f4f6fb', color: dark ? '#e8eaf2' : '#1f2430', fontSize: 13,
-    cursor: 'pointer',
+    padding: '6px 12px', borderRadius: 9, border: '1px solid ' + (dark ? '#333a50' : '#dde2ec'),
+    background: dark ? '#1e2230' : '#f5f6fb', color: dark ? '#e8eaf2' : '#1f2430', fontSize: 13,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+    transition: 'all .18s ease',
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
       <div style={toolbar}>
-        <button style={{ ...btn, background: '#4f6ef7', border: 'none', color: '#fff' }} onClick={() => run('all')}>
-          {running ? '⏳ 执行中...' : '▶ 一键出片'}
+        <button
+          onClick={() => run('all')}
+          style={{
+            ...btn, border: 'none',
+            background: running ? '#f5a524' : 'linear-gradient(135deg,#4f6ef7,#6a5cf6)',
+            color: '#fff', fontWeight: 700, padding: '6px 16px',
+            boxShadow: running ? '0 2px 10px rgba(245,165,36,.35)' : '0 2px 10px rgba(79,110,247,.35)',
+          }}
+        >
+          {running ? '⏳ 执行中…' : '▶ 一键出片'}
         </button>
-        <button style={btn} onClick={() => run('downstream', )}>仅下游</button>
-        <button style={btn} onClick={save}>{saving ? '保存中...' : '💾 保存'}</button>
+        <button style={btn} onClick={() => run('downstream')}>⬇ 仅下游</button>
+        <button style={btn} onClick={save}>{saving ? '保存中…' : '💾 保存'}</button>
         {running && (() => {
           const vals = Object.values(nodeProgress).filter((v) => v !== undefined && v !== null)
           const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: 260 }}>
-              <div style={{ flex: 1, height: 8, background: dark ? '#2c3142' : '#eef1f7', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: (avg * 100) + '%', background: '#4f6ef7', transition: 'width .3s', borderRadius: 4 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: 260, marginLeft: 6 }}>
+              <div style={{ flex: 1, height: 8, background: dark ? '#2c3142' : '#eef1f7', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: (avg * 100) + '%', background: 'linear-gradient(90deg,#4f6ef7,#9a6dff)', transition: 'width .3s', borderRadius: 999 }} />
               </div>
-              <span style={{ fontSize: 11, color: '#8b93a9', whiteSpace: 'nowrap' }}>{(avg * 100).toFixed(0)}%</span>
+              <span style={{ fontSize: 11, color: dark ? '#8b93a9' : '#7a8499', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{(avg * 100).toFixed(0)}%</span>
             </div>
           )
         })()}
         {lastError && (
-          <span style={{ fontSize: 11, color: '#e5484d', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={lastError}>
+          <span style={{ fontSize: 11, color: '#e5484d', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: dark ? 'rgba(229,72,77,.12)' : '#fdecec', padding: '3px 9px', borderRadius: 999 }} title={lastError}>
             ⚠ {lastError}
           </span>
         )}
-        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: dark ? '#e8eaf2' : '#1f2430' }}>
-          <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)} />
+        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: dark ? '#c6cbd8' : '#4a5264', cursor: 'pointer', userSelect: 'none', marginLeft: 4 }}>
+          <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)}
+            style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
           自动布局
         </label>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: '#8b93a9' }}>Ctrl+S 保存 · 双击节点打开时间线</span>
+        <span style={{ fontSize: 11.5, color: dark ? '#5d6579' : '#a2aabd' }}>Ctrl+S 保存 · 双击节点打开时间线</span>
       </div>
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -335,9 +345,9 @@ export function Canvas({ workflowId }: { workflowId: string }) {
         return (
           <div
             style={{
-              position: 'fixed', left: menu.x, top: menu.y, zIndex: 1000, minWidth: 170,
-              background: dark ? '#1a1d29' : '#fff', border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-              borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.18)', padding: '4px 0',
+              position: 'fixed', left: menu.x, top: menu.y, zIndex: 1000, minWidth: 178,
+              background: dark ? '#1a1d29' : '#fff', border: '1px solid ' + (dark ? '#333a50' : '#e2e6ee'),
+              borderRadius: 10, boxShadow: 'var(--shadow-lg)', padding: '5px 0',
             }}
             onMouseLeave={() => setMenu(null)}
           >

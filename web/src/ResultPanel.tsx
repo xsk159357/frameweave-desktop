@@ -54,30 +54,24 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
   const isRunning = status === 'running' || status === 'queued'
 
   return (
-    <div style={{
-      borderTop: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
-      background: dark ? '#1a1d29' : '#fff', padding: '10px 14px', flexShrink: 0,
-      maxHeight: 200, overflowY: 'auto',
+    <div className="fw-scroll" style={{
+      borderTop: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
+      background: dark ? '#161a26' : '#fff', padding: '12px 16px', flexShrink: 0,
+      maxHeight: 210, overflowY: 'auto',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>📦 批量结果</span>
         {items.length > 0 && (
-          <span style={{ fontSize: 12, color: '#8b93a9' }}>
+          <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
             {okCount}/{items.length} 成功{failed.length > 0 ? ' · ' + failed.length + ' 失败' : ''}
           </span>
         )}
         {isRunning && <span style={{ fontSize: 12, color: '#f5a524' }}>⏳ 批量执行中…</span>}
         <span style={{ flex: 1 }} />
         {failed.length > 0 && batchNodeId && (
-          <button onClick={() => onRetry(batchNodeId)} style={{
-            padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-            border: 'none', background: '#e5484d', color: '#fff',
-          }}>🔄 重试失败项</button>
+          <button onClick={() => onRetry(batchNodeId)} className="fw-btn fw-btn-danger" style={{ padding: '5px 12px', fontSize: 12 }}>🔄 重试失败项</button>
         )}
-        <button onClick={onClose} style={{
-          padding: '4px 8px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-          border: 'none', background: 'transparent', color: '#8b93a9',
-        }}>✕</button>
+        <button onClick={onClose} className="fw-btn fw-btn-ghost" style={{ padding: '5px 9px', fontSize: 13 }}>✕</button>
       </div>
       {loading && <div style={{ fontSize: 12, color: '#8b93a9' }}>读取结果…</div>}
       {error && <div style={{ fontSize: 12, color: '#e5484d' }}>⚠ {error}</div>}
@@ -87,8 +81,9 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
       {items.map((it) => (
         <div key={it.index} style={{
           display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
-          padding: '4px 6px', borderRadius: 4, marginBottom: 2,
-          background: dark ? '#22263a' : '#f7f8fc',
+          padding: '6px 10px', borderRadius: 9, marginBottom: 3,
+          background: dark ? '#1e2230' : '#f5f6fb',
+          border: '1px solid ' + (dark ? '#262c3d' : '#e8ebf3'), transition: 'all .15s',
         }}>
           <span style={{ color: it.ok ? '#30a46c' : '#e5484d', width: 18 }}>{it.ok ? '✓' : '✗'}</span>
           <span style={{ fontWeight: 600 }}>{it.name}</span>
