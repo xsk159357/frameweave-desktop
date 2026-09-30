@@ -1,7 +1,7 @@
 // 后端 API 客户端
 import type { NodeSpec, WfMeta, Segment } from './types'
 
-const BASE = ''
+const BASE = 'http://127.0.0.1:8788'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(BASE + path, {
@@ -92,8 +92,8 @@ export const api = {
 
 // WebSocket 事件订阅
 export function connectWS(onEvent: (ev: any) => void): WebSocket {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(proto + '://' + location.host + '/ws')
+  // 打包版 file:// 下 location.host 为空 → 必须用绝对地址（与 API BASE 同源）
+  const ws = new WebSocket('ws://127.0.0.1:8788/ws')
   ws.onmessage = (m) => {
     try { onEvent(JSON.parse(m.data)) } catch { /* ignore */ }
   }

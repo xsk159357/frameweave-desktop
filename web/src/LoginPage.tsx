@@ -113,7 +113,7 @@ export function LoginPage() {
             手机号账号体系 · 安全订阅
           </div>
         </div>
-        <div className="lp-ver">FrameWeave v0.2.2</div>
+        <div className="lp-ver">FrameWeave v{__APP_VERSION__}</div>
       </div>
 
       {/* 登录卡片 */}
