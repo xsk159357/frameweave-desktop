@@ -258,15 +258,17 @@ export function Canvas({ workflowId }: { workflowId: string }) {
   }, [running])
 
   const toolbar = {
-    display: 'flex', gap: 8, alignItems: 'center', padding: '9px 14px',
-    borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
-    background: dark ? '#161a26' : '#ffffff', flexShrink: 0,
+    display: 'flex', gap: 8, alignItems: 'center', padding: '10px 14px',
+    borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
+    backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+    boxShadow: 'var(--glass-inner)', flexShrink: 0, position: 'relative', zIndex: 9,
   }
   const btn = {
-    padding: '6px 12px', borderRadius: 9, border: '1px solid ' + (dark ? '#333a50' : '#dde2ec'),
-    background: dark ? '#1e2230' : '#f5f6fb', color: dark ? '#e8eaf2' : '#1f2430', fontSize: 13,
+    padding: '7px 13px', borderRadius: 11, border: 'var(--glass-border)',
+    background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+    boxShadow: 'var(--glass-inner)', color: 'var(--text)', fontSize: 13,
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-    transition: 'all .18s ease',
+    transition: 'all .2s ease',
   }
 
   return (
@@ -312,7 +314,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
       </div>
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div ref={flowWrapper} style={{ flex: 1, position: 'relative', background: dark ? '#12141c' : '#f0f2f8' }}>
+        <div ref={flowWrapper} style={{ flex: 1, position: 'relative', background: 'var(--bg-grad)', backgroundAttachment: 'fixed' }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -345,9 +347,10 @@ export function Canvas({ workflowId }: { workflowId: string }) {
         return (
           <div
             style={{
-              position: 'fixed', left: menu.x, top: menu.y, zIndex: 1000, minWidth: 178,
-              background: dark ? '#1a1d29' : '#fff', border: '1px solid ' + (dark ? '#333a50' : '#e2e6ee'),
-              borderRadius: 10, boxShadow: 'var(--shadow-lg)', padding: '5px 0',
+              position: 'fixed', left: menu.x, top: menu.y, zIndex: 1000, minWidth: 180,
+              background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+              border: 'var(--glass-border)', borderRadius: 14, boxShadow: 'var(--glass-inner), var(--shadow-lg)',
+              padding: '6px 0',
             }}
             onMouseLeave={() => setMenu(null)}
           >

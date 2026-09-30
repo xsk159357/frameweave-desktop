@@ -55,8 +55,9 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
 
   return (
     <div className="fw-scroll" style={{
-      borderTop: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
-      background: dark ? '#161a26' : '#fff', padding: '12px 16px', flexShrink: 0,
+      borderTop: 'var(--glass-border)', background: 'var(--glass-strong)',
+      backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      boxShadow: 'var(--glass-inner)', padding: '12px 16px', flexShrink: 0,
       maxHeight: 210, overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -82,8 +83,8 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
         <div key={it.index} style={{
           display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
           padding: '6px 10px', borderRadius: 9, marginBottom: 3,
-          background: dark ? '#1e2230' : '#f5f6fb',
-          border: '1px solid ' + (dark ? '#262c3d' : '#e8ebf3'), transition: 'all .15s',
+          background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+          border: 'var(--glass-border)', transition: 'all .15s',
         }}>
           <span style={{ color: it.ok ? '#30a46c' : '#e5484d', width: 18 }}>{it.ok ? '✓' : '✗'}</span>
           <span style={{ fontWeight: 600 }}>{it.name}</span>

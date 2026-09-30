@@ -43,11 +43,11 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       }}
       onDoubleClick={(e) => { e.stopPropagation(); dbl(id) }}
       style={{
-        position: 'relative', width: 200, background: dark ? '#181c29' : '#fff',
-        border: '1px solid ' + (selected ? 'var(--accent)' : (dark ? '#2c3142' : '#e4e8f0')),
-        borderRadius: 12, boxShadow: selected ? '0 0 0 2px var(--input-focus-ring)' : 'var(--shadow-sm)',
-        padding: '11px 11px 13px', fontSize: 12, color: dark ? '#e8eaf2' : '#1f2430',
-        overflow: 'hidden', transition: 'box-shadow .18s, border-color .18s',
+        position: 'relative', width: 200, background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+        border: selected ? '1.5px solid var(--accent)' : 'var(--glass-border)',
+        borderRadius: 14, boxShadow: selected ? '0 0 0 3px var(--input-focus-ring), var(--glass-inner), var(--shadow-md)' : 'var(--glass-inner), var(--shadow-sm)',
+        padding: '12px 12px 14px', fontSize: 12, color: 'var(--text)',
+        overflow: 'hidden', transition: 'box-shadow .2s, border-color .2s',
       }}
     >
       {/* 顶部渐变状态条 */}
@@ -84,7 +84,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
           <span>{statusText[status] || status}</span>
           {Object.keys(asset_ids).length > 0 && (
-            <span className="fw-badge" style={{ marginLeft: 'auto', background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
+            <span className="fw-badge" style={{ marginLeft: 'auto', background: 'var(--glass)', color: 'var(--text-dim)' }}>
               {Object.keys(asset_ids).length} 输出
             </span>
           )}

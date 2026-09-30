@@ -34,16 +34,17 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
 
   const styles = {
     panel: {
-      width: 324, borderLeft: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
-      background: dark ? '#161a26' : '#fff', padding: 16, overflowY: 'auto', flexShrink: 0,
+      width: 328, borderLeft: 'var(--glass-border)',
+      background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      boxShadow: 'var(--glass-inner)', padding: 16, overflowY: 'auto', flexShrink: 0,
     },
     label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: dark ? '#8b93a9' : '#7a8499', margin: '14px 0 7px', textTransform: 'uppercase' as const },
     input: {
-      width: '100%', padding: '7px 10px', borderRadius: 9, fontSize: 13,
-      border: '1px solid ' + (dark ? '#333a50' : '#d4d9e4'),
-      background: dark ? '#10131d' : '#f8f9fb', color: dark ? '#e8eaf2' : '#1f2430',
-      marginBottom: 10, boxSizing: 'border-box' as const, outline: 'none',
-      transition: 'border-color .18s, box-shadow .18s',
+      width: '100%', padding: '8px 11px', borderRadius: 10, fontSize: 13,
+      border: 'var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text)',
+      backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      boxShadow: 'var(--glass-inner)', marginBottom: 10, boxSizing: 'border-box' as const, outline: 'none',
+      transition: 'border-color .2s, box-shadow .2s',
     },
   }
 

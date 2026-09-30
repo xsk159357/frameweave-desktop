@@ -90,21 +90,22 @@ export default function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column',
-      background: dark ? '#12141c' : '#f8f9fb', color: dark ? '#e8eaf2' : '#1f2430' }}>
+      background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
       {/* 顶栏 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 52,
-        borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
-        background: dark ? '#161a26' : '#ffffff', flexShrink: 0,
-        boxShadow: '0 1px 0 rgba(0,0,0,.02)',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', height: 54,
+        borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
+        backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+        flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 8px rgba(80,90,140,.06)',
+        position: 'relative', zIndex: 10,
       }}>
         {/* 品牌区 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginRight: 6 }}>
           <div style={{
-            width: 28, height: 28, borderRadius: 8, background: 'var(--accent-grad)',
+            width: 30, height: 30, borderRadius: 9, background: 'var(--accent-grad)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, fontWeight: 800, color: '#fff',
-            boxShadow: '0 2px 8px rgba(79,110,247,.4)',
+            fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: 0,
+            boxShadow: '0 6px 18px rgba(91,108,247,.45), inset 0 1px 0 rgba(255,255,255,.3)',
           }}>帧</div>
           <span style={{ fontWeight: 750, fontSize: 15.5, letterSpacing: .2 }}>拾帧 FrameWeave</span>
           <span className="fw-pill" style={{
@@ -113,9 +114,9 @@ export default function App() {
           }}>v0.2.8</span>
         </div>
         {/* 工作流 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
-          border: '1px solid ' + (dark ? '#262c3d' : '#e2e6ee'), background: dark ? '#10131d' : '#f6f7fb',
-          maxWidth: 240, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
+          border: 'var(--glass-border)', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+          boxShadow: 'var(--glass-inner)', maxWidth: 240, overflow: 'hidden' }}>
           <span style={{ fontSize: 12 }}>📄</span>
           <span style={{ fontSize: 12, color: dark ? '#c6cbd8' : '#4a5264', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {workflowId}

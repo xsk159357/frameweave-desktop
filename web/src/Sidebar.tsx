@@ -31,20 +31,19 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       key={s.type_id}
       onClick={() => onAddNode(s.type_id)}
       style={{
-        padding: '8px 10px', marginBottom: 5, borderRadius: 10, cursor: 'pointer',
-        background: dark ? '#1a1e2c' : '#ffffff',
-        border: '1px solid ' + (dark ? '#262c3d' : '#e6eaf2'),
-        boxShadow: dark ? 'none' : '0 1px 2px rgba(31,36,48,.04)',
-        transition: 'all .18s ease',
+        padding: '9px 11px', marginBottom: 6, borderRadius: 13, cursor: 'pointer',
+        background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+        border: 'var(--glass-border)', boxShadow: 'var(--glass-inner), var(--shadow-sm)',
+        transition: 'all .2s ease',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'var(--accent)'
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-        e.currentTarget.style.transform = 'translateY(-1px)'
+        e.currentTarget.style.boxShadow = 'var(--glass-inner), var(--shadow-md)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = dark ? '#262c3d' : '#e6eaf2'
-        e.currentTarget.style.boxShadow = dark ? 'none' : '0 1px 2px rgba(31,36,48,.04)'
+        e.currentTarget.style.borderColor = ''
+        e.currentTarget.style.boxShadow = 'var(--glass-inner), var(--shadow-sm)'
         e.currentTarget.style.transform = 'translateY(0)'
       }}
     >
@@ -75,8 +74,9 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
   )
 
   return (
-    <div style={{ width: 264, borderRight: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
-      background: dark ? '#12141c' : '#f6f7fb', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+    <div style={{ width: 264, borderRight: 'var(--glass-border)',
+      background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative', zIndex: 5 }}>
       <div style={{ padding: '12px 12px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <span style={{ fontWeight: 700, fontSize: 13.5 }}>🧩 节点库</span>

@@ -47,8 +47,9 @@ export function Timeline({ nodeId }: { nodeId: string }) {
   const seconds = Math.ceil(totalDur || 60)
 
   return (
-    <div style={{ height: 200, borderTop: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'),
-      background: dark ? '#12141c' : '#f6f7fb', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+    <div style={{ height: 200, borderTop: 'var(--glass-border)',
+      background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       {/* 工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
         borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), background: dark ? '#161a26' : '#fff' }}>
@@ -81,8 +82,8 @@ export function Timeline({ nodeId }: { nodeId: string }) {
           </div>
 
           {/* 视频轨 */}
-          <div style={{ height: 54, margin: '4px 0', position: 'relative', background: dark ? '#181c29' : '#fff',
-            border: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), borderRadius: 10, boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ height: 54, margin: '4px 0', position: 'relative', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+            border: 'var(--glass-border)', borderRadius: 12, boxShadow: 'var(--glass-inner), var(--shadow-sm)' }}>
             {clips.map((c) => (
               <div key={c.index} title={`#${c.index} ${c.start}s-${c.end}s`}
                 style={{
