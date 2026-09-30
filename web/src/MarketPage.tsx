@@ -70,11 +70,11 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
     finally { setBusy(false) }
   }
 
-  const frame = { border: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'), background: dark ? '#1b1f2e' : '#ffffff' }
+  const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)' }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: dark ? 'rgba(8,10,18,.72)' : 'rgba(20,24,40,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ ...frame, width: 860, maxWidth: '92vw', height: '82vh', borderRadius: 14, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,.4)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...frame, width: 860, maxWidth: '92vw', height: '82vh', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 'var(--glass-inner), var(--shadow-lg)' }}>
         {/* 头部 */}
         <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'), display: 'flex', alignItems: 'center', gap: 12 }}>
           <Boxes size={20} color={dark ? '#9fb4ff' : '#3a5bd9'} />

@@ -120,7 +120,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
     if (srcPort && dstPort && !canConnect(srcPort.type, dstPort.type)) return
     setEdges((eds) => addEdge({
       ...conn,
-      style: { stroke: '#4f6ef7', strokeWidth: 2 },
+      style: { stroke: '#4f5cf0', strokeWidth: 2.2 },
       label: srcPort && dstPort ? srcPort.type + '→' + dstPort.type : '',
       labelStyle: { fontSize: 10, fill: '#8b93a9' },
     }, eds))
@@ -220,7 +220,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
       const eds = (wf.edges || []).map((e: any) => ({
         id: 'e_' + e.source + '_' + e.target, source: e.source, target: e.target,
         sourceHandle: e.sourceHandle, targetHandle: e.targetHandle,
-        style: { stroke: '#4f6ef7', strokeWidth: 2 },
+        style: { stroke: '#4f5cf0', strokeWidth: 2.2 },
       }))
       setNodes(nds); setEdges(eds)
     }).catch(() => { /* 新工作流为空 */ })
@@ -283,7 +283,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
           onClick={() => run('all')}
           style={{
             ...btn, border: 'none',
-            background: running ? '#f5a524' : 'linear-gradient(135deg,#4f6ef7,#6a5cf6)',
+            background: running ? '#f5a524' : 'var(--btn-primary-grad)',
             color: '#fff', fontWeight: 700, padding: '6px 16px',
             boxShadow: running ? '0 2px 10px rgba(245,165,36,.35)' : '0 2px 10px rgba(79,110,247,.35)',
           }}
@@ -299,7 +299,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: 280, marginLeft: 2 }}>
               <div style={sep} />
               <div style={{ flex: 1, height: 8, background: dark ? '#2c3142' : '#eef1f7', borderRadius: 999, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: (avg * 100) + '%', background: 'linear-gradient(90deg,#4f6ef7,#9a6dff)', transition: 'width .3s', borderRadius: 999 }} />
+                <div style={{ height: '100%', width: (avg * 100) + '%', background: 'var(--accent-grad)', transition: 'width .3s', borderRadius: 999 }} />
               </div>
               <span style={{ fontSize: 11, color: dark ? '#8b93a9' : '#7a8499', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{(avg * 100).toFixed(0)}%</span>
             </div>

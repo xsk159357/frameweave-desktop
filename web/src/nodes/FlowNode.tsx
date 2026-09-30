@@ -44,26 +44,26 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       }}
       onDoubleClick={(e) => { e.stopPropagation(); dbl(id) }}
       style={{
-        position: 'relative', width: 200, background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+        position: 'relative', width: 216, background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
         border: selected ? '1.5px solid var(--accent)' : 'var(--glass-border)',
-        borderRadius: 14, boxShadow: selected ? '0 0 0 3px var(--input-focus-ring), var(--glass-inner), var(--shadow-md)' : 'var(--glass-inner), var(--shadow-sm)',
-        padding: '12px 12px 14px', fontSize: 12, color: 'var(--text)',
-        overflow: 'hidden', transition: 'box-shadow .2s, border-color .2s',
+        borderRadius: 16, boxShadow: selected ? '0 0 0 4px var(--input-focus-ring), var(--glass-inner), var(--shadow-md)' : 'var(--glass-inner), var(--shadow-sm)',
+        padding: '13px 13px 15px', fontSize: 12, color: 'var(--text)',
+        overflow: 'hidden', transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',
       }}
     >
       {/* 顶部渐变状态条 */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, ' + color + ' 0%, ' + color + '88 100%)', opacity: .9, pointerEvents: 'none' }} />
-      <div style={{ fontWeight: 600, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
-        <span>{title}
+      <div style={{ fontWeight: 650, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}
           {hasDiff && (
             <span title={'参数与上次运行不同：' + diffKeys.join(', ')}
-                  style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 9, fontSize: 10,
-                           background: '#f5a524', color: '#1f2430', fontWeight: 600, cursor: 'help' }}>
+                  style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 999, fontSize: 9.5,
+                           background: 'var(--running-soft)', color: 'var(--running)', fontWeight: 650, cursor: 'help' }}>
               参数改动
             </span>
           )}
         </span>
-        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{category}</span>
+        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7c869c' }}>{category}</span>
       </div>
       {hasDiff && (
         <div style={{ fontSize: 10, color: '#b8860b', marginBottom: 4, wordBreak: 'break-all', lineHeight: 1.5 }}>
@@ -100,13 +100,14 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle in"
             title={'输入: ' + p.name + ' · ' + p.type}
-            style={{ top: 24 + i * 26 }}
+            style={{ top: 26 + i * 26 }}
           />
           <span
             style={{
-              position: 'absolute', left: 6, top: 24 + i * 26, transform: 'translateY(-50%)',
-              fontSize: 10, lineHeight: 1, color: dark ? '#8b93a9' : '#6b7280',
+              position: 'absolute', left: 8, top: 26 + i * 26, transform: 'translateY(-50%)',
+              fontSize: 9.5, lineHeight: 1, color: dark ? '#8b93a9' : '#6d768c',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis',
+              fontWeight: 500,
             }}
           >{p.name}</span>
         </Fragment>
@@ -120,14 +121,14 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle out"
             title={'输出: ' + p.name + ' · ' + p.type}
-            style={{ top: 24 + i * 26 }}
+            style={{ top: 26 + i * 26 }}
           />
           <span
             style={{
-              position: 'absolute', right: 6, top: 24 + i * 26, transform: 'translateY(-50%)',
-              fontSize: 10, lineHeight: 1, color: dark ? '#8b93a9' : '#6b7280',
+              position: 'absolute', right: 8, top: 26 + i * 26, transform: 'translateY(-50%)',
+              fontSize: 9.5, lineHeight: 1, color: dark ? '#8b93a9' : '#6d768c',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis',
-              textAlign: 'right',
+              textAlign: 'right', fontWeight: 500,
             }}
           >{p.name}</span>
         </Fragment>

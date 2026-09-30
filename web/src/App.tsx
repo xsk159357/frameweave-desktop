@@ -94,10 +94,10 @@ export default function App() {
       background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
       {/* 顶栏 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', height: 54,
+        display: 'flex', alignItems: 'center', gap: 8, padding: '0 18px', height: 52,
         borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
         backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-        flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 8px rgba(80,90,140,.06)',
+        flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 10px rgba(30,40,92,.06)',
         position: 'relative', zIndex: 10,
       }}>
         {/* 品牌区 */}

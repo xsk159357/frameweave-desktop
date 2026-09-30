@@ -81,8 +81,8 @@ export function LoginPage() {
   return (
     <div className="lp-root">
       <div className="lp-grid-bg" />
-      <div className="lp-glow" style={{ width: 420, height: 420, left: '-80px', top: '-60px', background: dark ? 'rgba(109,138,255,.25)' : 'rgba(124,92,247,.22)' }} />
-      <div className="lp-glow" style={{ width: 360, height: 360, right: '18%', bottom: '-100px', background: dark ? 'rgba(157,109,255,.18)' : 'rgba(79,110,247,.2)' }} />
+      <div className="lp-glow" style={{ width: 440, height: 440, left: '-70px', top: '-70px', background: 'rgba(96,120,255,.5)' }} />
+      <div className="lp-glow" style={{ width: 380, height: 380, right: '16%', bottom: '-110px', background: 'rgba(165,110,255,.4)' }} />
 
       <button className="lp-btn-theme lp-ask" onClick={toggleDark} title={dark ? '切换浅色' : '切换深色'}>
         {dark ? <Sun size={18} /> : <Moon size={18} />}
