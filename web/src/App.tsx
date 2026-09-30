@@ -1,6 +1,6 @@
 // 主应用：登录门禁 -> 工作区
 import { useEffect, useState } from 'react'
-import { FileText, Sun, Moon, RefreshCw, Store, Crown, Sparkles } from 'lucide-react'
+import { FileText, RefreshCw, Store, Crown, Sparkles } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -94,40 +94,37 @@ export default function App() {
       background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
       {/* 顶栏 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '0 18px', height: 52,
+        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', height: 52,
         borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
         backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-        flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 10px rgba(30,40,92,.06)',
+        flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 12px rgba(0,0,0,.28)',
         position: 'relative', zIndex: 10,
       }}>
         {/* 品牌区 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginRight: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 8 }}>
           <div style={{
-            width: 30, height: 30, borderRadius: 9, background: 'var(--accent-grad)',
+            width: 30, height: 30, borderRadius: 9, background: 'var(--brand-grad)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: 0,
-            boxShadow: '0 6px 18px rgba(91,108,247,.45), inset 0 1px 0 rgba(255,255,255,.3)',
+            fontSize: 15, fontWeight: 800, color: '#fff',
+            boxShadow: '0 6px 20px rgba(108,140,255,.45), inset 0 1px 0 rgba(255,255,255,.32)',
           }}>帧</div>
-          <span style={{ fontWeight: 750, fontSize: 15.5, letterSpacing: .2 }}>拾帧 FrameWeave</span>
+          <span style={{ fontWeight: 750, fontSize: 15, letterSpacing: .2 }}>拾帧 FrameWeave</span>
           <span className="fw-pill" style={{
-            border: '1px solid ' + (dark ? '#333a50' : '#e2e6ee'),
-            color: dark ? '#8b93a9' : '#7a8499', background: 'transparent', fontWeight: 500,
+            border: '1px solid var(--border)', color: 'var(--text-faint)',
+            background: 'transparent', fontWeight: 500,
           }}>v0.2.8</span>
         </div>
         {/* 工作流 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999,
           border: 'var(--glass-border)', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
           boxShadow: 'var(--glass-inner)', maxWidth: 240, overflow: 'hidden' }}>
-          <FileText size={13} style={{ color: dark ? '#8b93a9' : '#7a8499', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: dark ? '#c6cbd8' : '#4a5264', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <FileText size={13} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {workflowId}
           </span>
         </div>
         <span style={{ flex: 1 }} />
         {/* 右侧操作 */}
-        <button className="fw-btn fw-btn-ghost" onClick={toggleDark} title="切换主题">
-          {dark ? <><Sun size={14} /> 亮色</> : <><Moon size={14} /> 暗色</>}
-        </button>
         <button className="fw-btn fw-btn-ghost"
           onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
           <><RefreshCw size={13} /> 更新</>
@@ -137,18 +134,14 @@ export default function App() {
         </button>
         {session.plan === 'member' ? (
           <span className="fw-pill" style={{
-            color: dark ? '#ffd47e' : '#a06a00',
-            border: '1px solid ' + (dark ? '#5a4a1a' : '#e8d48b'),
-            background: dark ? '#2a2410' : '#fff8e1',
+            color: '#ffd47e', border: '1px solid #5a4a1a', background: '#2a2410',
           }}><Crown size={12} style={{ verticalAlign: '-2px' }} /> 会员</span>
         ) : (
           <span className="fw-pill" style={{
-            color: dark ? '#9fb4ff' : '#3a5bd9',
-            border: '1px solid ' + (dark ? '#2c3a5c' : '#c9d6f9'),
-            background: dark ? '#1a2138' : '#edf2ff',
+            color: '#9fb4ff', border: '1px solid #2c3a5c', background: '#1a2138',
           }}><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> 试用 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天</span>
         )}
-        <span style={{ fontSize: 12, color: dark ? '#8b93a9' : '#7a8499', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
         <button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().setSession(null)}>退出</button>
       </div>
 

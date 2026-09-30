@@ -53,18 +53,16 @@ export function Timeline({ nodeId }: { nodeId: string }) {
       display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       {/* 工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
-        borderBottom: '1px solid ' + (dark ? '#262c3d' : '#e4e8f0'), background: 'transparent' }}>
-        <button onClick={togglePlay} style={{
-          padding: '4px 12px', borderRadius: 9, border: '1px solid ' + (dark ? '#333a50' : '#dde2ec'),
-          background: dark ? '#1e2230' : '#f5f6fb', color: dark ? '#e8eaf2' : '#1f2430', cursor: 'pointer',
-          fontSize: 12, transition: 'all .18s',
-        }}>{playingRef.current ? <><Pause size={12} /> 暂停</> : <><Play size={12} /> 播放</>}</button>
+        borderBottom: '1px solid var(--border)', background: 'transparent' }}>
+        <button onClick={togglePlay} className="fw-btn" style={{ padding: '4px 13px', color: 'var(--text)' }}>
+          {playingRef.current ? <><Pause size={12} /> 暂停</> : <><Play size={12} /> 播放</>}
+        </button>
         <input type="range" min={10} max={80} value={scale}
           onChange={(e) => setScale(+e.target.value)}
           style={{ width: 120, accentColor: 'var(--accent)' }} />
-        <span style={{ fontSize: 11, color: dark ? '#5d6579' : '#9aa2b5' }}>{scale}px/s</span>
+        <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{scale}px/s</span>
         <span style={{ flex: 1 }} />
-        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
+        <span className="fw-badge" style={{ background: 'var(--bg-panel-2)', color: 'var(--text-faint)' }}>
           {nodeId} · {clips.length} 片段 · {totalDur.toFixed(1)}s
         </span>
       </div>
@@ -73,10 +71,10 @@ export function Timeline({ nodeId }: { nodeId: string }) {
       <div style={{ flex: 1, overflowX: 'auto', position: 'relative', paddingLeft: 60 }}>
         <div style={{ width: px(seconds) + 40, minWidth: '100%', position: 'relative' }}>
           {/* 标尺 */}
-          <div style={{ height: 20, borderBottom: '1px solid ' + (dark ? '#2c3142' : '#e2e6ee'),
+          <div style={{ height: 20, borderBottom: '1px solid var(--border)',
             display: 'flex', position: 'sticky', top: 0, background: 'var(--bg-panel-2)', zIndex: 2 }}>
             {Array.from({ length: seconds }).map((_, i) => (
-              <div key={i} style={{ position: 'absolute', left: px(i), fontSize: 9, color: '#8b93a9' }}>
+              <div key={i} style={{ position: 'absolute', left: px(i), fontSize: 9, color: 'var(--text-faint)' }}>
                 {i}s
               </div>
             ))}
@@ -90,17 +88,18 @@ export function Timeline({ nodeId }: { nodeId: string }) {
                 style={{
                   position: 'absolute', left: px(c.start), width: Math.max(px(c.duration), 8),
                   top: 7, bottom: 7, borderRadius: 6, cursor: 'pointer',
-                  background: 'linear-gradient(180deg, rgba(109,138,255,.34), rgba(79,110,247,.18))',
-                  border: '1px solid rgba(109,138,255,.55)', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: 10, color: dark ? '#a9b8ff' : '#3a5bd9', overflow: 'hidden',
-                  fontWeight: 600, boxShadow: '0 1px 3px rgba(31,36,48,.08)', transition: 'filter .15s',
+                  background: 'linear-gradient(180deg, rgba(108,140,255,.42), rgba(138,92,246,.24))',
+                  border: '1px solid rgba(138,150,255,.6)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: 10, color: '#b9c4ff', overflow: 'hidden',
+                  fontWeight: 600, boxShadow: '0 0 10px rgba(108,140,255,.22), inset 0 1px 0 rgba(255,255,255,.14)',
+                  transition: 'filter .15s, box-shadow var(--t-fast)',
                 }}>
                 #{c.index}
               </div>
             ))}
             {clips.length === 0 && (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', fontSize: 12, color: '#8b93a9' }}>
+                justifyContent: 'center', fontSize: 12, color: 'var(--text-faint)' }}>
                 视频轨（运行 SceneDetect 后显示片段）
               </div>
             )}
@@ -108,15 +107,15 @@ export function Timeline({ nodeId }: { nodeId: string }) {
 
           {/* 字幕轨 */}
           <div style={{ height: 30, position: 'relative', background: 'var(--bg-panel-2)',
-            border: '1px dashed ' + (dark ? '#2c3142' : '#e2e6ee'), borderRadius: 4,
+            border: '1px dashed var(--border-strong)', borderRadius: 6,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, color: '#8b93a9' }}>
+            fontSize: 11, color: 'var(--text-faint)' }}>
             字幕轨（M1 接入）
           </div>
 
           {/* 播放头 */}
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: px(playhead), width: 1,
-            background: '#e5484d', zIndex: 3, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: px(playhead), width: 2,
+            background: 'var(--danger)', boxShadow: '0 0 10px rgba(248,113,113,.8)', zIndex: 3, pointerEvents: 'none' }} />
         </div>
       </div>
     </div>

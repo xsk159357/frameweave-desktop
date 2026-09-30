@@ -273,7 +273,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
   }
   const sep = {
     width: 1, alignSelf: 'stretch', margin: '4px 2px',
-    background: dark ? 'rgba(160,175,235,.18)' : 'rgba(120,130,190,.16)',
+    background: 'var(--border)',
   }
 
   return (
@@ -285,7 +285,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             ...btn, border: 'none',
             background: running ? '#f5a524' : 'var(--btn-primary-grad)',
             color: '#fff', fontWeight: 700, padding: '6px 16px',
-            boxShadow: running ? '0 2px 10px rgba(245,165,36,.35)' : '0 2px 10px rgba(79,110,247,.35)',
+            boxShadow: running ? '0 2px 10px rgba(245,165,36,.4)' : '0 2px 12px rgba(108,140,255,.42)',
           }}
         >
           {running ? <><Loader2 size={15} className="fw-spin" /> 执行中…</> : <><Play size={15} /> 一键出片</>}
@@ -298,26 +298,26 @@ export function Canvas({ workflowId }: { workflowId: string }) {
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: 280, marginLeft: 2 }}>
               <div style={sep} />
-              <div style={{ flex: 1, height: 8, background: dark ? '#2c3142' : '#eef1f7', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ flex: 1, height: 8, background: 'var(--bg-panel-2)', borderRadius: 999, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: (avg * 100) + '%', background: 'var(--accent-grad)', transition: 'width .3s', borderRadius: 999 }} />
               </div>
-              <span style={{ fontSize: 11, color: dark ? '#8b93a9' : '#7a8499', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{(avg * 100).toFixed(0)}%</span>
+              <span style={{ fontSize: 11, color: 'var(--text-faint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{(avg * 100).toFixed(0)}%</span>
             </div>
           )
         })()}
         {lastError && (
-          <span style={{ fontSize: 11, color: '#e5484d', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: dark ? 'rgba(229,72,77,.12)' : '#fdecec', padding: '3px 9px', borderRadius: 999 }} title={lastError}>
+          <span style={{ fontSize: 11, color: 'var(--danger)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'var(--danger-soft)', padding: '3px 9px', borderRadius: 999 }} title={lastError}>
             <><AlertTriangle size={12} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {lastError}</>
           </span>
         )}
         <div style={sep} />
-        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: dark ? '#c6cbd8' : '#4a5264', cursor: 'pointer', userSelect: 'none' }}>
+        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', cursor: 'pointer', userSelect: 'none' }}>
           <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)}
             style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
           自动布局
         </label>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11.5, color: dark ? '#5d6579' : '#a2aabd' }}>Ctrl+S 保存 · 双击节点打开时间线</span>
+        <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>Ctrl+S 保存 · 双击节点打开时间线</span>
       </div>
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -334,7 +334,7 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null) }}
             onPaneClick={() => { setSelectedNodeId(null); setMenu(null) }}
           >
-            <Background gap={20} color={dark ? '#2c3142' : '#e2e6ee'} />
+            <Background gap={22} color="#161d33" />
             <Controls />
             <MiniMap pannable zoomable style={{ background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
           </ReactFlow>
@@ -348,9 +348,9 @@ export function Canvas({ workflowId }: { workflowId: string }) {
       {menu && (() => {
         const n = nodes.find((x) => x.id === menu.nodeId)
         const itemStyle = {
-          padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: dark ? '#e8eaf2' : '#1f2430',
+          padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--text)',
         }
-        const itemHover = { background: dark ? '#2c3142' : '#eef1f7' }
+        const itemHover = { background: 'var(--hover-bg)' }
         return (
           <div
             style={{
@@ -361,8 +361,8 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             }}
             onMouseLeave={() => setMenu(null)}
           >
-            <div style={{ padding: '4px 12px', fontSize: 11, color: '#8b93a9' }}>{n?.data?.title || menu.nodeId}</div>
-            <div style={{ height: 1, background: dark ? '#2c3142' : '#e2e6ee', margin: '2px 0' }} />
+            <div style={{ padding: '4px 12px', fontSize: 11, color: 'var(--text-faint)' }}>{n?.data?.title || menu.nodeId}</div>
+            <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
             <div style={{ ...itemStyle, ...itemHover }} onClick={() => { setMenu(null); run('selection', [menu.nodeId]) }}>
               <><Play size={13} /> 单独运行</>
               <span style={{ fontSize: 10, color: '#8b93a9', marginLeft: 6 }}>仅重跑此节点</span>

@@ -64,21 +64,21 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{ fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Package size={14} /> 批量结果</span>
         {items.length > 0 && (
-          <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>
+          <span className="fw-badge" style={{ background: dark ? 'var(--border)' : 'var(--bg-panel-2)', color: dark ? 'var(--text-faint)' : '#7a8499' }}>
             {okCount}/{items.length} 成功{failed.length > 0 ? ' · ' + failed.length + ' 失败' : ''}
           </span>
         )}
-        {isRunning && <span style={{ fontSize: 12, color: '#f5a524', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Loader2 size={12} className="fw-spin" /> 批量执行中…</span>}
+        {isRunning && <span style={{ fontSize: 12, color: 'var(--running)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Loader2 size={12} className="fw-spin" /> 批量执行中…</span>}
         <span style={{ flex: 1 }} />
         {failed.length > 0 && batchNodeId && (
           <button onClick={() => onRetry(batchNodeId)} className="fw-btn fw-btn-danger" style={{ padding: '5px 12px', fontSize: 12 }}><><RotateCcw size={12} /> 重试失败项</></button>
         )}
         <button onClick={onClose} className="fw-btn fw-btn-ghost" style={{ padding: '5px 9px', fontSize: 13 }}><X size={14} /></button>
       </div>
-      {loading && <div style={{ fontSize: 12, color: '#8b93a9' }}>读取结果…</div>}
-      {error && <div style={{ fontSize: 12, color: '#e5484d' }}><><AlertCircle size={12} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</></div>}
+      {loading && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>读取结果…</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)' }}><><AlertCircle size={12} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</></div>}
       {!loading && !error && items.length === 0 && !isRunning && (
-        <div style={{ fontSize: 12, color: '#8b93a9' }}>暂无结果（连接批量出片节点并执行后展示）</div>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>暂无结果（连接批量出片节点并执行后展示）</div>
       )}
       {items.map((it) => (
         <div key={it.index} style={{
@@ -87,26 +87,26 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
           background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
           border: 'var(--glass-border)', transition: 'all .15s',
         }}>
-          <span style={{ color: it.ok ? '#30a46c' : '#e5484d', width: 18, display: 'inline-flex', justifyContent: 'center' }}>{it.ok ? <Check size={13} /> : <XCircle size={13} />}</span>
+          <span style={{ color: it.ok ? 'var(--success)' : 'var(--danger)', width: 18, display: 'inline-flex', justifyContent: 'center' }}>{it.ok ? <Check size={13} /> : <XCircle size={13} />}</span>
           <span style={{ fontWeight: 600 }}>{it.name}</span>
           {it.ok ? (
             <>
-              <span style={{ color: '#8b93a9' }}>
+              <span style={{ color: 'var(--text-faint)' }}>
                 {it.size ? ((it.size / 1024 / 1024).toFixed(1) + ' MB') : ''}
               </span>
-              <span style={{ flex: 1, color: '#8b93a9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.path}>
+              <span style={{ flex: 1, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.path}>
                 {it.path}
               </span>
               {it.path && (
                 <button onClick={() => api.revealPath(it.path!).catch(() => {})} style={{
                   padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
-                  border: '1px solid ' + (dark ? '#3a4157' : '#dfe4ee'), background: dark ? '#2c3142' : '#fff',
-                  color: dark ? '#e8eaf2' : '#1f2430', flexShrink: 0,
+                  border: '1px solid ' + (dark ? '#3a4157' : '#dfe4ee'), background: dark ? 'var(--border)' : '#fff',
+                  color: dark ? 'var(--text)' : 'var(--text)', flexShrink: 0,
                 }}><><FolderOpen size={11} /> 定位</></button>
               )}
             </>
           ) : (
-            <span style={{ flex: 1, color: '#e5484d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.error}>
+            <span style={{ flex: 1, color: 'var(--danger)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.error}>
               {it.error}
             </span>
           )}

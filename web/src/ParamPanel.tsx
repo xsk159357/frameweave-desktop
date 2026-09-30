@@ -39,7 +39,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
       background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
       boxShadow: 'var(--glass-inner)', padding: 16, overflowY: 'auto', flexShrink: 0,
     },
-    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: dark ? '#8b93a9' : '#7a8499', margin: '14px 0 7px', textTransform: 'uppercase' as const },
+    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: dark ? 'var(--text-faint)' : '#7a8499', margin: '14px 0 7px', textTransform: 'uppercase' as const },
     input: {
       width: '100%', padding: '8px 11px', borderRadius: 10, fontSize: 13,
       border: 'var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text)',
@@ -97,9 +97,9 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
                 alert('已加密存入本机保险箱，参数已改为引用 ' + '@secret:' + secName)
               } catch (e: any) { alert('存入失败: ' + e.message) }
             }}
-            style={{ ...styles.input, background: dark ? '#262c3d' : '#eef1f8', cursor: 'pointer',
+            style={{ ...styles.input, background: dark ? 'var(--border)' : 'var(--bg-panel-2)', cursor: 'pointer',
                      marginTop: -4, textAlign: 'center', fontSize: 12, width: '100%', fontWeight: 600,
-                     borderColor: dark ? '#3a4260' : '#d4d9e4', transition: 'all .18s' }}
+                     borderColor: dark ? 'var(--border-strong)' : 'var(--border-strong)', transition: 'all .18s' }}
           >
             <><Lock size={12} /> 加密存入本机保险箱</>
           </button>
@@ -119,28 +119,28 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
     <div style={styles.panel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{spec?.title || '节点'}</span>
-        <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
+        <span className="fw-badge" style={{ background: dark ? 'var(--border)' : 'var(--bg-panel-2)', color: dark ? 'var(--text-faint)' : '#7a8499', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
       </div>
-      <div style={{ fontSize: 11, color: dark ? '#5d6579' : '#9aa2b5', marginBottom: 4, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, color: dark ? 'var(--text-faint)' : '#9aa2b5', marginBottom: 4, lineHeight: 1.5 }}>
         {spec?.type_id}
       </div>
       {spec?.description && (
-        <div style={{ fontSize: 11.5, color: dark ? '#8b93a9' : '#7a8499', marginBottom: 12, lineHeight: 1.55 }}>{spec.description}</div>
+        <div style={{ fontSize: 11.5, color: dark ? 'var(--text-faint)' : '#7a8499', marginBottom: 12, lineHeight: 1.55 }}>{spec.description}</div>
       )}
 
       {/* 执行状态 */}
       <div style={styles.label}>执行状态</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
         <span style={{ width: 8, height: 8, borderRadius: '50%',
-          background: status === 'success' ? '#30a46c' : status === 'failed' ? '#e5484d'
-            : status === 'running' ? '#f5a524' : status === 'cached' ? '#6d8aff' : dark ? '#5d6579' : '#a2aabd',
-          boxShadow: '0 0 0 3px ' + (status === 'success' ? 'rgba(48,164,108,.18)' : status === 'failed' ? 'rgba(229,72,77,.18)' : 'transparent') }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: status === 'success' ? '#30a46c' : status === 'failed' ? '#e5484d' : status === 'running' ? '#f5a524' : status === 'cached' ? '#6d8aff' : dark ? '#e8eaf2' : '#1f2430' }}>
+          background: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)'
+            : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : dark ? 'var(--text-faint)' : 'var(--text-faint)',
+          boxShadow: '0 0 0 3px ' + (status === 'success' ? 'var(--success-soft)' : status === 'failed' ? 'var(--danger-soft)' : 'transparent') }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)' : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : dark ? 'var(--text)' : 'var(--text)' }}>
           {status}
         </span>
       </div>
       {error && (
-        <div style={{ color: '#e5484d', fontSize: 12, marginBottom: 10, whiteSpace: 'pre-wrap', background: dark ? 'rgba(229,72,77,.1)' : '#fdecec', borderRadius: 9, padding: '8px 10px', lineHeight: 1.5 }}>{error}</div>
+        <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 10, whiteSpace: 'pre-wrap', background: dark ? 'rgba(229,72,77,.1)' : 'var(--danger-soft)', borderRadius: 9, padding: '8px 10px', lineHeight: 1.5 }}>{error}</div>
       )}
 
       {/* 参数表单 */}
@@ -149,7 +149,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
           <div style={{ ...styles.label, marginTop: 4 }}>参数</div>
           {spec.params.map((p) => (
             <div key={p.name}>
-              <div style={{ fontSize: 12, color: dark ? '#b9c0d4' : '#4a5268', marginBottom: 2 }}>
+              <div style={{ fontSize: 12, color: dark ? 'var(--text-dim)' : 'var(--text-faint)', marginBottom: 2 }}>
                 {p.label} {p.description ? '· ' + p.description : ''}
               </div>
               {renderParam(p)}
@@ -164,22 +164,22 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
           <div style={{ ...styles.label, marginTop: 8 }}>运行历史（{run_history.length}）</div>
           <div style={{ maxHeight: 180, overflow: 'auto', marginBottom: 10 }}>
             {[...run_history].reverse().map((h, i) => {
-              const hColor = h.status === 'success' ? '#2e9e5b' : h.status === 'cached' ? '#6d8aff' : '#e5484d'
+              const hColor = h.status === 'success' ? 'var(--success)' : h.status === 'cached' ? 'var(--cached)' : 'var(--danger)'
               const t = h.time ? new Date(h.time * 1000).toLocaleString('zh-CN', { hour12: false }) : ''
               const paramSummary = h.params ? Object.entries(h.params).filter(([k, v]) => String(v ?? '') !== '').slice(0, 3).map(([k, v]) => k + '=' + String(v).slice(0, 14)).join(' ') : ''
               return (
                 <div key={i} style={{
-                  border: '1px solid ' + (dark ? '#2c3142' : '#eef1f7'),
+                  border: '1px solid ' + (dark ? 'var(--border)' : 'var(--bg-panel-2)'),
                   borderRadius: 6, padding: '6px 8px', marginBottom: 6, fontSize: 11,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: hColor, fontWeight: 600 }}>
                       {h.status === 'success' ? <><Check size={11} style={{ verticalAlign: '-2px' }} /> 成功</> : h.status === 'cached' ? <><Zap size={11} style={{ verticalAlign: '-2px' }} /> 缓存命中</> : <><X size={11} style={{ verticalAlign: '-2px' }} /> {h.status || '失败'}</>}
                     </span>
-                    <span style={{ color: '#8b93a9' }}>{t}</span>
+                    <span style={{ color: 'var(--text-faint)' }}>{t}</span>
                   </div>
-                  {paramSummary && <div style={{ color: '#8b93a9', marginTop: 2 }}>{paramSummary}</div>}
-                  {h.error && <div style={{ color: '#e5484d', marginTop: 2, wordBreak: 'break-all' }}>{String(h.error).slice(0, 120)}</div>}
+                  {paramSummary && <div style={{ color: 'var(--text-faint)', marginTop: 2 }}>{paramSummary}</div>}
+                  {h.error && <div style={{ color: 'var(--danger)', marginTop: 2, wordBreak: 'break-all' }}>{String(h.error).slice(0, 120)}</div>}
                 </div>
               )
             })}
@@ -189,7 +189,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
       {/* 输出资产 */}
       <div style={{ ...styles.label, marginTop: 8 }}>输出资产</div>
       {Object.entries(assetIds).length === 0 && (
-        <div style={{ fontSize: 12, color: '#8b93a9', marginBottom: 10 }}>尚未产出（运行后显示）</div>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>尚未产出（运行后显示）</div>
       )}
       {Object.entries(assetIds).map(([port, aid]) => (
         <div key={port} style={{ marginBottom: 8 }}>
@@ -197,8 +197,8 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
             onClick={() => loadPreview(aid)}
             style={{
               padding: '8px 10px', borderRadius: 9, width: '100%', textAlign: 'left', cursor: 'pointer',
-              border: '1px solid ' + (dark ? '#333a50' : '#e2e6ee'), background: dark ? '#1e2230' : '#f5f6fb',
-              color: dark ? '#e8eaf2' : '#1f2430', fontSize: 12, transition: 'all .18s',
+              border: '1px solid ' + (dark ? 'var(--border-strong)' : 'var(--border)'), background: dark ? 'var(--bg-panel-2)' : 'var(--bg-panel-2)',
+              color: dark ? 'var(--text)' : 'var(--text)', fontSize: 12, transition: 'all .18s',
             }}
           >
             <><Eye size={13} style={{ verticalAlign: '-2px', marginRight: 2 }} /> 预览 {port}（{aid.slice(0, 8)}）</>
@@ -206,16 +206,16 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
         </div>
       ))}
 
-      {previewErr && <div style={{ color: '#e5484d', fontSize: 12, marginBottom: 8 }}>{previewErr}</div>}
+      {previewErr && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{previewErr}</div>}
 
       {preview && (
         <div style={{ marginTop: 4, fontSize: 12, wordBreak: 'break-all' }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>预览内容（{preview.kind}）</div>
           {preview.kind === 'SEGMENTS' && Array.isArray(preview.content) && (
             <div>
-              <div style={{ color: '#8b93a9', marginBottom: 6 }}>共 {preview.content.length} 个片段</div>
+              <div style={{ color: 'var(--text-faint)', marginBottom: 6 }}>共 {preview.content.length} 个片段</div>
               {preview.content.slice(0, 10).map((s: any) => (
-                <div key={s.index} style={{ padding: '4px 0', borderBottom: '1px solid ' + (dark ? '#2c3142' : '#eef1f7') }}>
+                <div key={s.index} style={{ padding: '4px 0', borderBottom: '1px solid ' + (dark ? 'var(--border)' : 'var(--bg-panel-2)') }}>
                   #{s.index} {s.start}s → {s.end}s（{s.duration}s）
                 </div>
               ))}
@@ -223,22 +223,22 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
           )}
           {preview.kind === 'SUBTITLE' && Array.isArray(preview.content) && (
             <div>
-              <div style={{ color: '#8b93a9', marginBottom: 6 }}>共 {preview.content.length} 条字幕</div>
+              <div style={{ color: 'var(--text-faint)', marginBottom: 6 }}>共 {preview.content.length} 条字幕</div>
               {preview.content.slice(0, 8).map((s: any, i: number) => (
-                <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid ' + (dark ? '#2c3142' : '#eef1f7') }}>
+                <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid ' + (dark ? 'var(--border)' : 'var(--bg-panel-2)') }}>
                   {s.start}s → {s.end}s {s.text}
                 </div>
               ))}
             </div>
           )}
           {preview.kind === 'JSON' && preview.content && (
-            <pre style={{ whiteSpace: 'pre-wrap', background: dark ? '#12141c' : '#f4f6fb',
+            <pre style={{ whiteSpace: 'pre-wrap', background: dark ? '#0a0e18' : '#f4f6fb',
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {JSON.stringify(preview.content, null, 2).slice(0, 2500)}
             </pre>
           )}
           {preview.kind === 'STRING' && preview.content && (
-            <pre style={{ whiteSpace: 'pre-wrap', background: dark ? '#12141c' : '#f4f6fb',
+            <pre style={{ whiteSpace: 'pre-wrap', background: dark ? '#0a0e18' : '#f4f6fb',
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {String((preview.content as any).text || JSON.stringify(preview.content)).slice(0, 2500)}
             </pre>

@@ -1,11 +1,10 @@
-// 左侧节点面板：搜索 + 分类 + 收藏
+// 左侧节点面板：搜索 + 分类 + 收藏（v3 霓虹行式）
 import { useMemo, useState } from 'react'
 import { Star, Puzzle } from 'lucide-react'
 import { useAppStore } from './store'
 
 export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) {
   const specs = useAppStore((s) => s.specs)
-  const dark = useAppStore((s) => s.dark)
   const [query, setQuery] = useState('')
   const [favs, setFavs] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('fw_favs') || '[]') } catch { return [] }
@@ -22,11 +21,18 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
   }, [specs, query])
 
   const catGrad: Record<string, string> = {
-    输入: 'linear-gradient(135deg,#5b6cf7,#8a5cf6)',
-    语义: 'linear-gradient(135deg,#8a5cf6,#c26df5)',
-    分析: 'linear-gradient(135deg,#2fa26b,#3ecb85)',
-    控制: 'linear-gradient(135deg,#f5a524,#f07b3f)',
-    输出: 'linear-gradient(135deg,#e5484d,#ff7a7d)',
+    输入: 'linear-gradient(135deg,#6c8cff,#8b5cf6)',
+    语义: 'linear-gradient(135deg,#8b5cf6,#c084fc)',
+    分析: 'linear-gradient(135deg,#0ea5a4,#34d399)',
+    控制: 'linear-gradient(135deg,#f59e0b,#f97316)',
+    输出: 'linear-gradient(135deg,#f87171,#fb7185)',
+  }
+  const catColor: Record<string, string> = {
+    输入: '#6c8cff',
+    语义: '#a78bfa',
+    分析: '#34d399',
+    控制: '#fbbf24',
+    输出: '#f87171',
   }
   const short = (s: any) => {
     const last = String(s.type_id || '').split('/').pop() || ''
@@ -46,11 +52,12 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       onClick={() => onAddNode(s.type_id)}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-        padding: '8px 9px', marginBottom: 3, borderRadius: 12,
+        padding: '8px 10px', marginBottom: 2, borderRadius: 11,
+        position: 'relative',
         transition: 'background var(--t-fast) var(--t-ease), transform var(--t-fast) var(--t-ease)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--hover-bg)'
+        e.currentTarget.style.background = 'var(--accent-soft)'
         e.currentTarget.style.transform = 'translateX(2px)'
       }}
       onMouseLeave={(e) => {
@@ -63,7 +70,7 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
         background: catGrad[s.category] || 'var(--accent-grad)', color: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 13.5, fontWeight: 700,
-        boxShadow: '0 2px 8px rgba(60,72,140,.26), inset 0 1px 0 rgba(255,255,255,.28)',
+        boxShadow: '0 2px 10px rgba(70,90,200,.35), inset 0 1px 0 rgba(255,255,255,.3)',
       }}>{short(s)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
@@ -72,60 +79,60 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
             onClick={(e) => { e.stopPropagation(); toggleFav(s.type_id) }}
             style={{
               background: 'none', border: 'none', padding: 2, lineHeight: 0, cursor: 'pointer', flexShrink: 0,
-              color: favs.includes(s.type_id) ? '#f5a524' : dark ? '#4a5264' : '#b6bdd0',
-              opacity: favs.includes(s.type_id) ? 1 : 0.55,
+              color: favs.includes(s.type_id) ? '#fbbf24' : 'var(--text-faint)',
+              opacity: favs.includes(s.type_id) ? 1 : 0.5,
               transition: 'opacity var(--t-fast), color var(--t-fast)',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#f5a524' }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = favs.includes(s.type_id) ? '1' : '0.55'; e.currentTarget.style.color = favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0') }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#fbbf24' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = favs.includes(s.type_id) ? '1' : '0.5'; e.currentTarget.style.color = favs.includes(s.type_id) ? '#fbbf24' : 'var(--text-faint)' }}
             title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
-          ><Star size={13} fill={favs.includes(s.type_id) ? '#f5a524' : 'none'} color={favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0')} /></button>
+          ><Star size={13} fill={favs.includes(s.type_id) ? '#fbbf24' : 'none'} color={favs.includes(s.type_id) ? '#fbbf24' : 'var(--text-faint)'} /></button>
         </div>
-        <div style={{ fontSize: 10.5, color: dark ? '#5d6579' : '#98a1b6', marginTop: 1, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 1, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</div>
       </div>
     </div>
   )
 
-  const SectionTitle = ({ children, extra }: { children: React.ReactNode; extra?: string }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 12px 7px' }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .8, color: dark ? '#8b93a9' : '#7c869c', textTransform: 'uppercase' }}>{children}</span>
-      {extra && <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{extra}</span>}
-      <span style={{ flex: 1, height: 1, background: dark ? '#1d2130' : '#e8ebf3' }} />
+  const SectionTitle = ({ children, extra, color }: { children: React.ReactNode; extra?: string; color?: string }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 10px 8px' }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, color: color || 'var(--text-faint)', textTransform: 'uppercase' }}>{children}</span>
+      {extra && <span className="fw-badge" style={{ background: 'var(--bg-panel-2)', color: 'var(--text-faint)' }}>{extra}</span>}
+      <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
     </div>
   )
 
   return (
-    <div style={{ width: 246, borderRight: 'var(--glass-border)',
-      background: 'linear-gradient(180deg, var(--glass-strong), var(--glass))', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      boxShadow: 'var(--glass-inner), inset -1px 0 0 rgba(255,255,255,.35)', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative', zIndex: 5 }}>
-      <div style={{ padding: '14px 14px 10px' }}>
+    <div style={{ width: 248, borderRight: 'var(--glass-border)',
+      background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      boxShadow: 'var(--glass-inner)', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative', zIndex: 5 }}>
+      <div style={{ padding: '14px 14px 10px', borderBottom: 'var(--glass-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontWeight: 700, fontSize: 13.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Puzzle size={14} color="var(--accent)" /> 节点库</span>
-          <span className="fw-badge" style={{ background: dark ? '#262c3d' : '#eef1f7', color: dark ? '#8b93a9' : '#7a8499' }}>{specs.length}</span>
+          <span style={{ fontWeight: 700, fontSize: 13.5, display: 'inline-flex', alignItems: 'center', gap: 7, letterSpacing: .3 }}><Puzzle size={14} color="var(--accent)" /> 节点库</span>
+          <span className="fw-badge" style={{ background: 'var(--bg-panel-2)', color: 'var(--text-faint)' }}>{specs.length}</span>
         </div>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索节点…"
           className="fw-input"
-          style={{ paddingLeft: 30, backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2214%22 height=%2214%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%238b93a9%22 stroke-width=%222%22><circle cx=%2211%22 cy=%2211%22 r=%227%22/><path d=%22M21 21l-4.3-4.3%22/></svg>')", backgroundRepeat: 'no-repeat', backgroundPosition: '10px center' }}
+          style={{ paddingLeft: 30, backgroundImage: "url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2214%22 height=%2214%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b779f%22 stroke-width=%222%22><circle cx=%2211%22 cy=%2211%22 r=%227%22/><path d=%22M21 21l-4.3-4.3%22/></svg>')", backgroundRepeat: 'no-repeat', backgroundPosition: '10px center' }}
         />
       </div>
-      <div className="fw-scroll" style={{ overflow: 'auto', padding: '0 8px 14px', flex: 1 }}>
+      <div className="fw-scroll" style={{ overflow: 'auto', padding: '4px 8px 14px', flex: 1 }}>
         {favs.length > 0 && (
           <div>
-            <SectionTitle><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Star size={10} fill="#f5a524" /> 常用节点</span></SectionTitle>
+            <SectionTitle color="#fbbf24"><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Star size={10} fill="#fbbf24" /> 常用节点</span></SectionTitle>
             {specs.filter(s => favs.includes(s.type_id)).map(renderItem)}
           </div>
         )}
         {categories.map(([cat, items]) => (
           <div key={cat}>
-            <SectionTitle extra={String(items.length)}>{cat}</SectionTitle>
+            <SectionTitle extra={String(items.length)} color={catColor[cat]}>{cat}</SectionTitle>
             {items.map(renderItem)}
           </div>
         ))}
         {categories.length === 0 && (
-          <div style={{ color: dark ? '#5d6579' : '#9aa2b5', fontSize: 12, padding: '20px 4px', textAlign: 'center' }}>
+          <div style={{ color: 'var(--text-faint)', fontSize: 12, padding: '20px 4px', textAlign: 'center' }}>
             无匹配节点
           </div>
         )}

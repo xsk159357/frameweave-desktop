@@ -102,7 +102,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedNodeId: null,
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
 
-  dark: localStorage.getItem('fw_theme') === 'dark',
+    dark: true,
   toggleDark: () => {
     const d = !get().dark
     localStorage.setItem('fw_theme', d ? 'dark' : 'light')

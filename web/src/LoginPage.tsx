@@ -1,7 +1,7 @@
 // 登录门禁页：独立登录窗口（未登录不可进入主界面）
 import { useState } from 'react'
 import {
-  Mail, Lock, KeyRound, Sun, Moon, CheckCircle2, AlertCircle,
+  Mail, Lock, KeyRound, CheckCircle2, AlertCircle,
   Layers, Workflow, Sparkles, ShieldCheck, DownloadCloud,
 } from 'lucide-react'
 import { api } from './api'
@@ -10,16 +10,12 @@ import { useAppStore } from './store'
 function Logo({ size = 76 }: { size?: number }) {
   return (
     <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 48 48" fill="none">
-      {/* 取景框主体 */}
       <rect x="3" y="6" width="42" height="36" rx="7" stroke="#fff" strokeWidth="3.2" fill="rgba(255,255,255,.08)" />
-      {/* 四角取景角标 */}
       <path d="M3 13C3 9 6 6 10.5 6h2.5v4H10.5c-1.5 0-3.5 1.3-3.5 3v0z" fill="#fff" />
       <path d="M45 13c0-4-3-7-7.5-7h-2.5v4h2.5c1.5 0 3.5 1.3 3.5 3z" fill="#fff" />
       <rect x="3" y="34" width="4" height="6.5" rx="1.6" fill="#fff" />
       <rect x="41" y="34" width="4" height="6.5" rx="1.6" fill="#fff" />
-      {/* 中心播放三角（镜头启动） */}
       <path d="M21 19.5l9 4.5-9 4.5z" fill="#fff" />
-      {/* 底部进度线（帧） */}
       <rect x="16" y="37.5" width="3" height="2.6" rx="1.3" fill="#fff" opacity=".9" />
       <rect x="22.5" y="37.5" width="3" height="2.6" rx="1.3" fill="#fff" opacity=".9" />
       <rect x="29" y="37.5" width="3" height="2.6" rx="1.3" fill="#fff" opacity=".9" />
@@ -28,8 +24,6 @@ function Logo({ size = 76 }: { size?: number }) {
 }
 
 export function LoginPage() {
-  const dark = useAppStore((s) => s.dark)
-  const toggleDark = useAppStore((s) => s.toggleDark)
   const setSession = useAppStore((s) => s.setSession)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -77,16 +71,14 @@ export function LoginPage() {
   }
 
   const field = (name: string) => ({ className: 'lp-field' + (focus === name ? ' focus' : '') })
+  const featIc = (c: string) => ({ color: c })
 
   return (
     <div className="lp-root">
       <div className="lp-grid-bg" />
-      <div className="lp-glow" style={{ width: 440, height: 440, left: '-70px', top: '-70px', background: 'rgba(96,120,255,.5)' }} />
-      <div className="lp-glow" style={{ width: 380, height: 380, right: '16%', bottom: '-110px', background: 'rgba(165,110,255,.4)' }} />
-
-      <button className="lp-btn-theme lp-ask" onClick={toggleDark} title={dark ? '切换浅色' : '切换深色'}>
-        {dark ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
+      <div className="lp-glow" style={{ width: 460, height: 460, left: '-70px', top: '-70px', background: 'rgba(108,140,255,.5)' }} />
+      <div className="lp-glow" style={{ width: 400, height: 400, right: '15%', bottom: '-110px', background: 'rgba(167,139,255,.42)' }} />
+      <div className="lp-glow" style={{ width: 300, height: 300, left: '38%', top: '-140px', background: 'rgba(77,208,225,.28)' }} />
 
       {/* 品牌区 */}
       <div className="lp-brand">
@@ -94,23 +86,23 @@ export function LoginPage() {
         <div className="lp-title">
           拾帧 <span className="lp-title-grad">FrameWeave</span>
         </div>
-        <div className="lp-slogan">无限画布 · AI 视频创作工作流<br />节点化编排，轻松产出创意视频</div>
+        <div className="lp-slogan">节点式 AI 视频创作工作台<br />把灵感编成画面，把画面剪成故事</div>
         <div className="lp-feats">
           <div className="lp-feat">
-            <div className="lp-feat-ic"><Workflow size={17} color="var(--accent)" /></div>
-            无限画布 + 节点式工作流编排
+            <div className="lp-feat-ic"><Workflow size={17} {...featIc('var(--accent)')} /></div>
+            无限画布 · 节点式工作流编排
           </div>
           <div className="lp-feat">
-            <div className="lp-feat-ic"><Layers size={17} color="var(--accent)" /></div>
+            <div className="lp-feat-ic"><Layers size={17} {...featIc('var(--accent2)')} /></div>
             节点与工作流商城，一键安装即用
           </div>
           <div className="lp-feat">
-            <div className="lp-feat-ic"><Sparkles size={17} color="var(--accent)" /></div>
+            <div className="lp-feat-ic"><Sparkles size={17} {...featIc('var(--cyan)')} /></div>
             AI 驱动的视频创作全流程
           </div>
           <div className="lp-feat">
-            <div className="lp-feat-ic"><ShieldCheck size={17} color="var(--accent)" /></div>
-            手机号账号体系 · 安全订阅
+            <div className="lp-feat-ic"><ShieldCheck size={17} {...featIc('var(--success)')} /></div>
+            账号体系 · 安全订阅
           </div>
         </div>
         <div className="lp-ver">FrameWeave v{__APP_VERSION__}</div>
