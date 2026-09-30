@@ -19,6 +19,26 @@ if (!gotLock) {
   })
 }
 
+// ---------- 运行日志（黑匣子）：userData/debug.log，供故障排查 ----------
+const LOG_MAX = 2 * 1024 * 1024  // 2MB 轮转
+
+function fwLog(...args) {
+  try {
+    const line = new Date().toISOString() + ' ' + args.map(String).join(' ') + '\n'
+    const p = path.join(app.getPath('userData'), 'debug.log')
+    try { if (fs.existsSync(p) && fs.statSync(p).size > LOG_MAX) fs.renameSync(p, p + '.old') } catch { /* 轮转失败忽略 */ }
+    fs.appendFileSync(p, line)
+  } catch { /* 日志失败不影响主流程 */ }
+}
+
+process.on('uncaughtException', (e) => fwLog('[CRASH] uncaughtException:', e && e.stack || e))
+process.on('unhandledRejection', (e) => fwLog('[CRASH] unhandledRejection:', e && e.stack || e))
+
+ipcMain.on('fw-log', (_e, payload) => {
+  const d = payload || {}
+  fwLog('[renderer:' + (d.level || 'info') + ']', d.msg || '')
+})
+
 let mainWindow = null
 let backendProc = null
 const BACKEND_PORT = 8788
@@ -83,9 +103,12 @@ function waitForBackend(timeoutMs = 20000) {
 }
 
 async function startBackend() {
+  fwLog('[boot] startBackend begin, packaged=', app.isPackaged, 'port=', BACKEND_PORT)
   // 端口占用检测：已是本服务(复用) / 其他程序(友好报错) / 空闲(正常启动)
   const occ = await probePort()
+  fwLog('[boot] probePort =>', occ)
   if (occ === 'frameweave') {
+    fwLog('[boot] 已检测到运行中的 FrameWeave 后端，直接复用')
     console.log('[backend] 已检测到运行中的 FrameWeave 后端，直接复用')
     return true
   }
@@ -100,12 +123,14 @@ async function startBackend() {
       ? spawn(cmd, ['-u', backendMain], { env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, stdio: 'ignore' })
       : spawn(cmd, [], { env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }, stdio: 'ignore' })
     const ok = await waitForBackend()
+    fwLog('[boot] waitForBackend =>', ok)
     if (!ok) {
       dialog.showErrorBox('FrameWeave', '后端服务启动超时，请检查 Python 环境后重启应用')
       return false
     }
     return true
   } catch (e) {
+    fwLog('[boot] 启动后端失败:', e.message)
     dialog.showErrorBox('FrameWeave', '启动后端失败: ' + e.message)
     return false
   }
@@ -132,9 +157,10 @@ function createWindow() {
   const prodFile = path.join(distDir, 'index.html')
 
   // 打包模式：直接加载构建产物（避免被本地 dev server 带偏）；开发模式才探测 Vite
+  fwLog('[boot] createWindow, packaged=', app.isPackaged)
   if (app.isPackaged) {
-    if (fs.existsSync(prodFile)) mainWindow.loadFile(prodFile)
-    else mainWindow.loadURL(devUrl) // 页面会显示连接失败提示
+    if (fs.existsSync(prodFile)) { fwLog('[boot] loadFile:', prodFile); mainWindow.loadFile(prodFile) }
+    else { fwLog('[boot] prodFile 缺失, fallback devUrl'); mainWindow.loadURL(devUrl) }
   } else {
     http.get(devUrl + '/api/health', (res) => {
       res.resume()
@@ -149,10 +175,12 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  fwLog('[boot] app ready, version=', app.getVersion())
   const backendOk = await startBackend()
-  if (!backendOk) { app.quit(); return }
+  if (!backendOk) { fwLog('[boot] backend 未就绪，退出'); app.quit(); return }
   createWindow()
   setupAutoUpdate()
+  fwLog('[boot] 启动完成')
 })
 
 // ---- 自动更新（electron-updater） ----
@@ -233,6 +261,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('quit', () => {
+  fwLog('[boot] app quit, killing backend pid=', backendProc && backendProc.pid)
   if (backendProc && !backendProc.killed) {
     try { backendProc.kill() } catch { /* ignore */ }
   }

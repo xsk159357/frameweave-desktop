@@ -4,6 +4,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('frameweave', {
   backendPort: 8788,
   version: '0.1.0',
+  // 运行日志（黑匣子）：渲染进程写 debug.log
+  log: (level, msg) => ipcRenderer.send('fw-log', { level, msg }),
   // 自动更新桥
   checkForUpdate: () => ipcRenderer.send('check-for-update'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, v) => cb(v)),
