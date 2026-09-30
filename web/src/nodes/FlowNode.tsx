@@ -1,5 +1,5 @@
 // 自定义画布节点组件
-import { memo } from 'react'
+import { Fragment, memo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FlowNodeData } from '../types'
 import { useAppStore } from '../store'
@@ -83,29 +83,46 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           {Object.keys(asset_ids).length > 0 ? ' · ' + Object.keys(asset_ids).length + ' 输出' : ''}
         </div>
       )}
-      {/* 输入端口：多端口垂直分布 + hover 放大 + 类型提示 */}
+      {/* 输入端口：多端口垂直分布 + 名称标签 + hover 放大 + 类型提示 */}
       {(spec?.inputs || []).map((p, i) => (
-        <Handle
-          key={'in-' + p.name}
-          type="target"
-          position={Position.Left}
-          id={p.name}
-          className="fw-handle in"
-          title={'输入: ' + p.name + ' · ' + p.type}
-          style={{ top: 24 + i * 26 }}
-        />
+        <Fragment key={'in-' + p.name}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={p.name}
+            className="fw-handle in"
+            title={'输入: ' + p.name + ' · ' + p.type}
+            style={{ top: 24 + i * 26 }}
+          />
+          <span
+            style={{
+              position: 'absolute', left: 6, top: 24 + i * 26, transform: 'translateY(-50%)',
+              fontSize: 10, lineHeight: 1, color: dark ? '#8b93a9' : '#6b7280',
+              pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >{p.name}</span>
+        </Fragment>
       ))}
       {/* 输出端口 */}
       {(spec?.outputs || []).map((p, i) => (
-        <Handle
-          key={'out-' + p.name}
-          type="source"
-          position={Position.Right}
-          id={p.name}
-          className="fw-handle out"
-          title={'输出: ' + p.name + ' · ' + p.type}
-          style={{ top: 24 + i * 26 }}
-        />
+        <Fragment key={'out-' + p.name}>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={p.name}
+            className="fw-handle out"
+            title={'输出: ' + p.name + ' · ' + p.type}
+            style={{ top: 24 + i * 26 }}
+          />
+          <span
+            style={{
+              position: 'absolute', right: 6, top: 24 + i * 26, transform: 'translateY(-50%)',
+              fontSize: 10, lineHeight: 1, color: dark ? '#8b93a9' : '#6b7280',
+              pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis',
+              textAlign: 'right',
+            }}
+          >{p.name}</span>
+        </Fragment>
       ))}
     </div>
   )
