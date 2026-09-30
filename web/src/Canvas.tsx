@@ -270,6 +270,10 @@ export function Canvas({ workflowId }: { workflowId: string }) {
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
     transition: 'all .2s ease',
   }
+  const sep = {
+    width: 1, alignSelf: 'stretch', margin: '4px 2px',
+    background: dark ? 'rgba(160,175,235,.18)' : 'rgba(120,130,190,.16)',
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
@@ -291,7 +295,8 @@ export function Canvas({ workflowId }: { workflowId: string }) {
           const vals = Object.values(nodeProgress).filter((v) => v !== undefined && v !== null)
           const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: 260, marginLeft: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: 280, marginLeft: 2 }}>
+              <div style={sep} />
               <div style={{ flex: 1, height: 8, background: dark ? '#2c3142' : '#eef1f7', borderRadius: 999, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: (avg * 100) + '%', background: 'linear-gradient(90deg,#4f6ef7,#9a6dff)', transition: 'width .3s', borderRadius: 999 }} />
               </div>
@@ -304,7 +309,8 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             ⚠ {lastError}
           </span>
         )}
-        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: dark ? '#c6cbd8' : '#4a5264', cursor: 'pointer', userSelect: 'none', marginLeft: 4 }}>
+        <div style={sep} />
+        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: dark ? '#c6cbd8' : '#4a5264', cursor: 'pointer', userSelect: 'none' }}>
           <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)}
             style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
           自动布局

@@ -20,6 +20,19 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
     return [...map.entries()]
   }, [specs, query])
 
+  const catGrad: Record<string, string> = {
+    输入: 'linear-gradient(135deg,#5b6cf7,#8a5cf6)',
+    语义: 'linear-gradient(135deg,#8a5cf6,#c26df5)',
+    分析: 'linear-gradient(135deg,#2fa26b,#3ecb85)',
+    控制: 'linear-gradient(135deg,#f5a524,#f07b3f)',
+    输出: 'linear-gradient(135deg,#e5484d,#ff7a7d)',
+  }
+  const short = (s: any) => {
+    const last = String(s.type_id || '').split('/').pop() || ''
+    const ch = last.replace(/[^a-zA-Z0-9]/g, '')[0]
+    return ch ? ch.toUpperCase() : (s.title || '?').slice(0, 1)
+  }
+
   const toggleFav = (typeId: string) => {
     const next = favs.includes(typeId) ? favs.filter(f => f !== typeId) : [...favs, typeId]
     setFavs(next)
@@ -31,7 +44,7 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       key={s.type_id}
       onClick={() => onAddNode(s.type_id)}
       style={{
-        padding: '9px 11px', marginBottom: 6, borderRadius: 13, cursor: 'pointer',
+        padding: '10px 12px', marginBottom: 7, borderRadius: 13, cursor: 'pointer',
         background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
         border: 'var(--glass-border)', boxShadow: 'var(--glass-inner), var(--shadow-sm)',
         transition: 'all .2s ease',
@@ -47,21 +60,32 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
         e.currentTarget.style.transform = 'translateY(0)'
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{s.title}</span>
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleFav(s.type_id) }}
-          style={{
-            background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', flexShrink: 0,
-            color: favs.includes(s.type_id) ? '#f5a524' : dark ? '#4a5264' : '#b6bdd0',
-            transition: 'color .15s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#f5a524' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0') }}
-          title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
-        >★</button>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+          background: catGrad[s.category] || 'var(--accent-grad)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, fontWeight: 700,
+          boxShadow: '0 3px 10px rgba(80,90,140,.28), inset 0 1px 0 rgba(255,255,255,.25)',
+        }}>{short(s)}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleFav(s.type_id) }}
+              style={{
+                background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', flexShrink: 0,
+                color: favs.includes(s.type_id) ? '#f5a524' : dark ? '#4a5264' : '#b6bdd0',
+                transition: 'color .15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#f5a524' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = favs.includes(s.type_id) ? '#f5a524' : (dark ? '#4a5264' : '#b6bdd0') }}
+              title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
+            >★</button>
+          </div>
+          <div style={{ fontSize: 10.5, color: dark ? '#5d6579' : '#9aa2b5', marginTop: 2, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</div>
+        </div>
       </div>
-      <div style={{ fontSize: 11, color: dark ? '#5d6579' : '#9aa2b5', marginTop: 3, fontFamily: 'Consolas, monospace' }}>{s.type_id}</div>
     </div>
   )
 

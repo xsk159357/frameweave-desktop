@@ -113,16 +113,24 @@ input, select, textarea { font-family: inherit; }
   background-size: 44px 44px;
   mask-image: radial-gradient(ellipse 90% 80% at 30% 45%, #000 30%, transparent 75%);
 }
-.lp-glow { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; pointer-events: none; }
-.lp-brand { width: 55%; min-width: 420px; display: flex; flex-direction: column; justify-content: center; padding: 0 64px; position: relative; z-index: 1; }
+.lp-glow { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; pointer-events: none; animation: lp-drift 14s ease-in-out infinite alternate; }
+@keyframes lp-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(30px, 22px) scale(1.08); } }
+.lp-brand { width: 55%; min-width: 420px; max-width: 640px; display: flex; flex-direction: column; justify-content: center; padding: 0 56px 0 72px; position: relative; z-index: 1; }
 .lp-logo {
-  width: 76px; height: 76px; border-radius: 20px; margin-bottom: 28px;
+  width: 76px; height: 76px; border-radius: 22px; margin-bottom: 28px;
   background: var(--login-brand-grad);
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 12px 34px rgba(79, 110, 247, .35);
-  animation: lp-breathe 5s ease-in-out infinite;
+  box-shadow: 0 14px 38px rgba(79, 110, 247, .4), inset 0 1px 0 rgba(255,255,255,.3);
+  animation: lp-glow 6s ease-in-out infinite;
 }
-@keyframes lp-breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes lp-glow {
+  0%, 100% { box-shadow: 0 14px 38px rgba(79, 110, 247, .4), inset 0 1px 0 rgba(255,255,255,.3); }
+  50% { box-shadow: 0 18px 54px rgba(79, 110, 247, .62), inset 0 1px 0 rgba(255,255,255,.3); }
+}
+/* 登录页入场 */
+.lp-brand { animation: lp-enter .6s cubic-bezier(.22,.9,.36,1) both; }
+.lp-card { animation: lp-enter .5s .12s cubic-bezier(.22,.9,.36,1) both; }
+@keyframes lp-enter { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 .lp-title { font-size: 40px; font-weight: 800; letter-spacing: 1px; }
 .lp-title-grad {
   background: var(--login-brand-grad);
@@ -275,6 +283,12 @@ input, select, textarea { font-family: inherit; }
 .react-flow__controls { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-md); border: 1px solid var(--border); }
 .react-flow__controls button { border-bottom: var(--glass-border); background: var(--glass); color: var(--text-dim); }
 .react-flow__controls button:hover { background: var(--hover-bg); color: var(--text); }
-.react-flow__minimap { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-md); border: 1px solid var(--border); }
+.react-flow__minimap {
+  border-radius: var(--radius-md); overflow: hidden;
+  box-shadow: var(--glass-inner), var(--shadow-md);
+  border: var(--glass-border); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  position: absolute; left: auto; bottom: auto; right: 14px; top: 14px;
+}
+.react-flow__minimap-mask { fill: rgba(120,130,200,.12); }
 .react-flow__edge-path { stroke-linecap: round; }
 .react-flow__attribution { display: none; }
