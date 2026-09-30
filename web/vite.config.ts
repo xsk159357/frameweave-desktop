@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  // base 用相对路径：打包版经 Electron loadFile(file://) 加载，绝对路径 /assets 会指向磁盘根导致白屏
+  base: './',
   plugins: [react()],
   server: {
     port: 5180,
