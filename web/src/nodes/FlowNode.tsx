@@ -75,14 +75,14 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     const widget = p.widget || (p.type === 'INT' || p.type === 'FLOAT' ? 'number' : 'text')
     const label = p.label || p.name
     const base = {
-      width: '100%', padding: '5px 8px', borderRadius: 8, fontSize: 12, marginTop: 3,
+      width: '100%', padding: '4px 7px', borderRadius: 7, fontSize: 11.5, marginTop: 2,
       border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)',
       outline: 'none', boxSizing: 'border-box' as const,
     }
     if (widget === 'select' || (p.options && p.options.length)) {
       return (
-        <div key={p.name} style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{label}</div>
+        <div key={p.name} style={{ marginBottom: 5 }}>
+          <div style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>{label}</div>
           <select style={base} value={String(val ?? '')} onChange={(e) => paramUpd({ [p.name]: e.target.value })}>
             {(p.options || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
           </select>
@@ -91,18 +91,18 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     }
     if (p.type === 'BOOL' || widget === 'toggle') {
       return (
-        <div key={p.name} style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div key={p.name} style={{ marginBottom: 5, display: 'flex', alignItems: 'center', gap: 7 }}>
           <input type="checkbox" checked={String(val) === 'true' || val === true}
             onChange={(e) => paramUpd({ [p.name]: String(e.target.checked) })}
-            style={{ accentColor: 'var(--accent)', width: 14, height: 14, margin: 0 }} />
-          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{label}</div>
+            style={{ accentColor: 'var(--accent)', width: 13, height: 13, margin: 0 }} />
+          <div style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>{label}</div>
         </div>
       )
     }
     const isSecret = /key|token|secret|api/.test((p.name || '').toLowerCase())
     return (
-      <div key={p.name} style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{label}</div>
+      <div key={p.name} style={{ marginBottom: 5 }}>
+        <div style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>{label}</div>
         <input style={base} type={isSecret ? 'password' : 'text'} value={String(val ?? '')}
           placeholder={p.description || ''} onChange={(e) => paramUpd({ [p.name]: e.target.value })} />
       </div>
@@ -127,13 +127,14 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
   // —— v046：节点高度恒定（不随编辑变化，杜绝表单撑高覆盖相邻节点的穿模）；状态区固定 36px ——
   const summaryH = !expanded && summaryItem ? 20 : 0
   const cfgItems = (spec?.params || []).length
-  const cfgH = expanded ? Math.min(30 + cfgItems * 50 + 18, 320) : 0
+  // 内镶参数区：全展开不滚动（紧凑行高 44），位于端口圆点下方；高度估算与 Canvas estNodeH 保持一致
+  const cfgH = expanded ? 24 + cfgItems * 46 + 12 : 0
   const portH = portRows * 24
   const bodyH = portH
   const statusH = 36
-  const nodeH = 44 + summaryH + cfgH + bodyH + statusH + 12
-  const portY = (i: number) => 44 + summaryH + cfgH + i * 24
-  const statusTop = 44 + summaryH + cfgH + bodyH + 3
+  const nodeH = 44 + summaryH + portH + cfgH + statusH + 12
+  const portY = (i: number) => 44 + summaryH + i * 24
+  const statusTop = 44 + summaryH + portH + cfgH + 3
 
   const openEdit = () => { ;(window as any).__fwOpenEdit?.(id) }
 
@@ -209,24 +210,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {/* ===== 内镶配置区（展开态：节点本体增高，端口/状态自动下移，画布自动推开重叠节点） ===== */}
-      {expanded && (
-        <div style={{ margin: '0 10px 8px', padding: '8px 10px 10px',
-          background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .7, color: 'var(--text-faint)', flex: 1 }}>参数配置</span>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>{paramsList.length} 项</span>
-          </div>
-          {paramsList.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--text-faint)', padding: '6px 0' }}>此节点无参数</div>}
-          <div style={{ maxHeight: 290, overflowY: 'auto' }}>
-            {paramsList.map((p: any) => renderCompact(p, (params || {})[p.name] ?? p.default))}
-          </div>
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 5, fontSize: 10, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <PencilLine size={9} /> 修改即时保存
-          </div>
-        </div>
-      )}
-
       {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>
@@ -276,6 +259,18 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           </span>
         </Fragment>
       ))}
+
+      {expanded && (
+        <div style={{ margin: (portH + 6) + 'px 10px 8px', padding: '6px 9px 8px',
+          background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .6, color: 'var(--text-faint)', flex: 1 }}>参数配置</span>
+            <span style={{ fontSize: 9.5, color: 'var(--text-faint)' }}>{paramsList.length} 项</span>
+          </div>
+          {paramsList.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-faint)', padding: '4px 0' }}>此节点无参数</div>}
+          {paramsList.map((p: any) => renderCompact(p, (params || {})[p.name] ?? p.default))}
+        </div>
+      )}
 
       {/* ===== 状态区：固定 36px，杜绝运行态 reflow（v4.2） ===== */}
       <div style={{ position: 'absolute', left: 6, right: 6, top: statusTop, height: statusH, fontSize: 10, overflow: 'hidden' }}>

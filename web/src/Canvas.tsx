@@ -727,10 +727,10 @@ const estNodeH = (d: any): number => {
   const p = d?.spec?.params || []
   const hasVal = d?.params && p.some((pl: any) => { const v = (d.params || {})[pl.name]; return v !== undefined && v !== null && String(v) !== '' })
   const sumH = !d?.expanded && hasVal ? 20 : 0
-  const cfgH = d?.expanded ? Math.min(30 + p.length * 50 + 18, 320) : 0
+  const cfgH = d?.expanded ? 24 + p.length * 46 + 12 : 0
   const ins = d?.spec?.inputs?.length || 0
   const outs = d?.spec?.outputs?.length || 0
-  return 44 + sumH + cfgH + Math.max(ins, outs, 1) * 24 + 36 + 12
+  return 44 + sumH + Math.max(ins, outs, 1) * 24 + cfgH + 36 + 12
 }
 // 整列垂直重排：节点展开/收起后，把其下方水平区间相交的节点按原纵向顺序依次压紧（链式一次解决），
 // 收起时下方节点自动上移缝合间隙。
