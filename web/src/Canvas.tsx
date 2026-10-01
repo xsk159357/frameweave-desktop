@@ -218,7 +218,23 @@ const onAddNode = useCallback((typeId: string) => {
     ;(window as any).__fwNodeMenu = (info: { x: number; y: number; nodeId: string; nodeTitle: string }) => setMenu(info)
     ;(window as any).__fwAddNode = (typeId: string) => onAddNode(typeId)
     ;(window as any).__fwOpenEdit = (id: string) => { setSelectedNodeId(id); setMenu(null) }
-  }, [updateParams, onAddNode, setSelectedNodeId])
+    ;(window as any).__fwNodeExpand = (nodeId: string, deltaH: number, expanding: boolean) => {
+      setNodes((nds) => {
+        const self = nds.find((n) => n.id === nodeId)
+        if (!self || deltaH <= 0) return nds
+        const sx = self.position.x
+        return nds.map((n) => {
+          if (n.id === nodeId) return n
+          if (!expanding) return n
+          const overlapX = Math.abs(n.position.x - sx) < 240
+          if (overlapX && n.position.y >= self.position.y + 120) {
+            return { ...n, position: { ...n.position, y: n.position.y + deltaH } }
+          }
+          return n
+        })
+      })
+    }
+  }, [updateParams, onAddNode, setSelectedNodeId, setNodes])
 
   // ---- 保存 ----
   const save = useCallback(async () => {

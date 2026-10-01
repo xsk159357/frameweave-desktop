@@ -67,6 +67,13 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [expanded])
+
+  // 展开/收起时通知画布：自动下推重叠节点（内镶增高不遮挡）
+  // 注意：cfgH 在下方声明，不能进依赖数组（渲染期求值会触发 TDZ）；effect 回调执行时 cfgH 已初始化
+  useEffect(() => {
+    ;(window as any).__fwNodeExpand?.(id, cfgH, expanded)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, id])
   const paramUpd = (patch: Record<string, string>) => { ;(window as any).__fwUpdateParams?.(id, patch) }
   const renderCompact = (p: any, val: any) => {
     const widget = p.widget || (p.type === 'INT' || p.type === 'FLOAT' ? 'number' : 'text')
@@ -122,13 +129,15 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     return null
   })()
   // —— v046：节点高度恒定（不随编辑变化，杜绝表单撑高覆盖相邻节点的穿模）；状态区固定 36px ——
-  const summaryH = summaryItem ? 20 : 0
+  const summaryH = !expanded && summaryItem ? 20 : 0
+  const cfgItems = (spec?.params || []).length
+  const cfgH = expanded ? Math.min(30 + cfgItems * 50 + 18, 320) : 0
   const portH = portRows * 24
   const bodyH = portH
   const statusH = 36
-  const nodeH = 44 + summaryH + bodyH + statusH + 12
-  const portY = (i: number) => 44 + summaryH + i * 24
-  const statusTop = 44 + summaryH + bodyH + 3
+  const nodeH = 44 + summaryH + cfgH + bodyH + statusH + 12
+  const portY = (i: number) => 44 + summaryH + cfgH + i * 24
+  const statusTop = 44 + summaryH + cfgH + bodyH + 3
 
   const openEdit = () => { ;(window as any).__fwOpenEdit?.(id) }
 
@@ -192,7 +201,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       </div>
 
       {/* ===== 参数摘要行（首个非空参数） ===== */}
-      {summaryItem && (
+      {summaryItem && !expanded && (
         <div onClick={() => { if ((spec?.params || []).length > 0) setExpanded(v => !v) }}
           title={(spec?.params || []).length > 0 ? '点击展开配置' : ''}
           style={{
@@ -204,24 +213,25 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {/* ===== 内嵌配置板（展开态：锚定节点下方，不改节点尺寸，零穿模） ===== */}
+      {/* ===== 内镶配置区（展开态：节点本体增高，端口/状态自动下移，画布自动推开重叠节点） ===== */}
       {expanded && (
-        <div style={{ position: 'absolute', left: -1, right: -1, top: '100%', zIndex: 70, marginTop: 4,
-          background: 'var(--panel-2)', border: '1px solid var(--border-strong)', borderRadius: 12,
-          boxShadow: 'var(--shadow-lg)', padding: '8px 10px 10px', maxHeight: 340, overflowY: 'auto' }}>
+        <div style={{ margin: '0 10px 8px', padding: '8px 10px 10px',
+          background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .7, color: 'var(--text-faint)', flex: 1 }}>参数配置</span>
             <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>{paramsList.length} 项</span>
           </div>
           {paramsList.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--text-faint)', padding: '6px 0' }}>此节点无参数</div>}
-          {paramsList.map((p: any) => renderCompact(p, (params || {})[p.name] ?? p.default))}
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 6, fontSize: 10.5, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <PencilLine size={10} /> 修改即时保存，点画布空白处收起
+          <div style={{ maxHeight: 290, overflowY: 'auto' }}>
+            {paramsList.map((p: any) => renderCompact(p, (params || {})[p.name] ?? p.default))}
+          </div>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 5, fontSize: 10, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <PencilLine size={9} /> 修改即时保存
           </div>
         </div>
       )}
 
-      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
+      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>
           <Handle
