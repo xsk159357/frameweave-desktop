@@ -1,9 +1,9 @@
-// 自定义画布节点组件（v4 节点驱动：类型色端口 / 参数摘要 / 双击内嵌编辑 / 状态整卡）
-import { Fragment, memo, useState } from 'react'
-import { AlertTriangle, PencilLine, Zap, Lock, Minus } from 'lucide-react'
+// 自定义画布节点组件（v4 节点驱动：类型色端口 / 参数摘要 / 双击打开右侧编辑面板）
+// v046：移除卡片内嵌编辑（表单撑高节点会覆盖相邻节点=穿模），双击统一打开右侧 ParamPanel，节点尺寸恒定
+import { Fragment, memo } from 'react'
+import { AlertTriangle, PencilLine, Zap, Minus } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FlowNodeData, PortType } from '../types'
-import { useAppStore } from '../store'
 
 const statusColor: Record<string, string> = {
   pending: '#6b779f',
@@ -37,37 +37,8 @@ const portColor: Record<string, string> = {
 }
 const pc = (t: string) => portColor[t] || portColor.ANY
 
-// 内嵌参数控件（C：节点内编辑，widget 简化集）
-function InlineParam({ p, val, onUpdate }: { p: any; val: string; onUpdate: (v: string) => void }) {
-  const widget = p.widget || (p.type === 'INT' ? 'number' : 'text')
-  if (widget === 'select' || (p.options && p.options.length)) {
-    return (
-      <select value={String(val)} onChange={(e) => onUpdate(e.target.value)}>
-        {(p.options || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
-      </select>
-    )
-  }
-  if (widget === 'number' || p.type === 'INT' || p.type === 'FLOAT') {
-    return <input type="number" value={String(val)} onChange={(e) => onUpdate(e.target.value)} />
-  }
-  if (p.type === 'BOOL') {
-    return (
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7, fontSize: 11.5, cursor: 'pointer' }}>
-        <input type="checkbox" checked={String(val) === 'true' || val === true}
-          onChange={(e) => onUpdate(String(e.target.checked))} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
-        {p.label || p.name}
-      </label>
-    )
-  }
-  if (p.name === 'api_key' || (p.name || '').toLowerCase().includes('apikey')) {
-    return <input type="password" value={String(val)} placeholder={p.description || '或填 @secret:名称'} onChange={(e) => onUpdate(e.target.value)} />
-  }
-  return <input type="text" value={String(val)} placeholder={p.description || ''} onChange={(e) => onUpdate(e.target.value)} />
-}
-
 function FlowNodeInner({ id, data, selected }: NodeProps) {
   const { type_id, title, category, params, last_params, status, error, progress, asset_ids, spec } = data
-  const [editing, setEditing] = useState(false)
 
   const color = statusColor[status] || statusColor.pending
   const grad = catGrad[category] || 'var(--accent-grad)'
@@ -103,19 +74,16 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     }
     return null
   })()
-  // —— v4.2 性能：状态区高度固定 36px（信息行+状态行），节点尺寸只在编辑/摘要切换时变化，杜绝运行态 ResizeObserver 重排 ——
-  const summaryH = summaryItem && !editing ? 20 : 0
-  const editH = editing ? paramsList.length * 49 + 24 : 0
+  // —— v046：节点高度恒定（不随编辑变化，杜绝表单撑高覆盖相邻节点的穿模）；状态区固定 36px ——
+  const summaryH = summaryItem ? 20 : 0
   const portH = portRows * 24
-  const bodyH = Math.max(editH, portH)
+  const bodyH = portH
   const statusH = 36
   const nodeH = 44 + summaryH + bodyH + statusH + 12
-  const portY = (i: number) => 44 + (editing ? 0 : summaryH) + i * 24
+  const portY = (i: number) => 44 + summaryH + i * 24
   const statusTop = 44 + summaryH + bodyH + 3
 
-  const updateParam = (name: string, value: string) => {
-    ;(window as any).__fwUpdateParams?.(id, { [name]: value })
-  }
+  const openEdit = () => { ;(window as any).__fwOpenEdit?.(id) }
 
   return (
     <div
@@ -123,10 +91,9 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         e.preventDefault(); e.stopPropagation()
         ;(window as any).__fwNodeMenu && (window as any).__fwNodeMenu({ x: e.clientX, y: e.clientY, nodeId: id, nodeTitle: (data as FlowNodeData).title })
       }}
-      onDoubleClick={(e) => { e.stopPropagation(); setEditing((v) => !v) }}
+      onDoubleClick={(e) => { e.stopPropagation(); openEdit() }}
       style={{
         position: 'relative', width: 240, height: nodeH,
-        // v4.2 性能：移除 backdrop-filter（画布 transform 时每帧重采样背层是拖动/缩放卡顿主因），背景提高不透明度保持质感
         background: 'linear-gradient(180deg, rgba(31,38,66,.985), rgba(22,27,48,.985))',
         border: isFailed
           ? '1px solid rgba(248,113,113,.6)'
@@ -177,42 +144,21 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         }}>{category}</span>
       </div>
 
-      {/* ===== 参数摘要行（B2/C3） ===== */}
-      {summaryItem && !editing && (
+      {/* ===== 参数摘要行（B2/C3，双击打开编辑面板） ===== */}
+      {summaryItem && (
         <div style={{
           margin: '0 12px 2px', padding: '3px 9px', borderRadius: 7,
           background: 'rgba(108,140,255,.09)', border: '1px solid rgba(108,140,255,.16)',
           fontSize: 10, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5,
           cursor: 'pointer', userSelect: 'none',
-        }} onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}>
+        }} onDoubleClick={(e) => { e.stopPropagation(); openEdit() }}>
           <span style={{ color: 'var(--accent)', fontWeight: 650, flexShrink: 0 }}>{summaryItem.label}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{summaryItem.value}</span>
           <PencilLine size={9} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
         </div>
       )}
 
-      {/* ===== 内嵌参数表单（C1：双击展开） ===== */}
-      {editing && (
-        <div className="fw-node-param" style={{ position: 'relative', margin: '0 12px 4px' }}>
-          {paramsList.length === 0 && (
-            <div style={{ fontSize: 10.5, color: 'var(--text-faint)', padding: '2px 0 6px' }}>此节点无参数</div>
-          )}
-          {paramsList.map((pl) => (
-            <div key={pl.name}>
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                {pl.label || pl.name}
-                {pl.required && <span style={{ color: 'var(--danger)' }}>*</span>}
-              </div>
-              <InlineParam p={pl} val={String((params || {})[pl.name] ?? pl.default ?? '')} onUpdate={(v) => updateParam(pl.name, v)} />
-            </div>
-          ))}
-          <div style={{ fontSize: 9.5, color: 'var(--text-faint)', textAlign: 'center', paddingBottom: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-            <Minus size={9} /> 双击收起 <Minus size={9} />
-          </div>
-        </div>
-      )}
-
-      {/* ===== 端口区（左右轨道 + 类型色） ===== */}
+      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>
           <Handle
@@ -221,7 +167,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle in"
             title={'输入: ' + p.name + ' · ' + p.type}
-            // v4.3 外观：圆心内移 5px，端口圆点完全收在卡片内，杜绝半圆探出卡边的穿模观感
             style={{ top: portY(i), left: 5, background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
           />
           <span
@@ -230,7 +175,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
               fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
               overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500,
-              display: editing ? 'none' : 'flex', alignItems: 'center', gap: 4,
+              display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc(p.type), flexShrink: 0 }} />
@@ -246,7 +191,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle out"
             title={'输出: ' + p.name + ' · ' + p.type}
-            // v4.3 外观：圆心内移 5px，端口圆点完全收在卡片内
             style={{ top: portY(i), right: 5, background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
           />
           <span
@@ -255,7 +199,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
               fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
               overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right', fontWeight: 500,
-              display: editing ? 'none' : 'flex', alignItems: 'center', gap: 4,
+              display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
             {p.name}
@@ -266,7 +210,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
 
       {/* ===== 状态区：固定 36px，杜绝运行态 reflow（v4.2） ===== */}
       <div style={{ position: 'absolute', left: 6, right: 6, top: statusTop, height: statusH, fontSize: 10, overflow: 'hidden' }}>
-        {/* 行1：错误 > 进度条 > 已改（三选一） */}
         {error && (
           <div style={{ color: 'var(--danger)', height: 17, lineHeight: '17px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={error}>
             <><AlertTriangle size={10} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</>
@@ -285,7 +228,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: '-1px' }}><PencilLine size={10} /> 已改</span>: {diffKeys.join(', ')}
           </div>
         )}
-        {/* 行2：状态行——始终显示（pending 显示「就绪」，避免高度跳变） */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, height: 17, lineHeight: '17px' }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: '0 0 6px ' + color + 'cc', flexShrink: 0 }} />
           <span style={{ color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -108,7 +108,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
         const d = compute(n.id)
         const c = counts.get(d) || 0
         counts.set(d, c + 1)
-        return { ...n, position: { x: 40 + d * 260, y: 40 + c * 140 } }
+        return { ...n, position: { x: 40 + d * 260, y: 40 + c * 230 } }
       })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,9 +129,15 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
     setNodes((nds) => [...nds, { id, type: 'flow', position: { x, y }, data }])
   }, [specs, pushHistory, setNodes])
 
-  // 点击添加（随机位置，保留）
+  // 点击添加（v047：级联错开，杜绝随机落点互相重叠的穿模）
+  const addPosRef = useRef<{ x: number; y: number } | null>(null)
   const onAddNode = useCallback((typeId: string) => {
-    createNode(typeId, 80 + Math.random() * 200, 60 + Math.random() * 120)
+    const base = addPosRef.current || { x: 60, y: 60 }
+    let x = base.x + 56, y = base.y + 210
+    if (y > 900) { y = 60; x += 280 }
+    if (x > 1200) { x = 60; y = 60 }
+    addPosRef.current = { x, y }
+    createNode(typeId, x, y)
   }, [createNode])
 
   // ---- 拖拽添加（D1） ----
@@ -181,7 +187,8 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
     ;(window as any).__fwUpdateParams = updateParams
     ;(window as any).__fwNodeMenu = (info: { x: number; y: number; nodeId: string; nodeTitle: string }) => setMenu(info)
     ;(window as any).__fwAddNode = (typeId: string) => onAddNode(typeId)
-  }, [updateParams, onAddNode])
+    ;(window as any).__fwOpenEdit = (id: string) => { setSelectedNodeId(id); setMenu(null) }
+  }, [updateParams, onAddNode, setSelectedNodeId])
 
   // ---- 保存 ----
   const save = useCallback(async () => {
@@ -520,7 +527,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
               {[
                 ['Ctrl + S', '保存工作流'], ['Ctrl + Z / Ctrl+Shift+Z', '撤销 / 重做'],
                 ['Ctrl + C / Ctrl + V', '复制 / 粘贴节点'], ['Delete / Backspace', '删除选中节点'],
-                ['双击节点', '内嵌编辑参数'], ['右键节点', '运行 / 时间线 / 重置'],
+                ['双击节点', '打开参数面板'], ['右键节点', '运行 / 时间线 / 重置'],
                 ['右键连线', '删除连线'], ['?', '本面板'],
                 ['拖动侧栏节点到画布', '在指定位置添加'],
               ].map(([k, v]) => (
