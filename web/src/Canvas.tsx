@@ -269,21 +269,47 @@ const onAddNode = useCallback((typeId: string) => {
     })
   }, [specs])
 
-  // 连接候选：其他节点的类型兼容输入端口
-  const connCands = useMemo(() => {
+  // 可新建节点类型候选：源类型 → 输入兼容的节点类型（按类别分组）
+  const connGroups = useMemo(() => {
     if (!connMenu) return []
-    const out: { node: (typeof nodes)[number]; port: { name: string; type: string; label?: string } }[] = []
-    for (const n of nodes) {
-      if (n.id === connMenu.source) continue
-      // 端口以节点自带 spec 快照为准（画布渲染用的就是它），全局 specs 兜底
-      const sp = (n.data?.spec as any) || specs.find((s) => s.type_id === n.data.type_id)
-      for (const p of (sp?.inputs || [])) {
-        if (canConnect(connMenu.srcType as any, p.type as any)) out.push({ node: n, port: p })
-      }
+    const order = ['输入', '语义', '分析', '控制', '输出', '用户节点']
+    const groups = new Map<string, { spec: any; ports: any[] }[]>()
+    for (const sp of specs) {
+      const ports = (sp.inputs || []).filter((p: any) => canConnect(connMenu.srcType as any, p.type as any))
+      if (ports.length === 0) continue
+      const cat = order.includes(sp.category) ? sp.category : '其他'
+      if (!groups.has(cat)) groups.set(cat, [])
+      groups.get(cat)!.push({ spec: sp, ports })
     }
-    return out
-  }, [connMenu, nodes, specs])
+    return [...groups.entries()].map(([category, items]) => ({ category, items }))
+  }, [connMenu, specs])
   const connSrcNode = connMenu ? nodes.find((n) => n.id === connMenu.source) : null
+
+  // 从端口牵线 → 空白 → 选节点类型：创建新节点并自动连线（Blender/Figma 式）
+  const createAndConnect = useCallback((typeId: string, x: number, y: number) => {
+    if (!connMenu) return
+    const sp = specs.find((s) => s.type_id === typeId)
+    const tPort = sp?.inputs?.find((p: any) => canConnect(connMenu.srcType as any, p.type as any))
+    if (!sp || !tPort) return
+    pushHistory()
+    nodeSeq++
+    const id = 'n' + nodeSeq + '_' + Date.now().toString(36)
+    const data: FlowNodeData = {
+      type_id: typeId, title: sp.title, category: sp.category,
+      params: Object.fromEntries((sp.params || []).map((p: any) => [p.name, p.default ?? ''])),
+      status: 'pending', progress: 0, asset_ids: {}, outputs: {},
+      inputs: { [tPort.name]: connMenu.source },
+      spec: sp,
+    }
+    setNodes((nds) => [...nds, { id, type: 'flow', position: { x: x - 60, y: y - 14 }, data }])
+    setEdges((eds) => addEdge({
+      source: connMenu.source, sourceHandle: connMenu.sourceHandle, target: id, targetHandle: tPort.name,
+      style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 },
+      label: connMenu.srcType + '→' + tPort.type,
+      labelStyle: { fontSize: 10, fill: '#6b779f' },
+    }, eds))
+    setConnMenu(null)
+  }, [connMenu, specs, pushHistory, setEdges, setNodes])
 
   // ---- 更新节点参数 ----
   const updateParams = useCallback((nodeId: string, patch: Record<string, string>) => {
@@ -643,33 +669,39 @@ const onAddNode = useCallback((typeId: string) => {
           {/* 视口 vignette */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(120% 100% at 50% 40%, transparent 62%, var(--vignette))', zIndex: 1 }} />
 
-          {/* 拖线落空：可链接端口列表（v1.3） */}
+          {/* 拖线落空：新建节点类型列表（v1.3：点击=创建新节点并自动连线） */}
           {connMenu && (
-            <div style={{ position: 'fixed', left: Math.min(connMenu.x, innerWidth - 300), top: Math.min(connMenu.y, innerHeight - 400), zIndex: 56, width: 288,
-              background: 'var(--overlay)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', padding: 8 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, color: 'var(--text-faint)', padding: '2px 6px 8px', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span>链接到</span>
-                {connSrcNode && <span style={{ color: 'var(--text-dim)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{connSrcNode.data.title || connSrcNode.data.type_id}</span>}
+            <div style={{ position: 'fixed', left: Math.min(connMenu.x, innerWidth - 312), top: Math.min(connMenu.y, innerHeight - 420), zIndex: 56, width: 296,
+              background: 'var(--overlay)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                <span style={{ color: 'var(--text-faint)' }}>新建节点</span>
+                {connSrcNode && <span style={{ color: 'var(--text-dim)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>{connSrcNode.data.title || connSrcNode.data.type_id}</span>}
                 <span style={{ color: 'var(--accent-strong)' }}>{connMenu.srcType}</span>
-                <span style={{ marginLeft: 'auto', color: 'var(--text-faint)' }}>{connCands.length}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-faint)' }}>→ {connGroups.reduce((a, g) => a + g.items.length, 0)}</span>
               </div>
-              {connCands.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)', padding: '10px 6px 12px' }}>没有类型兼容的输入端口</div>}
-              <div className="fw-scroll" style={{ maxHeight: 330, overflowY: 'auto' }}>
-                {connCands.map((it) => (
-                  <button key={it.node.id + ':' + it.port.name}
-                    onClick={() => { makeConn(connMenu.source, connMenu.sourceHandle, it.node.id, it.port.name); setConnMenu(null) }}
-                    title={it.port.description || ''}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 8,
-                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 12 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: portDot(it.port.type), flexShrink: 0 }} />
-                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 550 }}>
-                      {it.node.data.title || it.node.data.type_id}
-                    </span>
-                    <span style={{ color: 'var(--text-faint)', fontSize: 10.5, flexShrink: 0 }}>{it.port.label || it.port.name} · {it.port.type}</span>
-                  </button>
+              <div className="fw-scroll" style={{ flex: 1, overflowY: 'auto', padding: 6 }}>
+                {connGroups.length === 0 && <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text-faint)' }}>没有接收 {connMenu.srcType} 的节点类型</div>}
+                {connGroups.map((g) => (
+                  <div key={g.category}>
+                    <div style={{ padding: '5px 8px 3px', fontSize: 10.5, fontWeight: 700, letterSpacing: .8, color: 'var(--text-faint)' }}>{g.category}</div>
+                    {g.items.map((it: any) => (
+                      <button key={it.spec.type_id}
+                        onClick={() => { createAndConnect(it.spec.type_id, connMenu.x - 150, connMenu.y - 20) }}
+                        title={it.spec.description || ''}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 8,
+                          background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 12 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: portDot(it.ports[0].type), flexShrink: 0 }} />
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 550 }}>
+                          {it.spec.title}
+                        </span>
+                        <span style={{ color: 'var(--text-faint)', fontSize: 10.5, flexShrink: 0 }}>+{it.ports.length} 口</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
-              <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 5, fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' }}>选择端口即时建边 · 点画布空白或 Esc 关闭</div>
+              <div style={{ borderTop: '1px solid var(--border)', padding: '5px 8px', fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' }}>点击即创建节点并自动连线 · 点画布空白关闭</div>
             </div>
           )}
 
