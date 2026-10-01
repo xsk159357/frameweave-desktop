@@ -49,8 +49,7 @@ export function Timeline({ nodeId }: { nodeId: string }) {
 
   return (
     <div style={{ height: 200, borderTop: 'var(--glass-border)',
-      background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      background: 'var(--glass)',       display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
       {/* 工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
         borderBottom: '1px solid var(--border)', background: 'transparent' }}>
@@ -82,15 +81,14 @@ export function Timeline({ nodeId }: { nodeId: string }) {
           </div>
 
           {/* 视频轨 */}
-          <div style={{ height: 54, margin: '4px 0', position: 'relative', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-            border: 'var(--glass-border)', borderRadius: 12, boxShadow: 'var(--glass-inner), var(--shadow-sm)' }}>
+          <div style={{ height: 54, margin: '4px 0', position: 'relative', background: 'var(--glass)',             border: 'var(--glass-border)', borderRadius: 12, boxShadow: 'var(--glass-inner), var(--shadow-sm)' }}>
             {clips.map((c) => (
               <div key={c.index} title={`#${c.index} ${c.start}s-${c.end}s`}
                 style={{
                   position: 'absolute', left: px(c.start), width: Math.max(px(c.duration), 8),
                   top: 7, bottom: 7, borderRadius: 6, cursor: 'pointer',
-                  background: 'linear-gradient(180deg, rgba(108,140,255,.42), rgba(138,92,246,.24))',
-                  border: '1px solid rgba(138,150,255,.6)', display: 'flex', alignItems: 'center',
+                  background: 'rgba(139,147,255,.16)',
+                  border: '1px solid rgba(139,147,255,.4)', display: 'flex', alignItems: 'center',
                   justifyContent: 'center', fontSize: 10, color: '#b9c4ff', overflow: 'hidden',
                   fontWeight: 600, boxShadow: '0 0 10px rgba(108,140,255,.22), inset 0 1px 0 rgba(255,255,255,.14)',
                   transition: 'filter .15s, box-shadow var(--t-fast)',
@@ -115,8 +113,10 @@ export function Timeline({ nodeId }: { nodeId: string }) {
           </div>
 
           {/* 播放头 */}
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: px(playhead), width: 2,
-            background: 'var(--danger)', boxShadow: '0 0 10px rgba(248,113,113,.8)', zIndex: 3, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: px(playhead), width: 1.5,
+            background: 'var(--accent)', boxShadow: '0 0 8px rgba(139,147,255,.45)', zIndex: 3, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: -4, left: -4.5, width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '6px solid var(--accent)' }} />
+          </div>
         </div>
       </div>
     </div>

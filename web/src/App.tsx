@@ -1,10 +1,12 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2 } from 'lucide-react'
+import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
-import { Sidebar } from './Sidebar'
+import { WorkflowPanel } from './WorkflowPanel'
+import { PluginPanel } from './PluginPanel'
+import { Logo } from './Logo'
 import { Canvas } from './Canvas'
 import { Timeline } from './Timeline'
 import { MarketPage } from './MarketPage'
@@ -23,6 +25,7 @@ export default function App() {
   const toasts = useAppStore((s) => s.toasts)
   const removeToast = useAppStore((s) => s.removeToast)
   const [showMarket, setShowMarket] = useState(false)
+  const [showPlugin, setShowPlugin] = useState(false)
   const [engineReady, setEngineReady] = useState(false)
   const [wfMenu, setWfMenu] = useState(false)
   const [wfList, setWfList] = useState<{ id: string; name: string; updated_at: number }[]>([])
@@ -34,6 +37,13 @@ export default function App() {
     if (dark) document.documentElement.classList.add('dark')
     else document.documentElement.classList.remove('dark')
   }, [dark])
+
+  // 画布右键菜单「导入节点插件」事件
+  useEffect(() => {
+    const h = () => setShowPlugin(true)
+    window.addEventListener('fw-open-plugins', h)
+    return () => window.removeEventListener('fw-open-plugins', h)
+  }, [])
 
   // 引擎就绪轮询（启动加速：Electron 窗口先行，界面先渲染加载层，本地引擎 health 200 后进入应用）
   useEffect(() => {
@@ -155,18 +165,22 @@ export default function App() {
   if (!engineReady) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--bg-grad)', color: 'var(--text)', gap: 18 }}>
-        <div style={{ width: 58, height: 58, borderRadius: 16, background: 'var(--brand-grad)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 800, color: '#fff',
-          boxShadow: '0 10px 40px rgba(108,140,255,.5), inset 0 1px 0 rgba(255,255,255,.32)' }}>帧</div>
-        <div style={{ fontSize: 13, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(108,140,255,.25)', borderTopColor: 'var(--accent)', animation: 'fw-spin 0.8s linear infinite' }} />
+        background: 'var(--bg-grad)', color: 'var(--text)', gap: 14 }}>
+        <div style={{ animation: 'fw-splash-in .6s cubic-bezier(.25,.1,.25,1)' }}>
+          <Logo size={76} color="var(--accent)" />
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: .5 }}>拾帧 <span style={{ color: 'var(--accent)', fontWeight: 800 }}>FrameWeave</span></div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>节点式 AI 视频创作工作台</div>
+        <div style={{ width: 220, height: 3, borderRadius: 2, background: 'var(--panel-2)', overflow: 'hidden', marginTop: 6, position: 'relative' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'var(--accent-grad)', animation: 'fw-splash-bar 1.6s ease-in-out infinite' }} />
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--text-faint)', borderTopColor: 'var(--accent)', animation: 'fw-spin .8s linear infinite', display: 'inline-block' }} />
           正在启动本地引擎…
         </div>
       </div>
     )
   }
-
   if (!session) return <LoginPage />
 
   return (
@@ -182,12 +196,9 @@ export default function App() {
       }}>
         {/* 品牌区 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 8 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 9, background: 'var(--brand-grad)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, fontWeight: 800, color: '#fff',
-            boxShadow: '0 6px 20px rgba(108,140,255,.45), inset 0 1px 0 rgba(255,255,255,.32)',
-          }}>帧</div>
+          <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Logo size={20} color="var(--accent)" />
+          </div>
           <span style={{ fontWeight: 750, fontSize: 15, letterSpacing: .2 }}>拾帧 FrameWeave</span>
           <span className="fw-pill" style={{ border: '1px solid var(--border)', color: 'var(--text-faint)', background: 'transparent', fontWeight: 500 }}>v0.2.8</span>
         </div>
@@ -264,6 +275,9 @@ export default function App() {
         <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
           <><RefreshCw size={13} /> 更新</>
         </button>
+        <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
+          <><Puzzle size={13} /> 插件</>
+        </button>
         <button className="fw-btn fw-btn-primary" onClick={() => setShowMarket(true)}>
           <><Store size={14} /> 商城</>
         </button>
@@ -277,6 +291,7 @@ export default function App() {
       </div>
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}
+      {showPlugin && <PluginPanel onClose={() => setShowPlugin(false)} />}
 
       {/* 模板选择弹层 */}
       {showTpl && (
@@ -305,7 +320,7 @@ export default function App() {
 
       {/* 主体：侧栏 + 画布 */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <Sidebar onAddNode={(t) => { ;(window as any).__fwAddNode?.(t) }} />
+        <WorkflowPanel onOpenPlugin={() => setShowPlugin(true)} />
         <Canvas workflowId={workflowId} />
       </div>
 

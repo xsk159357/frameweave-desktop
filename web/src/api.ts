@@ -21,10 +21,35 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   } finally { clearTimeout(timer) }
 }
 
+async function reqMulti<T>(path: string, fd: FormData): Promise<T> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 20000)
+  try {
+    const resp = await fetch(BASE + path, { method: 'POST', body: fd, signal: ctrl.signal })
+    if (!resp.ok) {
+      let msg = resp.statusText
+      try { const j = await resp.json(); msg = j.detail || j.message || msg } catch { /* ignore */ }
+      throw new Error(msg)
+    }
+    return resp.json() as Promise<T>
+  } finally { clearTimeout(timer) }
+}
+
 export const api = {
   health: () => req<{ok:boolean}>('/api/health'),
 
   specs: () => req<NodeSpec[]>('/api/specs'),
+
+  userNodes: () => req<{ nodes: string[]; dir: string }>('/api/user_nodes'),
+
+  installUserNode: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return reqMulti<{ ok: boolean; message?: string; nodes: string[] }>('/api/user_nodes/install', fd)
+  },
+
+  reloadUserNodes: () => req<{ ok: boolean; loaded: number; nodes: string[] }>('/api/user_nodes/reload', { method: 'POST' }),
+
 
   listWorkflows: () => req<WfMeta[]>('/api/workflows'),
 

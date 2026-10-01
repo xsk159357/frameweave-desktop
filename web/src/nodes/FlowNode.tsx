@@ -20,12 +20,12 @@ const statusText: Record<string, string> = {
   success: '完成', failed: '失败', cancelled: '已取消', cached: '缓存命中',
 }
 
-const catGrad: Record<string, string> = {
-  输入: 'linear-gradient(135deg,#6c8cff,#8b5cf6)',
-  语义: 'linear-gradient(135deg,#8b5cf6,#c084fc)',
-  分析: 'linear-gradient(135deg,#0ea5a4,#34d399)',
-  控制: 'linear-gradient(135deg,#f59e0b,#f97316)',
-  输出: 'linear-gradient(135deg,#f87171,#fb7185)',
+const catSolid: Record<string, string> = {
+  输入: '#7c8cf8',
+  语义: '#a78bfa',
+  分析: '#34d399',
+  控制: '#fbbf24',
+  输出: '#f87171',
 }
 
 // 端口类型 → 颜色（B1：类型可视化）
@@ -41,7 +41,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
   const { type_id, title, category, params, last_params, status, error, progress, asset_ids, spec } = data
 
   const color = statusColor[status] || statusColor.pending
-  const grad = catGrad[category] || 'var(--accent-grad)'
+  const solid = catSolid[category] || 'var(--accent)'
   const isFailed = status === 'failed'
   const isRunning = status === 'running'
 
@@ -94,15 +94,15 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       onDoubleClick={(e) => { e.stopPropagation(); openEdit() }}
       style={{
         position: 'relative', width: 240, height: nodeH,
-        background: 'linear-gradient(180deg, rgba(31,38,66,.985), rgba(22,27,48,.985))',
+        background: 'var(--panel)',
         border: isFailed
           ? '1.5px solid rgba(248,113,113,.9)'
-          : '1px solid ' + (selected ? 'rgba(108,140,255,.95)' : 'rgba(148,168,255,.26)'),
+          : '1px solid ' + (selected ? '#8b93ff' : 'var(--border)'),
         borderRadius: 16,
         boxShadow: isFailed
           ? '0 0 0 2px rgba(248,113,113,.3), 0 0 20px rgba(248,113,113,.28), var(--shadow-md)'
           : selected
-            ? '0 0 0 3px rgba(108,140,255,.22), 0 0 26px rgba(108,140,255,.3), var(--shadow-md)'
+            ? '0 0 0 3px rgba(139,147,255,.2), 0 0 26px rgba(139,147,255,.28), var(--shadow-md)'
             : '0 8px 24px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08)',
         fontSize: 12, color: 'var(--text)',
         transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',

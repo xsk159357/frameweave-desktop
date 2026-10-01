@@ -1,27 +1,12 @@
 // 登录门禁页：独立登录窗口（未登录不可进入主界面）
 import { useState } from 'react'
+import { Logo } from './Logo'
 import {
   Mail, Lock, KeyRound, CheckCircle2, AlertCircle,
   Layers, Workflow, Sparkles, ShieldCheck, DownloadCloud,
 } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
-
-function Logo({ size = 76 }: { size?: number }) {
-  return (
-    <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 48 48" fill="none">
-      <rect x="3" y="6" width="42" height="36" rx="7" stroke="#fff" strokeWidth="3.2" fill="rgba(255,255,255,.08)" />
-      <path d="M3 13C3 9 6 6 10.5 6h2.5v4H10.5c-1.5 0-3.5 1.3-3.5 3v0z" fill="#fff" />
-      <path d="M45 13c0-4-3-7-7.5-7h-2.5v4h2.5c1.5 0 3.5 1.3 3.5 3z" fill="#fff" />
-      <rect x="3" y="34" width="4" height="6.5" rx="1.6" fill="#fff" />
-      <rect x="41" y="34" width="4" height="6.5" rx="1.6" fill="#fff" />
-      <path d="M21 19.5l9 4.5-9 4.5z" fill="#fff" />
-      <rect x="16" y="37.5" width="3" height="2.6" rx="1.3" fill="#fff" opacity=".9" />
-      <rect x="22.5" y="37.5" width="3" height="2.6" rx="1.3" fill="#fff" opacity=".9" />
-      <rect x="29" y="37.5" width="3" height="2.6" rx="1.3" fill="#fff" opacity=".9" />
-    </svg>
-  )
-}
 
 export function LoginPage() {
   const setSession = useAppStore((s) => s.setSession)
@@ -76,9 +61,9 @@ export function LoginPage() {
   return (
     <div className="lp-root">
       <div className="lp-grid-bg" />
-      <div className="lp-glow" style={{ width: 460, height: 460, left: '-70px', top: '-70px', background: 'rgba(108,140,255,.5)' }} />
-      <div className="lp-glow" style={{ width: 400, height: 400, right: '15%', bottom: '-110px', background: 'rgba(167,139,255,.42)' }} />
-      <div className="lp-glow" style={{ width: 300, height: 300, left: '38%', top: '-140px', background: 'rgba(77,208,225,.28)' }} />
+      <div className="lp-glow" style={{ width: 460, height: 460, left: '-70px', top: '-70px', background: 'rgba(139,147,255,.38)' }} />
+      <div className="lp-glow" style={{ width: 400, height: 400, right: '15%', bottom: '-110px', background: 'rgba(139,147,255,.26)' }} />
+      <div className="lp-glow" style={{ width: 300, height: 300, left: '38%', top: '-140px', background: 'rgba(139,147,255,.18)' }} />
 
       {/* 品牌区 */}
       <div className="lp-brand">

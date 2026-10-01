@@ -75,30 +75,30 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
     finally { setBusy(false) }
   }
 
-  const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)' }
+  const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)',  WebkitBackdropFilter: 'var(--glass-blur)' }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: dark ? 'rgba(8,10,18,.72)' : 'rgba(20,24,40,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(8,10,18,.72)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ ...frame, width: 860, maxWidth: '92vw', height: '82vh', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 'var(--glass-inner), var(--shadow-lg)' }}>
         {/* 头部 */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + (dark ? 'var(--border)' : 'var(--border)'), display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Boxes size={20} color={dark ? '#9fb4ff' : '#3a5bd9'} />
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + ('var(--border)'), display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Boxes size={20} color={'#9fb4ff'} />
           <b style={{ fontSize: 16 }}>节点商城</b>
           <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>官方插件免费 · 用户节点积分定价</span>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-faint)' }}><Coins size={14} color="#e0a800" /> {credits} 积分</span>
-          <button onClick={() => setShowPublish(true)} style={{ padding: '5px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, border: 'none', background: dark ? '#2a3557' : '#e9eefc', color: dark ? '#c9d6ff' : '#3a5bd9' }}><Upload size={14} /> 发布作品</button>
+          <button onClick={() => setShowPublish(true)} style={{ padding: '5px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, border: 'none', background: '#2a3557', color: '#c9d6ff' }}><Upload size={14} /> 发布作品</button>
           <button onClick={onClose} style={{ padding: 6, borderRadius: 8, cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-faint)' }}><X size={18} /></button>
         </div>
 
         {/* 工具栏 */}
-        <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid ' + (dark ? '#22263a' : '#eef1f6') }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + (dark ? 'var(--border)' : '#dfe4ee'), borderRadius: 9, padding: '7px 11px', background: dark ? '#141828' : '#f7f9fd' }}>
+        <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid ' + ('#22263a') }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + ('var(--border)'), borderRadius: 9, padding: '7px 11px', background: '#141828' }}>
             <Search size={15} color="var(--text-faint)" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索节点 / 工作流 / 作者…" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'inherit' }} />
           </div>
           {['', 'node', 'workflow'].map((k) => (
-            <button key={k} onClick={() => setKind(k)} style={{ padding: '6px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, border: '1px solid ' + (kind === k ? (dark ? '#3a4a7a' : '#b9c8f4') : (dark ? 'var(--border)' : 'var(--border)')), background: kind === k ? (dark ? '#2a3557' : '#e9eefc') : 'transparent', color: kind === k ? (dark ? '#c9d6ff' : '#3a5bd9') : 'var(--text-faint)' }}>
+            <button key={k} onClick={() => setKind(k)} style={{ padding: '6px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, border: '1px solid ' + (kind === k ? ('#3a4a7a') : ('var(--border)')), background: kind === k ? ('#2a3557') : 'transparent', color: kind === k ? ('#c9d6ff') : 'var(--text-faint)' }}>
               {k === '' ? '全部' : k === 'node' ? '节点' : '工作流'}
             </button>
           ))}
@@ -109,7 +109,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
 
         {/* 消息 */}
         {(msg || err) && (
-          <div style={{ padding: '8px 18px', fontSize: 13, color: err ? '#d06a4f' : 'var(--success)', background: err ? (dark ? '#3a1c1c' : '#fdeeec') : (dark ? '#1c3322' : '#e8f7ee') }}>
+          <div style={{ padding: '8px 18px', fontSize: 13, color: err ? '#d06a4f' : 'var(--success)', background: err ? ('#3a1c1c') : ('#1c3322') }}>
             {err || msg}
           </div>
         )}
@@ -121,7 +121,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
             {items.map((it) => (
               <div key={it.id} style={{ ...frame, borderRadius: 10, padding: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {it.kind === 'node' ? <Package size={16} color={dark ? '#9fb4ff' : '#3a5bd9'} /> : <GitBranch size={16} color="var(--success)" />}
+                  {it.kind === 'node' ? <Package size={16} color={'#9fb4ff'} /> : <GitBranch size={16} color="var(--success)" />}
                   <b style={{ fontSize: 14, flex: 1 }}>{it.title}</b>
                   {it.official && <span style={{ fontSize: 11, color: '#b8860b', border: '1px solid #e8d48b', borderRadius: 999, padding: '1px 7px', background: '#fff8e1' }}>官方</span>}
                   {it.price > 0
@@ -134,7 +134,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
                   <span>↓ {it.downloads}</span>
                   <div style={{ flex: 1 }} />
                   {it.kind === 'node' && (
-                    <button onClick={() => install(it.id)} disabled={busy} style={{ padding: '4px 12px', borderRadius: 8, cursor: busy ? 'wait' : 'pointer', fontSize: 12, border: 'none', background: dark ? '#2a3557' : '#e9eefc', color: dark ? '#c9d6ff' : '#3a5bd9', display: 'flex', alignItems: 'center', gap: 4 }}><Download size={13} /> 安装</button>
+                    <button onClick={() => install(it.id)} disabled={busy} style={{ padding: '4px 12px', borderRadius: 8, cursor: busy ? 'wait' : 'pointer', fontSize: 12, border: 'none', background: '#2a3557', color: '#c9d6ff', display: 'flex', alignItems: 'center', gap: 4 }}><Download size={13} /> 安装</button>
                   )}
                 </div>
               </div>
@@ -143,13 +143,13 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* 发布表单 */}
-        {showPublish && <PublishForm dark={dark} onCancel={() => setShowPublish(false)} onSubmit={publish} />}
+        {showPublish && <PublishForm onCancel={() => setShowPublish(false)} onSubmit={publish} />}
       </div>
     </div>
   )
 }
 
-function PublishForm({ dark, onCancel, onSubmit }: { dark: boolean; onCancel: () => void; onSubmit: (f: any) => void }) {
+function PublishForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (f: any) => void }) {
   const [kind, setKind] = useState('node')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -159,18 +159,18 @@ function PublishForm({ dark, onCancel, onSubmit }: { dark: boolean; onCancel: ()
   const [sending, setSending] = useState(false)
 
   const input: any = {
-    width: '100%', border: '1px solid ' + (dark ? 'var(--border)' : '#dfe4ee'), borderRadius: 8,
-    padding: '7px 10px', fontSize: 13, outline: 'none', background: dark ? '#141828' : '#f7f9fd', color: 'inherit',
+    width: '100%', border: '1px solid ' + ('var(--border)'), borderRadius: 8,
+    padding: '7px 10px', fontSize: 13, outline: 'none', background: '#141828', color: 'inherit',
     boxSizing: 'border-box', marginBottom: 8,
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 420, maxWidth: '92vw', border: '1px solid ' + (dark ? 'var(--border)' : 'var(--border)'), background: dark ? 'var(--bg-panel)' : '#fff', borderRadius: 12, padding: 18 }}>
+      <div style={{ width: 420, maxWidth: '92vw', border: '1px solid ' + ('var(--border)'), background: 'var(--bg-panel)', borderRadius: 12, padding: 18 }}>
         <b style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>发布作品</b>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           {['node', 'workflow'].map((k) => (
-            <button key={k} onClick={() => setKind(k)} style={{ padding: '5px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, border: '1px solid ' + (kind === k ? '#3a5bd9' : (dark ? 'var(--border)' : 'var(--border)')), background: kind === k ? '#e9eefc' : 'transparent', color: kind === k ? '#3a5bd9' : 'var(--text-faint)' }}>
+            <button key={k} onClick={() => setKind(k)} style={{ padding: '5px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 12, border: '1px solid ' + (kind === k ? '#3a5bd9' : ('var(--border)')), background: kind === k ? '#e9eefc' : 'transparent', color: kind === k ? '#3a5bd9' : 'var(--text-faint)' }}>
               {k === 'node' ? '节点' : '工作流'}
             </button>
           ))}
@@ -182,7 +182,7 @@ function PublishForm({ dark, onCancel, onSubmit }: { dark: boolean; onCancel: ()
         <input style={input} placeholder="标签（逗号分隔，如 文案, 视频）" value={tags} onChange={(e) => setTags(e.target.value)} />
         <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 10 }}>提示：先导出节点/工作流得到 zip，上传到网盘取直链后填在上方；本地桩可留空直链仅作演示。</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onCancel} style={{ padding: '6px 14px', borderRadius: 8, cursor: 'pointer', border: '1px solid ' + (dark ? 'var(--border)' : 'var(--border)'), background: 'transparent', color: 'var(--text-faint)', fontSize: 13 }}>取消</button>
+          <button onClick={onCancel} style={{ padding: '6px 14px', borderRadius: 8, cursor: 'pointer', border: '1px solid ' + ('var(--border)'), background: 'transparent', color: 'var(--text-faint)', fontSize: 13 }}>取消</button>
           <button onClick={() => { setSending(true); onSubmit({ kind, title, description, price, download_url: downloadUrl, tags }) }} disabled={!title || sending} style={{ padding: '6px 16px', borderRadius: 8, cursor: sending || !title ? 'wait' : 'pointer', border: 'none', background: '#3a5bd9', color: '#fff', fontSize: 13 }}>发布</button>
         </div>
       </div>

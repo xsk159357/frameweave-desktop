@@ -1,11 +1,11 @@
 // 主画布（v4 画布优先）：浮层参数面板 + 拖拽添加 + 复制粘贴 + 撤销重做 + 连线右键 + 删除确认 + 导出导入 + 取消运行
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, useReactFlow,
   type Connection, type Edge,
 } from '@xyflow/react'
-import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2 } from 'lucide-react'
+import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle } from 'lucide-react'
 import { api, connectWS } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData } from './types'
@@ -42,6 +42,8 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId?: string; nodeTitle?: string; edgeId?: string } | null>(null)
   const [confirm, setConfirm] = useState<{ kind: 'nodes'; ids: string[] } | null>(null)
   const [showHelp, setShowHelp] = useState(false)
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
+  const [addQuery, setAddQuery] = useState('')
   const savedRef = useRef(false)
   const flowWrapper = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -131,7 +133,35 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
 
   // 点击添加（v047：级联错开，杜绝随机落点互相重叠的穿模）
   const addPosRef = useRef<{ x: number; y: number } | null>(null)
-  const onAddNode = useCallback((typeId: string) => {
+  const addNodeAt = useCallback((typeId: string, sx: number, sy: number) => {
+    const pos = screenToFlowPosition({ x: sx, y: sy })
+    createNode(typeId, pos.x - 120, pos.y - 30)
+  }, [createNode, screenToFlowPosition])
+
+  const menuIconChar = (typeId: string) => {
+    const last = String(typeId || '').split('/').pop() || ''
+    const ch = last.replace(/[^a-zA-Z0-9]/g, '')[0]
+    return ch ? ch.toUpperCase() : '?'
+  }
+
+  // 添加菜单分组（类别顺序）
+  const addGroups = useMemo(() => {
+    const order = ['输入', '语义', '分析', '控制', '输出', '用户节点']
+    const map = new Map<string, { type_id: string; title: string; category: string; description: string; gpu: boolean }[]>()
+    for (const s of specs) {
+      if (addQuery && !s.title.includes(addQuery) && !s.type_id.includes(addQuery)) continue
+      const cat = s.category || '其他'
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(s)
+    }
+    const keys = [...map.keys()].sort((a, b) => {
+      const ia = order.indexOf(a); const ib = order.indexOf(b)
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
+    return keys.map(k => ({ category: k, items: map.get(k)! }))
+  }, [specs, addQuery])
+
+const onAddNode = useCallback((typeId: string) => {
     const base = addPosRef.current || { x: 60, y: 60 }
     let x = base.x + 56, y = base.y + 210
     if (y > 900) { y = 60; x += 280 }
@@ -484,6 +514,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
           )
         })()}
         <div style={{ flex: 1 }} />
+        <div style={sep} />
         <button style={iconBtn} title="导入工作流 (JSON)" onClick={() => fileInput.current?.click()}><Upload size={14} /></button>
         <button style={iconBtn} title="导出工作流 (JSON)" onClick={exportWorkflow}><Download size={14} /></button>
         <button style={iconBtn} title="快捷键 (?)" onClick={() => setShowHelp(v => !v)}><HelpCircle size={14} /></button>
@@ -510,12 +541,58 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
             proOptions={{ hideAttribution: true }}
             onlyRenderVisibleElements={nodes.length > 40}
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null) }}
-            onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false) }}
+            onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false); setAddMenu(null) }}
+            onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null); setAddMenu({ x: e.clientX, y: e.clientY }) }}
           >
-            <Background gap={22} color="#161d33" />
+            <Background gap={22} color="#1a1d26" />
             <Controls />
-            <MiniMap pannable zoomable maskColor="rgba(10,14,24,.55)" style={{ background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
+            <MiniMap pannable zoomable maskColor="rgba(10,14,24,.55)" style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 12, position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
           </ReactFlow>
+          {/* 视口 vignette */}
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(120% 100% at 50% 40%, transparent 62%, rgba(0,0,0,.26))', zIndex: 1 }} />
+
+          {/* 空白右键：添加节点菜单（v1.2） */}
+          {addMenu && (
+            <div style={{ position: 'fixed', left: addMenu.x, top: addMenu.y, zIndex: 55, width: 272, maxHeight: 430,
+              background: 'var(--overlay)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+              onMouseLeave={() => setAddMenu(null)}>
+              <div style={{ padding: 8, borderBottom: '1px solid var(--border)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Search size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+                <input autoFocus value={addQuery} onChange={(e) => setAddQuery(e.target.value)}
+                  placeholder="搜索节点…" style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12.5, width: '100%' }} />
+              </div>
+              <div className="fw-scroll" style={{ flex: 1, overflowY: 'auto', padding: 6 }}>
+                {addGroups.length === 0 && <div style={{ padding: 14, textAlign: 'center', fontSize: 12, color: 'var(--text-faint)' }}>没有匹配的节点</div>}
+                {addGroups.map((g) => (
+                  <div key={g.category}>
+                    <div style={{ padding: '5px 8px 3px', fontSize: 10.5, fontWeight: 700, letterSpacing: .8, color: 'var(--text-faint)' }}>{g.category}</div>
+                    {g.items.map((s: any) => (
+                      <div key={s.type_id} title={s.description || ''}
+                        onClick={() => { setAddMenu(null); setAddQuery(''); addNodeAt(s.type_id, addMenu.x + 150, addMenu.y + 14) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', color: 'var(--text)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                          {menuIconChar(s.type_id)}
+                        </div>
+                        <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{s.title}</span>
+                        {s.gpu_required && <span className="fw-pill" style={{ marginLeft: 'auto', fontSize: 9, flexShrink: 0 }}>GPU</span>}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', padding: 6 }}>
+                <div style={{ padding: '6px 8px', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
+                  onClick={() => { setAddMenu(null); window.dispatchEvent(new Event('fw-open-plugins')) }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                  <Puzzle size={12} /> 导入节点插件…
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 快捷键面板（D6） */}
           {showHelp && (
@@ -528,9 +605,9 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
                 ['Ctrl + S', '保存工作流'], ['Ctrl + Z / Ctrl+Shift+Z', '撤销 / 重做'],
                 ['Ctrl + C / Ctrl + V', '复制 / 粘贴节点'], ['Delete / Backspace', '删除选中节点'],
                 ['双击节点', '打开参数面板'], ['右键节点', '运行 / 时间线 / 重置'],
+                ['右键画布空白', '添加节点'],
                 ['右键连线', '删除连线'], ['?', '本面板'],
-                ['拖动侧栏节点到画布', '在指定位置添加'],
-              ].map(([k, v]) => (
+                              ].map(([k, v]) => (
                 <div className="row" key={k}><span style={{ color: 'var(--text-dim)' }}>{v}</span><kbd>{k}</kbd></div>
               ))}
             </div>

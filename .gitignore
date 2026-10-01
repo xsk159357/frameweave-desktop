@@ -49,3 +49,4 @@ Thumbs.db
 .pip_verbose.py
 .test_popen.py
 .vt.py
+*.work

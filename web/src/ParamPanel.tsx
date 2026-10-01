@@ -37,15 +37,13 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
   const styles = {
     panel: {
       width: '100%', height: '100%', borderLeft: 'var(--glass-border)', boxSizing: 'border-box' as const,
-      background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      boxShadow: 'var(--glass-inner)', padding: 16, overflowY: 'auto', flexShrink: 0,
+      background: 'var(--glass-strong)',       boxShadow: 'none', padding: 16, overflowY: 'auto', flexShrink: 0,
     },
-    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: dark ? 'var(--text-faint)' : '#7a8499', margin: '14px 0 7px', textTransform: 'uppercase' as const },
+    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: 'var(--text-faint)', margin: '14px 0 7px', textTransform: 'uppercase' as const },
     input: {
       width: '100%', padding: '8px 11px', borderRadius: 10, fontSize: 13,
       border: 'var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text)',
-      backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      boxShadow: 'var(--glass-inner)', marginBottom: 10, boxSizing: 'border-box' as const, outline: 'none',
+            boxShadow: 'var(--glass-inner)', marginBottom: 10, boxSizing: 'border-box' as const, outline: 'none',
       transition: 'border-color .2s, box-shadow .2s',
     },
   }
@@ -98,9 +96,9 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
                 alert('已加密存入本机保险箱，参数已改为引用 ' + '@secret:' + secName)
               } catch (e: any) { alert('存入失败: ' + e.message) }
             }}
-            style={{ ...styles.input, background: dark ? 'var(--border)' : 'var(--bg-panel-2)', cursor: 'pointer',
+            style={{ ...styles.input, background: 'var(--border)', cursor: 'pointer',
                      marginTop: -4, textAlign: 'center', fontSize: 12, width: '100%', fontWeight: 600,
-                     borderColor: dark ? 'var(--border-strong)' : 'var(--border-strong)', transition: 'all .18s' }}
+                     borderColor: 'var(--border-strong)', transition: 'all .18s' }}
           >
             <><Lock size={12} /> 加密存入本机保险箱</>
           </button>
@@ -120,17 +118,17 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
     <div style={styles.panel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{spec?.title || '节点'}</span>
-        <span className="fw-badge" style={{ background: dark ? 'var(--border)' : 'var(--bg-panel-2)', color: dark ? 'var(--text-faint)' : '#7a8499', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
+        <span className="fw-badge" style={{ background: 'var(--border)', color: 'var(--text-faint)', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
         <span style={{ flex: 1 }} />
         {onClose && (
           <button onClick={onClose} title="关闭" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 4, borderRadius: 7, lineHeight: 0 }}><X size={15} /></button>
         )}
       </div>
-      <div style={{ fontSize: 11, color: dark ? 'var(--text-faint)' : '#9aa2b5', marginBottom: 4, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 4, lineHeight: 1.5 }}>
         {spec?.type_id}
       </div>
       {spec?.description && (
-        <div style={{ fontSize: 11.5, color: dark ? 'var(--text-faint)' : '#7a8499', marginBottom: 12, lineHeight: 1.55 }}>{spec.description}</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12, lineHeight: 1.55 }}>{spec.description}</div>
       )}
 
       {/* 执行状态 */}
@@ -138,14 +136,14 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
         <span style={{ width: 8, height: 8, borderRadius: '50%',
           background: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)'
-            : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : dark ? 'var(--text-faint)' : 'var(--text-faint)',
+            : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : 'var(--text-faint)',
           boxShadow: '0 0 0 3px ' + (status === 'success' ? 'var(--success-soft)' : status === 'failed' ? 'var(--danger-soft)' : 'transparent') }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)' : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : dark ? 'var(--text)' : 'var(--text)' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)' : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : 'var(--text)' }}>
           {status}
         </span>
       </div>
       {error && (
-        <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 10, whiteSpace: 'pre-wrap', background: dark ? 'rgba(229,72,77,.1)' : 'var(--danger-soft)', borderRadius: 9, padding: '8px 10px', lineHeight: 1.5 }}>{error}</div>
+        <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 10, whiteSpace: 'pre-wrap', background: 'rgba(229,72,77,.1)', borderRadius: 9, padding: '8px 10px', lineHeight: 1.5 }}>{error}</div>
       )}
 
       {/* 参数表单 */}
@@ -154,7 +152,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
           <div style={{ ...styles.label, marginTop: 4 }}>参数</div>
           {spec.params.map((p) => (
             <div key={p.name}>
-              <div style={{ fontSize: 12, color: dark ? 'var(--text-dim)' : 'var(--text-faint)', marginBottom: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 2 }}>
                 {p.label} {p.description ? '· ' + p.description : ''}
               </div>
               {renderParam(p)}
@@ -174,7 +172,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
               const paramSummary = h.params ? Object.entries(h.params).filter(([k, v]) => String(v ?? '') !== '').slice(0, 3).map(([k, v]) => k + '=' + String(v).slice(0, 14)).join(' ') : ''
               return (
                 <div key={i} style={{
-                  border: '1px solid ' + (dark ? 'var(--border)' : 'var(--bg-panel-2)'),
+                  border: '1px solid ' + ('var(--border)'),
                   borderRadius: 6, padding: '6px 8px', marginBottom: 6, fontSize: 11,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -202,8 +200,8 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
             onClick={() => loadPreview(aid)}
             style={{
               padding: '8px 10px', borderRadius: 9, width: '100%', textAlign: 'left', cursor: 'pointer',
-              border: '1px solid ' + (dark ? 'var(--border-strong)' : 'var(--border)'), background: dark ? 'var(--bg-panel-2)' : 'var(--bg-panel-2)',
-              color: dark ? 'var(--text)' : 'var(--text)', fontSize: 12, transition: 'all .18s',
+              border: '1px solid ' + ('var(--border-strong)'), background: 'var(--bg-panel-2)',
+              color: 'var(--text)', fontSize: 12, transition: 'all .18s',
             }}
           >
             <><Eye size={13} style={{ verticalAlign: '-2px', marginRight: 2 }} /> 预览 {port}（{aid.slice(0, 8)}）</>
@@ -220,7 +218,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
             <div>
               <div style={{ color: 'var(--text-faint)', marginBottom: 6 }}>共 {preview.content.length} 个片段</div>
               {preview.content.slice(0, 10).map((s: any) => (
-                <div key={s.index} style={{ padding: '4px 0', borderBottom: '1px solid ' + (dark ? 'var(--border)' : 'var(--bg-panel-2)') }}>
+                <div key={s.index} style={{ padding: '4px 0', borderBottom: '1px solid ' + ('var(--border)') }}>
                   #{s.index} {s.start}s → {s.end}s（{s.duration}s）
                 </div>
               ))}
@@ -230,20 +228,20 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
             <div>
               <div style={{ color: 'var(--text-faint)', marginBottom: 6 }}>共 {preview.content.length} 条字幕</div>
               {preview.content.slice(0, 8).map((s: any, i: number) => (
-                <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid ' + (dark ? 'var(--border)' : 'var(--bg-panel-2)') }}>
+                <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid ' + ('var(--border)') }}>
                   {s.start}s → {s.end}s {s.text}
                 </div>
               ))}
             </div>
           )}
           {preview.kind === 'JSON' && preview.content && (
-            <pre style={{ whiteSpace: 'pre-wrap', background: dark ? '#0a0e18' : '#f4f6fb',
+            <pre style={{ whiteSpace: 'pre-wrap', background: '#0a0e18',
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {JSON.stringify(preview.content, null, 2).slice(0, 2500)}
             </pre>
           )}
           {preview.kind === 'STRING' && preview.content && (
-            <pre style={{ whiteSpace: 'pre-wrap', background: dark ? '#0a0e18' : '#f4f6fb',
+            <pre style={{ whiteSpace: 'pre-wrap', background: '#0a0e18',
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {String((preview.content as any).text || JSON.stringify(preview.content)).slice(0, 2500)}
             </pre>

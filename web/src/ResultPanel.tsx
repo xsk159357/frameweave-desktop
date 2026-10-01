@@ -57,14 +57,13 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
   return (
     <div className="fw-scroll" style={{
       borderTop: 'var(--glass-border)', background: 'var(--glass-strong)',
-      backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      boxShadow: 'var(--glass-inner)', padding: '12px 16px', flexShrink: 0,
+            boxShadow: 'none', padding: '12px 16px', flexShrink: 0,
       maxHeight: 210, overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{ fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Package size={14} /> 批量结果</span>
         {items.length > 0 && (
-          <span className="fw-badge" style={{ background: dark ? 'var(--border)' : 'var(--bg-panel-2)', color: dark ? 'var(--text-faint)' : '#7a8499' }}>
+          <span className="fw-badge" style={{ background: 'var(--border)', color: 'var(--text-faint)' }}>
             {okCount}/{items.length} 成功{failed.length > 0 ? ' · ' + failed.length + ' 失败' : ''}
           </span>
         )}
@@ -84,8 +83,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
         <div key={it.index} style={{
           display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
           padding: '6px 10px', borderRadius: 9, marginBottom: 3,
-          background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-          border: 'var(--glass-border)', transition: 'all .15s',
+          background: 'var(--glass)',           border: 'var(--glass-border)', transition: 'all .15s',
         }}>
           <span style={{ color: it.ok ? 'var(--success)' : 'var(--danger)', width: 18, display: 'inline-flex', justifyContent: 'center' }}>{it.ok ? <Check size={13} /> : <XCircle size={13} />}</span>
           <span style={{ fontWeight: 600 }}>{it.name}</span>
@@ -100,8 +98,8 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
               {it.path && (
                 <button onClick={() => api.revealPath(it.path!).catch(() => {})} style={{
                   padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
-                  border: '1px solid ' + (dark ? '#3a4157' : '#dfe4ee'), background: dark ? 'var(--border)' : '#fff',
-                  color: dark ? 'var(--text)' : 'var(--text)', flexShrink: 0,
+                  border: '1px solid ' + ('#3a4157'), background: 'var(--border)',
+                  color: 'var(--text)', flexShrink: 0,
                 }}><><FolderOpen size={11} /> 定位</></button>
               )}
             </>
