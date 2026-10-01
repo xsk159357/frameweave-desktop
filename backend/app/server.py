@@ -107,10 +107,12 @@ class WSManager:
 
 manager = WSManager()
 
-# 保持运行中任务引用，防止被垃圾回收
-_RUNNING_TASKS = set()
-def _task_done(t):
-    _RUNNING_TASKS.discard(t)
+# 保持运行中任务引用，防止被垃圾回收（wfid → asyncio.Task）
+_RUNNING_TASKS: dict[str, "asyncio.Task"] = {}
+def _task_done(wfid: str):
+    def _done(t: "asyncio.Task"):
+        _RUNNING_TASKS.pop(wfid, None)
+    return _done
 
 
 def make_engine() -> Engine:
@@ -424,11 +426,24 @@ async def run_wf(wfid: str, body: RunRequest):
         finally:
             wfstore.save(wf)  # 持久化执行后的节点状态
 
-    # 用全局引用保持 task 不被 GC
+    # 用全局引用保持 task 不被 GC；同一工作流重复运行先取消旧任务
     t = asyncio.create_task(_run_and_save())
-    _RUNNING_TASKS.add(t)
-    t.add_done_callback(_task_done)
+    old = _RUNNING_TASKS.get(wfid)
+    if old and not old.done():
+        old.cancel()
+    _RUNNING_TASKS[wfid] = t
+    t.add_done_callback(_task_done(wfid))
     return {"ok": True, "message": "执行已开始"}
+
+
+@app.post("/api/workflows/{wfid}/cancel")
+async def cancel_wf(wfid: str):
+    """取消运行中的工作流（F3：运行中可停止）。"""
+    t = _RUNNING_TASKS.get(wfid)
+    if t and not t.done():
+        t.cancel()
+        return {"ok": True, "message": "已请求取消执行"}
+    return {"ok": True, "message": "当前没有正在执行的任务"}
 
 
 # ---- 资产 API ----

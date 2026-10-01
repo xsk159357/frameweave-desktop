@@ -1,7 +1,7 @@
 // 时间线 v0：多轨（视频/音频/字幕）+ 缩放 + 播放头联动
 // 数据源：选中节点的 SEGMENTS 资产（片段列表），M0 以只读预览为主
 import { useEffect, useRef, useState } from 'react'
-import { Play, Pause } from 'lucide-react'
+import { Play, Pause, X } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -54,6 +54,7 @@ export function Timeline({ nodeId }: { nodeId: string }) {
       {/* 工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px',
         borderBottom: '1px solid var(--border)', background: 'transparent' }}>
+        <button onClick={() => useAppStore.getState().setTimelineNodeId(null)} title="关闭时间线" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 3, lineHeight: 0 }}><X size={13} /></button>
         <button onClick={togglePlay} className="fw-btn" style={{ padding: '4px 13px', color: 'var(--text)' }}>
           {playingRef.current ? <><Pause size={12} /> 暂停</> : <><Play size={12} /> 播放</>}
         </button>

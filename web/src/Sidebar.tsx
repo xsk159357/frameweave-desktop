@@ -1,6 +1,6 @@
 // 左侧节点面板：搜索 + 分类 + 收藏（v3 霓虹行式）
 import { useMemo, useState } from 'react'
-import { Star, Puzzle } from 'lucide-react'
+import { Star, Puzzle, Zap } from 'lucide-react'
 import { useAppStore } from './store'
 
 export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) {
@@ -49,7 +49,10 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
   const renderItem = (s: any) => (
     <div
       key={s.type_id}
+      draggable
+      onDragStart={(e) => { e.dataTransfer.setData('application/fw-node', s.type_id); e.dataTransfer.effectAllowed = 'copy' }}
       onClick={() => onAddNode(s.type_id)}
+      title={s.description || s.title}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
         padding: '8px 10px', marginBottom: 2, borderRadius: 11,
@@ -88,7 +91,12 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
             title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
           ><Star size={13} fill={favs.includes(s.type_id) ? '#fbbf24' : 'none'} color={favs.includes(s.type_id) ? '#fbbf24' : 'var(--text-faint)'} /></button>
         </div>
-        <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 1, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 1, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</span>
+          {s.gpu_required && (
+            <span title="需要 GPU" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 8, fontWeight: 700, color: '#ffd47e', background: 'rgba(245,165,36,.14)', border: '1px solid rgba(245,165,36,.35)', borderRadius: 999, padding: '0 5px' }}><Zap size={7} />GPU</span>
+          )}
+        </div>
       </div>
     </div>
   )

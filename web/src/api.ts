@@ -36,6 +36,9 @@ export const api = {
 
   getWorkflow: (id: string) => req<Record<string, unknown>>('/api/workflows/' + id),
 
+  deleteWorkflow: (id: string) =>
+    req<{ok:boolean}>('/api/workflows/' + id, { method: 'DELETE' }),
+
   saveWorkflow: (id: string, nodes: unknown[], edges: unknown[]) =>
     req<Record<string, unknown>>('/api/workflows/' + id, {
       method: 'PUT', body: JSON.stringify({ nodes, edges }),
@@ -83,6 +86,9 @@ export const api = {
     req<{ok:boolean}>('/api/util/reveal', {
       method: 'POST', body: JSON.stringify({ path }),
     }),
+
+  cancelWorkflow: (id: string) =>
+    req<{ok:boolean}>('/api/workflows/' + id + '/cancel', { method: 'POST' }),
 
   resetNode: (workflowId: string, nodeId: string, force = true) =>
     req<{ok:boolean}>('/api/workflows/' + workflowId + '/nodes/' + nodeId + '/reset', {

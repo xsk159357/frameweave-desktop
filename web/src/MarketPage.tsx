@@ -20,6 +20,8 @@ interface MarketItem {
 export function MarketPage({ onClose }: { onClose: () => void }) {
   const dark = useAppStore((s) => s.dark)
   const session = useAppStore((s) => s.session)
+  const setSpecs = useAppStore((s) => s.setSpecs)
+  const pushToast = useAppStore((s) => s.pushToast)
   const [q, setQ] = useState('')
   const [kind, setKind] = useState('')
   const [items, setItems] = useState<MarketItem[]>([])
@@ -45,10 +47,13 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
       const r = await api.marketInstall(id, session?.token || '')
       if (r.ok) {
         setMsg(r.message || '安装成功')
+        pushToast((r.message || '安装成功') + '，可在左侧节点库使用')
         // 刷新积分
         if (session?.token && session?.deviceId) {
           try { const v = await api.verify(session.token, session.deviceId); if (v.ok && v.credits != null) setCredits(v.credits) } catch { /* ignore */ }
         }
+        // F1：立即刷新节点规格，新节点立即可用（不再需要重启）
+        try { const s = await api.specs(); setSpecs(s || []) } catch { /* ignore */ }
         load()
       } else setErr(r.message || '安装失败')
     } catch (e: any) { setErr(e.message || '安装失败') }

@@ -11,9 +11,10 @@ interface Props {
   params: Record<string, string>
   run_history?: { time: number; status: string; params?: Record<string, unknown>; cache_key?: string; error?: string }[]
   onUpdate: (nodeId: string, patch: Record<string, string>) => void
+  onClose?: () => void
 }
 
-export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Props) {
+export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClose }: Props) {
   const dark = useAppStore((s) => s.dark)
   const nodeStatus = useAppStore((s) => s.nodeStatus)
   const nodeError = useAppStore((s) => s.nodeError)
@@ -35,8 +36,8 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
 
   const styles = {
     panel: {
-      width: 328, borderLeft: 'var(--glass-border)',
-      background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      width: '100%', height: '100%', borderLeft: 'var(--glass-border)', boxSizing: 'border-box' as const,
+      background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
       boxShadow: 'var(--glass-inner)', padding: 16, overflowY: 'auto', flexShrink: 0,
     },
     label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: dark ? 'var(--text-faint)' : '#7a8499', margin: '14px 0 7px', textTransform: 'uppercase' as const },
@@ -120,6 +121,10 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate }: Prop
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{spec?.title || '节点'}</span>
         <span className="fw-badge" style={{ background: dark ? 'var(--border)' : 'var(--bg-panel-2)', color: dark ? 'var(--text-faint)' : '#7a8499', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
+        <span style={{ flex: 1 }} />
+        {onClose && (
+          <button onClick={onClose} title="关闭" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 4, borderRadius: 7, lineHeight: 0 }}><X size={15} /></button>
+        )}
       </div>
       <div style={{ fontSize: 11, color: dark ? 'var(--text-faint)' : '#9aa2b5', marginBottom: 4, lineHeight: 1.5 }}>
         {spec?.type_id}

@@ -1,8 +1,8 @@
-// 自定义画布节点组件（v3.2 规整三段式：标题行 / 端口区 / 状态行）
-import { Fragment, memo } from 'react'
-import { AlertTriangle, PencilLine } from 'lucide-react'
+// 自定义画布节点组件（v4 节点驱动：类型色端口 / 参数摘要 / 双击内嵌编辑 / 状态整卡）
+import { Fragment, memo, useState } from 'react'
+import { AlertTriangle, PencilLine, Zap, Lock, Minus } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import type { FlowNodeData } from '../types'
+import type { FlowNodeData, PortType } from '../types'
 import { useAppStore } from '../store'
 
 const statusColor: Record<string, string> = {
@@ -28,11 +28,51 @@ const catGrad: Record<string, string> = {
   输出: 'linear-gradient(135deg,#f87171,#fb7185)',
 }
 
+// 端口类型 → 颜色（B1：类型可视化）
+const portColor: Record<string, string> = {
+  VIDEO: '#f87171', IMAGE: '#c084fc', AUDIO: '#4dd0e1',
+  SCRIPT: '#34d399', SUBTITLE: '#34d399', SEGMENTS: '#6c8cff',
+  TIMELINE: '#6c8cff', JSON: '#a78bfa', STRING: '#9aa6c8',
+  INT: '#fbbf24', FLOAT: '#fbbf24', BOOL: '#fbbf24', ANY: '#6b779f',
+}
+const pc = (t: string) => portColor[t] || portColor.ANY
+
+// 内嵌参数控件（C：节点内编辑，widget 简化集）
+function InlineParam({ p, val, onUpdate }: { p: any; val: string; onUpdate: (v: string) => void }) {
+  const widget = p.widget || (p.type === 'INT' ? 'number' : 'text')
+  if (widget === 'select' || (p.options && p.options.length)) {
+    return (
+      <select value={String(val)} onChange={(e) => onUpdate(e.target.value)}>
+        {(p.options || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    )
+  }
+  if (widget === 'number' || p.type === 'INT' || p.type === 'FLOAT') {
+    return <input type="number" value={String(val)} onChange={(e) => onUpdate(e.target.value)} />
+  }
+  if (p.type === 'BOOL') {
+    return (
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7, fontSize: 11.5, cursor: 'pointer' }}>
+        <input type="checkbox" checked={String(val) === 'true' || val === true}
+          onChange={(e) => onUpdate(String(e.target.checked))} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+        {p.label || p.name}
+      </label>
+    )
+  }
+  if (p.name === 'api_key' || (p.name || '').toLowerCase().includes('apikey')) {
+    return <input type="password" value={String(val)} placeholder={p.description || '或填 @secret:名称'} onChange={(e) => onUpdate(e.target.value)} />
+  }
+  return <input type="text" value={String(val)} placeholder={p.description || ''} onChange={(e) => onUpdate(e.target.value)} />
+}
+
 function FlowNodeInner({ id, data, selected }: NodeProps) {
   const { type_id, title, category, params, last_params, status, error, progress, asset_ids, spec } = data
+  const [editing, setEditing] = useState(false)
 
   const color = statusColor[status] || statusColor.pending
   const grad = catGrad[category] || 'var(--accent-grad)'
+  const isFailed = status === 'failed'
+  const isRunning = status === 'running'
 
   const diffKeys = (() => {
     if (!last_params || Object.keys(last_params).length === 0) return []
@@ -48,40 +88,64 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     return ch ? ch.toUpperCase() : (title || '?').slice(0, 1)
   })()
 
-  // 三段式高度：标题行 40 + 端口区（取输入输出较多者）+ 状态信息行
   const inputs = spec?.inputs || []
   const outputs = spec?.outputs || []
+  const paramsList = spec?.params || []
   const portRows = Math.max(inputs.length, outputs.length, 1)
+  // 参数摘要行：第一个非空参数（B2）
+  const summaryItem = (() => {
+    for (const pl of paramsList) {
+      const v = (params || {})[pl.name]
+      if (v !== undefined && v !== null && String(v) !== '') {
+        const s = String(v)
+        return { label: pl.label || pl.name, value: s.length > 30 ? s.slice(0, 29) + '…' : s }
+      }
+    }
+    return null
+  })()
   const statusRows = (hasDiff ? 1 : 0) + (error ? 1 : 0)
-    + (status === 'running' && progress !== undefined ? 1 : 0)
+    + (isRunning && progress !== undefined ? 1 : 0)
     + (status !== 'pending' && status !== 'running' ? 1 : 0)
-  const nodeH = 58 + portRows * 24 + statusRows * 18
-  const portY = (i: number) => 44 + i * 24
+  // 编辑态参数区：每参数行高 ~34
+  const editRows = editing ? Math.max(paramsList.length, 1) : 0
+  const nodeH = 58 + (summaryItem && !editing ? 20 : 0) + portRows * 24 + statusRows * 18 + editRows * 34
+  const portY = (i: number) => 44 + (summaryItem && !editing ? 20 : 0) + i * 24
+
+  const updateParam = (name: string, value: string) => {
+    ;(window as any).__fwUpdateParams?.(id, { [name]: value })
+  }
 
   return (
     <div
       onContextMenu={(e) => {
         e.preventDefault(); e.stopPropagation()
-        ;(window as any).__fwNodeMenu && (window as any).__fwNodeMenu({ x: e.clientX, y: e.clientY, nodeId: id })
+        ;(window as any).__fwNodeMenu && (window as any).__fwNodeMenu({ x: e.clientX, y: e.clientY, nodeId: id, nodeTitle: (data as FlowNodeData).title })
       }}
-      onDoubleClick={(e) => { e.stopPropagation(); useAppStore.getState().setSelectedNodeId(id) }}
+      onDoubleClick={(e) => { e.stopPropagation(); setEditing((v) => !v) }}
       style={{
         position: 'relative', width: 240, height: nodeH,
-        background: 'linear-gradient(180deg, rgba(30,37,64,.88), rgba(22,27,48,.92))',
+        background: 'linear-gradient(180deg, rgba(30,37,64,.9), rgba(22,27,48,.93))',
         backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-        border: '1px solid ' + (selected ? 'rgba(108,140,255,.9)' : 'rgba(148,168,255,.2)'),
+        border: isFailed
+          ? '1px solid rgba(248,113,113,.6)'
+          : '1px solid ' + (selected ? 'rgba(108,140,255,.95)' : 'rgba(148,168,255,.26)'),
         borderRadius: 16,
-        boxShadow: selected
-          ? '0 0 0 3px rgba(108,140,255,.22), 0 0 26px rgba(108,140,255,.3), var(--shadow-md)'
-          : '0 8px 24px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.07)',
+        boxShadow: isFailed
+          ? '0 0 0 2px rgba(248,113,113,.22), 0 0 18px rgba(248,113,113,.2), var(--shadow-md)'
+          : selected
+            ? '0 0 0 3px rgba(108,140,255,.22), 0 0 26px rgba(108,140,255,.3), var(--shadow-md)'
+            : '0 8px 24px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08)',
         fontSize: 12, color: 'var(--text)',
         transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',
       }}
     >
-      {/* 顶部状态霓虹条 */}
+      {/* 顶部状态霓虹条（running 流动） */}
       <div style={{
         position: 'absolute', top: 1, left: 1, right: 1, height: 2.5, pointerEvents: 'none',
-        borderRadius: 2, background: color, opacity: status === 'pending' ? .5 : 1,
+        borderRadius: 2,
+        background: isRunning ? 'var(--running)' : color,
+        opacity: status === 'pending' ? .45 : 1,
+        ...(isRunning ? { backgroundImage: 'linear-gradient(90deg, var(--running), #fff3c4, var(--running))', backgroundSize: '200% 100%', animation: 'fw-flow 1.2s linear infinite' } : {}),
       }} />
       {/* 类别饰条 */}
       <div style={{ position: 'absolute', left: 1, top: 12, bottom: 12, width: 3, borderRadius: 3, background: grad, pointerEvents: 'none' }} />
@@ -98,13 +162,55 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           fontWeight: 650, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis',
           whiteSpace: 'nowrap', flex: 1, minWidth: 0,
         }}>{title}</span>
+        {spec?.gpu_required && (
+          <span title="需要 GPU" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
+            fontSize: 8, fontWeight: 700, color: '#ffd47e', background: 'rgba(245,165,36,.14)',
+            border: '1px solid rgba(245,165,36,.35)', borderRadius: 999, padding: '1px 5px',
+          }}><Zap size={8} />GPU</span>
+        )}
         <span style={{
           fontSize: 8.5, padding: '1px 7px', borderRadius: 999, fontWeight: 650, flexShrink: 0,
           background: 'var(--bg-panel-2)', color: 'var(--text-faint)', letterSpacing: .5,
         }}>{category}</span>
       </div>
 
-      {/* ===== 端口区（左右轨道 + 中间留白） ===== */}
+      {/* ===== 参数摘要行（B2/C3） ===== */}
+      {summaryItem && !editing && (
+        <div style={{
+          margin: '0 12px 2px', padding: '3px 9px', borderRadius: 7,
+          background: 'rgba(108,140,255,.09)', border: '1px solid rgba(108,140,255,.16)',
+          fontSize: 10, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5,
+          cursor: 'pointer', userSelect: 'none',
+        }} onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}>
+          <span style={{ color: 'var(--accent)', fontWeight: 650, flexShrink: 0 }}>{summaryItem.label}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{summaryItem.value}</span>
+          <PencilLine size={9} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+        </div>
+      )}
+
+      {/* ===== 内嵌参数表单（C1：双击展开） ===== */}
+      {editing && (
+        <div className="fw-node-param" style={{ position: 'relative', margin: '0 12px 4px' }}>
+          {paramsList.length === 0 && (
+            <div style={{ fontSize: 10.5, color: 'var(--text-faint)', padding: '2px 0 6px' }}>此节点无参数</div>
+          )}
+          {paramsList.map((pl) => (
+            <div key={pl.name}>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                {pl.label || pl.name}
+                {pl.required && <span style={{ color: 'var(--danger)' }}>*</span>}
+              </div>
+              <InlineParam p={pl} val={String((params || {})[pl.name] ?? pl.default ?? '')} onUpdate={(v) => updateParam(pl.name, v)} />
+            </div>
+          ))}
+          <div style={{ fontSize: 9.5, color: 'var(--text-faint)', textAlign: 'center', paddingBottom: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <Minus size={9} /> 双击收起 <Minus size={9} />
+          </div>
+        </div>
+      )}
+
+      {/* ===== 端口区（左右轨道 + 类型色） ===== */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>
           <Handle
@@ -113,7 +219,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle in"
             title={'输入: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i) }}
+            style={{ top: portY(i), background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
           />
           <span
             style={{
@@ -121,8 +227,12 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
               fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
               overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: 4,
             }}
-          >{p.name}</span>
+          >
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc(p.type), flexShrink: 0 }} />
+            {p.name}
+          </span>
         </Fragment>
       ))}
       {outputs.map((p, i) => (
@@ -133,7 +243,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle out"
             title={'输出: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i) }}
+            style={{ top: portY(i), background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
           />
           <span
             style={{
@@ -141,8 +251,12 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
               fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
               overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: 4,
             }}
-          >{p.name}</span>
+          >
+            {p.name}
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc(p.type), flexShrink: 0 }} />
+          </span>
         </Fragment>
       ))}
 
@@ -158,7 +272,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             <><AlertTriangle size={10} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</>
           </div>
         )}
-        {status === 'running' && progress !== undefined && (
+        {isRunning && progress !== undefined && (
           <div style={{ height: 4, background: 'var(--bg-panel-2)', borderRadius: 2, overflow: 'hidden', marginBottom: 3 }}>
             <div style={{ height: '100%', width: (progress * 100) + '%', background: color, boxShadow: '0 0 8px ' + color + 'aa', transition: 'width .3s' }} />
           </div>

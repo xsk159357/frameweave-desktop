@@ -1,4 +1,4 @@
-// Zustand 画布状态存储
+// Zustand 画布状态存储（v4：+toast 系统 / 时间线 / 未保存标志）
 import { create } from 'zustand'
 import type { FlowNodeData, NodeSpec, NodeStatus } from './types'
 
@@ -11,38 +11,46 @@ interface SessionInfo {
   deviceId?: string  // 本机设备标识
 }
 
+export interface ToastItem { id: number; msg: string; kind: 'ok' | 'err' | 'info' }
+
 interface AppState {
-  // 会话
   session: SessionInfo | null
   setSession: (s: SessionInfo | null) => void
 
-  // 节点规格
   specs: NodeSpec[]
   setSpecs: (s: NodeSpec[]) => void
 
-  // 工作流
   workflowId: string
   workflowName: string
   setWorkflow: (id: string, name: string) => void
 
-  // 执行状态
   running: boolean
   setRunning: (r: boolean) => void
   lastError: string
   setLastError: (m: string) => void
 
-  // 节点状态（后端实时推送）
   nodeStatus: Record<string, NodeStatus>
   nodeError: Record<string, string>
   nodeProgress: Record<string, number>
   nodeAssets: Record<string, Record<string, string>>
   applyNodeEvent: (ev: any) => void
 
-  // 选中节点（双击展开时间线）
   selectedNodeId: string | null
   setSelectedNodeId: (id: string | null) => void
 
-  // 主题
+  // v4：底部时间线独立开关（双击有 segments 资产才开）
+  timelineNodeId: string | null
+  setTimelineNodeId: (id: string | null) => void
+
+  // v4：未保存标志（改参数置脏，保存成功清）
+  dirty: boolean
+  setDirty: (d: boolean) => void
+
+  // v4：toast 轻提示
+  toasts: ToastItem[]
+  pushToast: (msg: string, kind?: 'ok' | 'err' | 'info') => void
+  removeToast: (id: number) => void
+
   dark: boolean
   toggleDark: () => void
 }
@@ -56,6 +64,8 @@ function loadSession(): SessionInfo | null {
   } catch { return null }
 }
 
+let toastSeq = 1
+
 export const useAppStore = create<AppState>((set, get) => ({
   session: loadSession(),
   setSession: (s) => {
@@ -68,8 +78,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSpecs: (specs) => set({ specs }),
 
   workflowId: '',
-  workflowName: '未命名工作流',
-  setWorkflow: (id, name) => set({ workflowId: id, workflowName: name }),
+  workflowName: '',
+  setWorkflow: (id, name) => set({ workflowId: id, workflowName: name || '未命名工作流' }),
 
   running: false,
   setRunning: (r) => set({ running: r }),
@@ -102,7 +112,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedNodeId: null,
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
 
-    dark: true,
+  timelineNodeId: null,
+  setTimelineNodeId: (id) => set({ timelineNodeId: id }),
+
+  dirty: false,
+  setDirty: (d) => set({ dirty: d }),
+
+  toasts: [],
+  pushToast: (msg, kind = 'ok') => {
+    const id = Date.now() + toastSeq++
+    set((s) => ({ toasts: [...s.toasts, { id, msg, kind }] }))
+    setTimeout(() => get().removeToast(id), 4200)
+  },
+  removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+
+  dark: true,
   toggleDark: () => {
     const d = !get().dark
     localStorage.setItem('fw_theme', d ? 'dark' : 'light')
