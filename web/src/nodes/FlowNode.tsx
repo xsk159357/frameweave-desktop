@@ -96,68 +96,19 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         position: 'relative', width: 240, height: nodeH,
         background: 'linear-gradient(180deg, rgba(31,38,66,.985), rgba(22,27,48,.985))',
         border: isFailed
-          ? '1px solid rgba(248,113,113,.6)'
+          ? '1.5px solid rgba(248,113,113,.9)'
           : '1px solid ' + (selected ? 'rgba(108,140,255,.95)' : 'rgba(148,168,255,.26)'),
         borderRadius: 16,
         boxShadow: isFailed
-          ? '0 0 0 2px rgba(248,113,113,.22), 0 0 18px rgba(248,113,113,.2), var(--shadow-md)'
+          ? '0 0 0 2px rgba(248,113,113,.3), 0 0 20px rgba(248,113,113,.28), var(--shadow-md)'
           : selected
             ? '0 0 0 3px rgba(108,140,255,.22), 0 0 26px rgba(108,140,255,.3), var(--shadow-md)'
             : '0 8px 24px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08)',
         fontSize: 12, color: 'var(--text)',
         transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',
+        ...(isRunning ? { animation: 'fw-node-pulse 2.2s ease-in-out infinite' } : {}),
       }}
     >
-      {/* 顶部状态霓虹条（running 流动） */}
-      <div style={{
-        position: 'absolute', top: 1, left: 1, right: 1, height: 2.5, pointerEvents: 'none',
-        borderRadius: 2,
-        background: isRunning ? 'var(--running)' : color,
-        opacity: status === 'pending' ? .45 : 1,
-        ...(isRunning ? { backgroundImage: 'linear-gradient(90deg, var(--running), #fff3c4, var(--running))', backgroundSize: '200% 100%', animation: 'fw-flow 1.2s linear infinite' } : {}),
-      }} />
-      {/* 类别饰条 */}
-      <div style={{ position: 'absolute', left: 1, top: 12, bottom: 12, width: 3, borderRadius: 3, background: grad, pointerEvents: 'none' }} />
-
-      {/* ===== 标题行 ===== */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 9px 6px 12px' }}>
-        <div style={{
-          width: 24, height: 24, borderRadius: 7, flexShrink: 0,
-          background: grad, color: '#fff', fontSize: 11.5, fontWeight: 800,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(70,90,200,.4), inset 0 1px 0 rgba(255,255,255,.3)',
-        }}>{iconChar}</div>
-        <span style={{
-          fontWeight: 650, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap', flex: 1, minWidth: 0,
-        }}>{title}</span>
-        {spec?.gpu_required && (
-          <span title="需要 GPU" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
-            fontSize: 8, fontWeight: 700, color: '#ffd47e', background: 'rgba(245,165,36,.14)',
-            border: '1px solid rgba(245,165,36,.35)', borderRadius: 999, padding: '1px 5px',
-          }}><Zap size={8} />GPU</span>
-        )}
-        <span style={{
-          fontSize: 8.5, padding: '1px 7px', borderRadius: 999, fontWeight: 650, flexShrink: 0,
-          background: 'var(--bg-panel-2)', color: 'var(--text-faint)', letterSpacing: .5,
-        }}>{category}</span>
-      </div>
-
-      {/* ===== 参数摘要行（B2/C3，双击打开编辑面板） ===== */}
-      {summaryItem && (
-        <div style={{
-          margin: '0 12px 2px', padding: '3px 9px', borderRadius: 7,
-          background: 'rgba(108,140,255,.09)', border: '1px solid rgba(108,140,255,.16)',
-          fontSize: 10, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5,
-          cursor: 'pointer', userSelect: 'none',
-        }} onDoubleClick={(e) => { e.stopPropagation(); openEdit() }}>
-          <span style={{ color: 'var(--accent)', fontWeight: 650, flexShrink: 0 }}>{summaryItem.label}</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{summaryItem.value}</span>
-          <PencilLine size={9} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-        </div>
-      )}
-
       {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>

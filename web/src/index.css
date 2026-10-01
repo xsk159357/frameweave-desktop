@@ -382,3 +382,9 @@ input, select, textarea { font-family: inherit; }
   outline: none; transition: border-color .15s, box-shadow .15s;
 }
 .fw-node-param input:focus, .fw-node-param select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(108,140,255,.2); }
+
+/* v048: 运行中节点缓慢闪动 */
+@keyframes fw-node-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .72; }
+}
