@@ -106,10 +106,17 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
   const statusRows = (hasDiff ? 1 : 0) + (error ? 1 : 0)
     + (isRunning && progress !== undefined ? 1 : 0)
     + (status !== 'pending' && status !== 'running' ? 1 : 0)
-  // 编辑态参数区：每参数行高 ~34
-  const editRows = editing ? Math.max(paramsList.length, 1) : 0
-  const nodeH = 58 + (summaryItem && !editing ? 20 : 0) + portRows * 24 + statusRows * 18 + editRows * 34
-  const portY = (i: number) => 44 + (summaryItem && !editing ? 20 : 0) + i * 24
+  // —— v4.1 布局修正：编辑态按真实控件高度计（label~14 + input~28 + margin7 = 49/参数 + 收尾 24），杜绝穿模 ——
+  const summaryH = summaryItem && !editing ? 20 : 0
+  const editH = editing ? paramsList.length * 49 + 24 : 0
+  const portH = portRows * 24
+  const bodyH = Math.max(editH, portH)
+  const statusH = statusRows * 18
+  const nodeH = 44 + summaryH + bodyH + statusH + 14
+  // 端口 handle 绝对 y：非编辑态位于摘要行下方；编辑态保持原位（表单占据中部，handle 留在左右轨道）
+  const portY = (i: number) => 44 + (editing ? 0 : summaryH) + i * 24
+  // 状态信息行绝对 y（表单/端口区下方，底部留 14px）
+  const statusTop = 44 + summaryH + bodyH + 4
 
   const updateParam = (name: string, value: string) => {
     ;(window as any).__fwUpdateParams?.(id, { [name]: value })
@@ -227,7 +234,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
               fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
               overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500,
-              display: 'flex', alignItems: 'center', gap: 4,
+              display: editing ? 'none' : 'flex', alignItems: 'center', gap: 4,
             }}
           >
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc(p.type), flexShrink: 0 }} />
@@ -251,7 +258,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
               fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
               pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
               overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right', fontWeight: 500,
-              display: 'flex', alignItems: 'center', gap: 4,
+              display: editing ? 'none' : 'flex', alignItems: 'center', gap: 4,
             }}
           >
             {p.name}
@@ -261,7 +268,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       ))}
 
       {/* ===== 状态信息行 ===== */}
-      <div style={{ position: 'absolute', left: 6, right: 6, top: nodeH - 16 - statusRows * 18 + 4, fontSize: 10 }}>
+      <div style={{ position: 'absolute', left: 6, right: 6, top: statusTop, fontSize: 10 }}>
         {hasDiff && (
           <div style={{ color: 'var(--running)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: '-1px' }}><PencilLine size={10} /> 已改</span>: {diffKeys.join(', ')}
