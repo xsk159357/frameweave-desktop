@@ -103,20 +103,15 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     }
     return null
   })()
-  const statusRows = (hasDiff ? 1 : 0) + (error ? 1 : 0)
-    + (isRunning && progress !== undefined ? 1 : 0)
-    + (status !== 'pending' && status !== 'running' ? 1 : 0)
-  // —— v4.1 布局修正：编辑态按真实控件高度计（label~14 + input~28 + margin7 = 49/参数 + 收尾 24），杜绝穿模 ——
+  // —— v4.2 性能：状态区高度固定 36px（信息行+状态行），节点尺寸只在编辑/摘要切换时变化，杜绝运行态 ResizeObserver 重排 ——
   const summaryH = summaryItem && !editing ? 20 : 0
   const editH = editing ? paramsList.length * 49 + 24 : 0
   const portH = portRows * 24
   const bodyH = Math.max(editH, portH)
-  const statusH = statusRows * 18
-  const nodeH = 44 + summaryH + bodyH + statusH + 14
-  // 端口 handle 绝对 y：非编辑态位于摘要行下方；编辑态保持原位（表单占据中部，handle 留在左右轨道）
+  const statusH = 36
+  const nodeH = 44 + summaryH + bodyH + statusH + 12
   const portY = (i: number) => 44 + (editing ? 0 : summaryH) + i * 24
-  // 状态信息行绝对 y（表单/端口区下方，底部留 14px）
-  const statusTop = 44 + summaryH + bodyH + 4
+  const statusTop = 44 + summaryH + bodyH + 3
 
   const updateParam = (name: string, value: string) => {
     ;(window as any).__fwUpdateParams?.(id, { [name]: value })
@@ -131,8 +126,8 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       onDoubleClick={(e) => { e.stopPropagation(); setEditing((v) => !v) }}
       style={{
         position: 'relative', width: 240, height: nodeH,
-        background: 'linear-gradient(180deg, rgba(30,37,64,.9), rgba(22,27,48,.93))',
-        backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+        // v4.2 性能：移除 backdrop-filter（画布 transform 时每帧重采样背层是拖动/缩放卡顿主因），背景提高不透明度保持质感
+        background: 'linear-gradient(180deg, rgba(31,38,66,.985), rgba(22,27,48,.985))',
         border: isFailed
           ? '1px solid rgba(248,113,113,.6)'
           : '1px solid ' + (selected ? 'rgba(108,140,255,.95)' : 'rgba(148,168,255,.26)'),
@@ -267,34 +262,39 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         </Fragment>
       ))}
 
-      {/* ===== 状态信息行 ===== */}
-      <div style={{ position: 'absolute', left: 6, right: 6, top: statusTop, fontSize: 10 }}>
-        {hasDiff && (
-          <div style={{ color: 'var(--running)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: '-1px' }}><PencilLine size={10} /> 已改</span>: {diffKeys.join(', ')}
-          </div>
-        )}
+      {/* ===== 状态区：固定 36px，杜绝运行态 reflow（v4.2） ===== */}
+      <div style={{ position: 'absolute', left: 6, right: 6, top: statusTop, height: statusH, fontSize: 10, overflow: 'hidden' }}>
+        {/* 行1：错误 > 进度条 > 已改（三选一） */}
         {error && (
-          <div style={{ color: 'var(--danger)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ color: 'var(--danger)', height: 17, lineHeight: '17px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={error}>
             <><AlertTriangle size={10} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}</>
           </div>
         )}
-        {isRunning && progress !== undefined && (
-          <div style={{ height: 4, background: 'var(--bg-panel-2)', borderRadius: 2, overflow: 'hidden', marginBottom: 3 }}>
-            <div style={{ height: '100%', width: (progress * 100) + '%', background: color, boxShadow: '0 0 8px ' + color + 'aa', transition: 'width .3s' }} />
+        {!error && isRunning && progress !== undefined && (
+          <div style={{ height: 17, display: 'flex', alignItems: 'center' }}>
+            <div style={{ flex: 1, height: 4, background: 'var(--bg-panel-2)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: (progress * 100) + '%', background: color, boxShadow: '0 0 8px ' + color + 'aa', transition: 'width .3s' }} />
+            </div>
+            <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>{(progress * 100).toFixed(0)}%</span>
           </div>
         )}
-        {status !== 'pending' && status !== 'running' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: '0 0 6px ' + color + 'cc', flexShrink: 0 }} />
-            <span style={{ color: 'var(--text-faint)' }}>{statusText[status] || status}</span>
-            {Object.keys(asset_ids).length > 0 && (
-              <span className="fw-badge" style={{ marginLeft: 'auto', background: 'var(--bg-panel)', color: 'var(--text-dim)' }}>
-                {Object.keys(asset_ids).length} 输出
-              </span>
-            )}
+        {!error && !isRunning && hasDiff && (
+          <div style={{ color: 'var(--running)', height: 17, lineHeight: '17px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={diffKeys.join(', ')}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: '-1px' }}><PencilLine size={10} /> 已改</span>: {diffKeys.join(', ')}
           </div>
         )}
+        {/* 行2：状态行——始终显示（pending 显示「就绪」，避免高度跳变） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, height: 17, lineHeight: '17px' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: '0 0 6px ' + color + 'cc', flexShrink: 0 }} />
+          <span style={{ color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {statusText[status] || status}
+          </span>
+          {Object.keys(asset_ids).length > 0 && (
+            <span className="fw-badge" style={{ marginLeft: 'auto', background: 'var(--bg-panel)', color: 'var(--text-dim)' }}>
+              {Object.keys(asset_ids).length} 输出
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

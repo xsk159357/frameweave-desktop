@@ -1,5 +1,5 @@
 // 主画布（v4 画布优先）：浮层参数面板 + 拖拽添加 + 复制粘贴 + 撤销重做 + 连线右键 + 删除确认 + 导出导入 + 取消运行
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, useReactFlow,
@@ -72,18 +72,17 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
     setDirty(false)
   }, [nodes, edges, setNodes, setEdges, setDirty])
 
-  // 节点状态注入画布
+  // 节点状态注入画布（v4.2 性能：引用相同则保持原节点对象，零处置节点不触发重渲染）
   useEffect(() => {
-    setNodes((nds) => nds.map((n) => ({
-      ...n,
-      data: {
-        ...n.data,
-        status: nodeStatus[n.id] || 'pending',
-        error: nodeError[n.id] || '',
-        progress: nodeProgress[n.id] || 0,
-        asset_ids: nodeAssets[n.id] || {},
-      },
-    })))
+    setNodes((nds) => nds.map((n) => {
+      const st = nodeStatus[n.id] || 'pending'
+      const er = nodeError[n.id] || ''
+      const pr = nodeProgress[n.id] || 0
+      const as = nodeAssets[n.id] || {}
+      const d = n.data
+      if (d.status === st && d.error === er && d.progress === pr && d.asset_ids === as) return n
+      return { ...n, data: { ...d, status: st, error: er, progress: pr, asset_ids: as } }
+    }))
   }, [nodeStatus, nodeError, nodeProgress, nodeAssets, setNodes])
 
   // WebSocket 事件
@@ -502,12 +501,13 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
             minZoom={0.2}
             maxZoom={1.6}
             proOptions={{ hideAttribution: true }}
+            onlyRenderVisibleElements={nodes.length > 40}
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null) }}
             onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false) }}
           >
             <Background gap={22} color="#161d33" />
             <Controls />
-            <MiniMap pannable zoomable style={{ background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
+            <MiniMap pannable zoomable maskColor="rgba(10,14,24,.55)" style={{ background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
           </ReactFlow>
 
           {/* 快捷键面板（D6） */}
@@ -620,10 +620,10 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   )
 }
 
-export function Canvas(props: { workflowId: string }) {
+export const Canvas = memo(function Canvas(props: { workflowId: string }) {
   return (
     <ReactFlowProvider>
       <CanvasInner {...props} />
     </ReactFlowProvider>
   )
-}
+})
