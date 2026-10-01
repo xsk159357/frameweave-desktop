@@ -1,6 +1,6 @@
 // 自定义画布节点组件（v4 节点驱动：类型色端口 / 参数摘要 / 双击打开右侧编辑面板）
 // v046：移除卡片内嵌编辑（表单撑高节点会覆盖相邻节点=穿模），双击统一打开右侧 ParamPanel，节点尺寸恒定
-import { Fragment, memo, useEffect, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useRef } from 'react'
 import { AlertTriangle, PencilLine, Zap, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FlowNodeData, PortType } from '../types'
@@ -59,20 +59,16 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     return ch ? ch.toUpperCase() : (title || '?').slice(0, 1)
   })()
 
-  const [expanded, setExpanded] = useState(false)
+  const expanded = !!(data as any).expanded
   const cardRef = useRef<HTMLDivElement>(null)
+  // 点节点外部收起（走 Canvas 的 __fwSetNodeExpanded → data.expanded → 触发整列重排，收起时自动缝合间隙）
   useEffect(() => {
     if (!expanded) return
-    const h = (e: MouseEvent) => { if (cardRef.current && !cardRef.current.contains(e.target as Node)) setExpanded(false) }
+    const h = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) ;(window as any).__fwSetNodeExpanded?.(id, false)
+    }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
-  }, [expanded])
-
-  // 展开/收起时通知画布：自动下推重叠节点（内镶增高不遮挡）
-  // 注意：cfgH 在下方声明，不能进依赖数组（渲染期求值会触发 TDZ）；effect 回调执行时 cfgH 已初始化
-  useEffect(() => {
-    ;(window as any).__fwNodeExpand?.(id, cfgH, expanded)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, id])
   const paramUpd = (patch: Record<string, string>) => { ;(window as any).__fwUpdateParams?.(id, patch) }
   const renderCompact = (p: any, val: any) => {
@@ -192,7 +188,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           }}>{category}</span>
         )}
         {(spec?.params || []).length > 0 && (
-          <button onClick={(e) => { e.stopPropagation(); setExpanded(v => !v) }}
+          <button onClick={(e) => { e.stopPropagation(); ;(window as any).__fwSetNodeExpanded?.(id, !expanded) }}
             title={expanded ? '收起配置' : '展开配置'}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 2, lineHeight: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}>
             {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -202,7 +198,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
 
       {/* ===== 参数摘要行（首个非空参数） ===== */}
       {summaryItem && !expanded && (
-        <div onClick={() => { if ((spec?.params || []).length > 0) setExpanded(v => !v) }}
+        <div onClick={() => { if ((spec?.params || []).length > 0) ;(window as any).__fwSetNodeExpanded?.(id, !expanded) }}
           title={(spec?.params || []).length > 0 ? '点击展开配置' : ''}
           style={{
           margin: '0 12px 6px', padding: '3px 9px', borderRadius: 7, cursor: (spec?.params || []).length > 0 ? 'pointer' : 'default',

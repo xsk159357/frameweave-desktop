@@ -33,7 +33,15 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const setDirty = useAppStore((s) => s.setDirty)
   const pushToast = useAppStore((s) => s.pushToast)
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<any>([])
+  const [nodes, setNodes, onNodesChangeRaw] = useNodesState<any>([])
+  // 节点被手动拖动后标记 _manual：整列重排尊重手动位置（不再自动拉回），自动推挤的收起时缝合回来
+  const onNodesChange = useCallback((changes: any[]) => {
+    const posIds = new Set(changes.filter((ch: any) => ch.type === 'position' && ch.position).map((ch: any) => ch.id))
+    if (posIds.size > 0) {
+      setNodes((nds) => nds.map((n) => posIds.has(n.id) && !n.data._manual ? { ...n, data: { ...n.data, _manual: true } } : n))
+    }
+    onNodesChangeRaw(changes)
+  }, [onNodesChangeRaw, setNodes])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [autoLayout, setAutoLayout] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -218,21 +226,12 @@ const onAddNode = useCallback((typeId: string) => {
     ;(window as any).__fwNodeMenu = (info: { x: number; y: number; nodeId: string; nodeTitle: string }) => setMenu(info)
     ;(window as any).__fwAddNode = (typeId: string) => onAddNode(typeId)
     ;(window as any).__fwOpenEdit = (id: string) => { setSelectedNodeId(id); setMenu(null) }
-    ;(window as any).__fwNodeExpand = (nodeId: string, deltaH: number, expanding: boolean) => {
-      setNodes((nds) => {
-        const self = nds.find((n) => n.id === nodeId)
-        if (!self || deltaH <= 0) return nds
-        const sx = self.position.x
-        return nds.map((n) => {
-          if (n.id === nodeId) return n
-          if (!expanding) return n
-          const overlapX = Math.abs(n.position.x - sx) < 240
-          if (overlapX && n.position.y >= self.position.y + 120) {
-            return { ...n, position: { ...n.position, y: n.position.y + deltaH } }
-          }
-          return n
-        })
-      })
+    // 展开/收起：更新节点展开态后对整个相关列做垂直重排（防遮挡 + 收缝）
+    ;(window as any).__fwSetNodeExpanded = (nodeId: string, exp: boolean) => {
+      setNodes((nds) => reflowColumn(
+        nds.map((n) => n.id === nodeId ? { ...n, data: { ...n.data, expanded: exp } } : n),
+        nodeId,
+      ))
     }
   }, [updateParams, onAddNode, setSelectedNodeId, setNodes])
 
@@ -718,6 +717,47 @@ const onAddNode = useCallback((typeId: string) => {
       )}
     </div>
   )
+}
+
+// ===== 节点整列重排（内镶展开防遮挡：矩形判交 + 列压缩 + 收起缝合） =====
+const NODE_W = 240
+const GAP = 14
+// 节点渲染高度估算（与 FlowNode 内 nodeH 一致：44 标题 + 摘要20 + 内镶表单cfgH + 端口 + 36 状态 + 12）
+const estNodeH = (d: any): number => {
+  const p = d?.spec?.params || []
+  const hasVal = d?.params && p.some((pl: any) => { const v = (d.params || {})[pl.name]; return v !== undefined && v !== null && String(v) !== '' })
+  const sumH = !d?.expanded && hasVal ? 20 : 0
+  const cfgH = d?.expanded ? Math.min(30 + p.length * 50 + 18, 320) : 0
+  const ins = d?.spec?.inputs?.length || 0
+  const outs = d?.spec?.outputs?.length || 0
+  return 44 + sumH + cfgH + Math.max(ins, outs, 1) * 24 + 36 + 12
+}
+// 整列垂直重排：节点展开/收起后，把其下方水平区间相交的节点按原纵向顺序依次压紧（链式一次解决），
+// 收起时下方节点自动上移缝合间隙。
+const reflowColumn = (nds: any[], id: string): any[] => {
+  const self = nds.find((n) => n.id === id)
+  if (!self) return nds
+  const sH = estNodeH(self.data)
+  const below = nds
+    .filter((n) => n.id !== id
+      && n.position.y > self.position.y
+      && n.position.x < self.position.x + NODE_W
+      && n.position.x + NODE_W > self.position.x)
+    .sort((a, b) => a.position.y - b.position.y || a.id.localeCompare(b.id))
+  const out = nds.map((n) => ({ ...n }))
+  // cursor 贴紧式：自动推挤过的节点收起时缝合（不留洞）；手动拖动过的节点(_manual)作为障碍推进、保持原位
+  let cursor = self.position.y + sH + GAP
+  for (const n of below) {
+    const rn = out.find((o) => o.id === n.id)!
+    const nH = estNodeH(rn.data)
+    if (rn.data?._manual) {
+      cursor = Math.max(cursor, rn.position.y + nH + GAP)
+      continue
+    }
+    if (rn.position.y !== cursor) rn.position = { ...rn.position, y: cursor }
+    cursor = rn.position.y + nH + GAP
+  }
+  return out
 }
 
 export const Canvas = memo(function Canvas(props: { workflowId: string }) {
