@@ -117,7 +117,7 @@ export default function App() {
         {/* 工作流 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999,
           border: 'var(--glass-border)', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-          boxShadow: 'var(--glass-inner)', maxWidth: 240, overflow: 'hidden' }}>
+          boxShadow: 'var(--glass-inner)', maxWidth: 200, overflow: 'hidden' }}>
           <FileText size={13} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {workflowId}
@@ -141,7 +141,7 @@ export default function App() {
             color: '#9fb4ff', border: '1px solid #2c3a5c', background: '#1a2138',
           }}><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> 试用 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天</span>
         )}
-        <span style={{ fontSize: 12, color: 'var(--text-faint)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
         <button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().setSession(null)}>退出</button>
       </div>
 

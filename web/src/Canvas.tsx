@@ -330,6 +330,9 @@ export function Canvas({ workflowId }: { workflowId: string }) {
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             fitView
+            fitViewOptions={{ maxZoom: 0.95, padding: 0.35 }}
+            minZoom={0.2}
+            maxZoom={1.5}
             proOptions={{ hideAttribution: true }}
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null) }}
             onPaneClick={() => { setSelectedNodeId(null); setMenu(null) }}
