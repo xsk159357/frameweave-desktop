@@ -15,7 +15,6 @@ interface Props {
 }
 
 export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClose }: Props) {
-  const dark = useAppStore((s) => s.dark)
   const nodeStatus = useAppStore((s) => s.nodeStatus)
   const nodeError = useAppStore((s) => s.nodeError)
   const nodeAssets = useAppStore((s) => s.nodeAssets)

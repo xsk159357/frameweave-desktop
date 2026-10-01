@@ -157,7 +157,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           ? '0 0 0 2px rgba(248,113,113,.3), 0 0 20px rgba(248,113,113,.28), var(--shadow-md)'
           : selected
             ? '0 0 0 3px rgba(139,147,255,.2), 0 0 26px rgba(139,147,255,.28), var(--shadow-md)'
-            : '0 8px 24px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08)',
+            : 'var(--card-shadow)',
         fontSize: 12, color: 'var(--text)',
         transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',
         ...(isRunning ? { animation: 'fw-node-pulse 2.2s ease-in-out infinite' } : {}),
@@ -219,7 +219,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle in"
             title={'输入: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i), left: 5, background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
+            style={{ top: portY(i), left: 5, background: pc(p.type), border: '1px solid var(--handle-ring)' }}
           />
           <span
             style={{
@@ -243,7 +243,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle out"
             title={'输出: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i), right: 5, background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
+            style={{ top: portY(i), right: 5, background: pc(p.type), border: '1px solid var(--handle-ring)' }}
           />
           <span
             style={{

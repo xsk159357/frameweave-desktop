@@ -10,7 +10,6 @@ interface TimelineClip {
 }
 
 export function Timeline({ nodeId }: { nodeId: string }) {
-  const dark = useAppStore((s) => s.dark)
   const nodeAssets = useAppStore((s) => s.nodeAssets)
   const [clips, setClips] = useState<TimelineClip[]>([])
   const [scale, setScale] = useState(20) // px per second

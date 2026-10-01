@@ -13,6 +13,10 @@ interface SessionInfo {
 
 export interface ToastItem { id: number; msg: string; kind: 'ok' | 'err' | 'info' }
 
+export interface AppSettings {
+  theme: 'dark' | 'light'
+  dragEnabled: boolean
+}
 interface AppState {
   session: SessionInfo | null
   setSession: (s: SessionInfo | null) => void
@@ -51,11 +55,25 @@ interface AppState {
   pushToast: (msg: string, kind?: 'ok' | 'err' | 'info') => void
   removeToast: (id: number) => void
 
-  dark: boolean
-  toggleDark: () => void
+  settings: AppSettings
+  setSettings: (p: Partial<AppSettings>) => void
 }
 
 const storageKey = 'fw_session_v1'
+const settingsKey = 'fw_settings_v1'
+
+function loadSettings(): AppSettings {
+  try {
+    const raw = localStorage.getItem(settingsKey)
+    if (raw) {
+      const p = JSON.parse(raw)
+      return { theme: p.theme === 'light' ? 'light' : 'dark', dragEnabled: p.dragEnabled !== false }
+    }
+    const legacy = localStorage.getItem('fw_theme')
+    if (legacy === 'light') return { theme: 'light', dragEnabled: true }
+  } catch { /* 忽略损坏 */ }
+  return { theme: 'dark', dragEnabled: true }
+}
 
 function loadSession(): SessionInfo | null {
   try {
@@ -126,10 +144,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
-  dark: true,
-  toggleDark: () => {
-    const d = !get().dark
-    localStorage.setItem('fw_theme', d ? 'dark' : 'light')
-    set({ dark: d })
+  settings: loadSettings(),
+  setSettings: (p) => {
+    const next = { ...get().settings, ...p }
+    try { localStorage.setItem(settingsKey, JSON.stringify(next)) } catch { /* 忽略 */ }
+    set({ settings: next })
   },
 }))

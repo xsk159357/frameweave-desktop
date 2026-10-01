@@ -13,6 +13,8 @@ import { FlowNode } from './nodes/FlowNode'
 import { ParamPanel } from './ParamPanel'
 import { ResultPanel } from './ResultPanel'
 
+const portDot = (t: string) => (({ VIDEO: '#4f8ef7', IMAGE: '#7c8cf8', AUDIO: '#34d399', SUBTITLE: '#fbbf24', SEGMENTS: '#a78bfa', TIMELINE: '#f472b6', SCRIPT: '#f87171', ANY: '#8b93a9' } as Record<string, string>)[t] || 'var(--accent)')
+
 const nodeTypes = { flow: FlowNode }
 let nodeSeq = 0
 
@@ -52,6 +54,8 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const [showHelp, setShowHelp] = useState(false)
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [addQuery, setAddQuery] = useState('')
+  const [connMenu, setConnMenu] = useState<{ x: number; y: number; source: string; sourceHandle: string; srcType: string } | null>(null)
+  const dragEnabled = useAppStore((s) => s.settings.dragEnabled)
   const savedRef = useRef(false)
   const flowWrapper = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -201,7 +205,7 @@ const onAddNode = useCallback((typeId: string) => {
     pushHistory()
     setEdges((eds) => addEdge({
       ...conn,
-      style: { stroke: '#6c8cff', strokeWidth: 2.2 },
+      style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 },
       label: srcPort && dstPort ? srcPort.type + '→' + dstPort.type : '',
       labelStyle: { fontSize: 10, fill: '#6b779f' },
     }, eds))
@@ -209,6 +213,56 @@ const onAddNode = useCallback((typeId: string) => {
       ...n, data: { ...n.data, inputs: { ...n.data.inputs, [conn.targetHandle || 'in']: conn.source } },
     } : n))
   }, [nodes, specs, pushHistory, setEdges, setNodes])
+
+  // ---- 建边（拖线成功 / 连接列表点击共用） ----
+  const makeConn = useCallback((source: string, sourceHandle: string, target: string, targetHandle: string) => {
+    const srcNode = nodes.find(n => n.id === source)
+    const dstNode = nodes.find(n => n.id === target)
+    if (!srcNode || !dstNode || source === target) return
+    const srcSpec = specs.find(s => s.type_id === srcNode.data.type_id)
+    const dstSpec = specs.find(s => s.type_id === dstNode.data.type_id)
+    const srcPort = srcSpec?.outputs.find(p => p.name === sourceHandle) || srcSpec?.outputs[0]
+    const dstPort = dstSpec?.inputs.find(p => p.name === targetHandle) || dstSpec?.inputs[0]
+    if (srcPort && dstPort && !canConnect(srcPort.type, dstPort.type)) return
+    pushHistory()
+    setEdges((eds) => addEdge({
+      source, sourceHandle, target, targetHandle,
+      style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 },
+      label: srcPort && dstPort ? srcPort.type + '→' + dstPort.type : '',
+      labelStyle: { fontSize: 10, fill: '#6b779f' },
+    }, eds))
+    setNodes((nds) => nds.map(n => n.id === target ? { ...n, data: { ...n.data, inputs: { ...n.data.inputs, [targetHandle || 'in']: source } } } : n))
+  }, [nodes, specs, pushHistory, setEdges, setNodes])
+
+  // 拖线落空（未连到有效端口）→ 弹出可链接列表（v1.3）
+  const onConnectEnd = useCallback((event: any, connState: any) => {
+    const from = connState?.fromNode
+    const fromHandle = connState?.fromHandle
+    if (!from || !fromHandle?.id) return
+    if (connState?.toNode) return // 已成功连接，onConnect 已处理
+    const fromSpec = specs.find((s) => s.type_id === from.data.type_id)
+    const srcPort = fromSpec?.outputs.find((p) => p.name === fromHandle.id)
+    if (!srcPort) return
+    setConnMenu({
+      x: Math.max(8, (event as any)?.clientX ?? 0), y: Math.max(8, (event as any)?.clientY ?? 0),
+      source: from.id, sourceHandle: fromHandle.id, srcType: srcPort.type,
+    })
+  }, [specs])
+
+  // 连接候选：其他节点的类型兼容输入端口
+  const connCands = useMemo(() => {
+    if (!connMenu) return []
+    const out: { node: (typeof nodes)[number]; port: { name: string; type: string; label?: string } }[] = []
+    for (const n of nodes) {
+      if (n.id === connMenu.source) continue
+      const sp = specs.find((s) => s.type_id === n.data.type_id)
+      for (const p of (sp?.inputs || [])) {
+        if (canConnect(connMenu.srcType as any, p.type as any)) out.push({ node: n, port: p })
+      }
+    }
+    return out
+  }, [connMenu, nodes, specs])
+  const connSrcNode = connMenu ? nodes.find((n) => n.id === connMenu.source) : null
 
   // ---- 更新节点参数 ----
   const updateParams = useCallback((nodeId: string, patch: Record<string, string>) => {
@@ -307,7 +361,7 @@ const onAddNode = useCallback((typeId: string) => {
       const eds = (wf.edges || []).map((e: any) => ({
         id: 'e_' + e.source + '_' + e.target + '_' + Math.random().toString(36).slice(2, 6), source: e.source, target: e.target,
         sourceHandle: e.sourceHandle, targetHandle: e.targetHandle,
-        style: { stroke: '#6c8cff', strokeWidth: 2.2 }, labelStyle: { fontSize: 10, fill: '#6b779f' },
+        style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 }, labelStyle: { fontSize: 10, fill: '#6b779f' },
       }))
       setNodes(nds); setEdges(eds)
       if (wf.name) useAppStore.getState().setWorkflow(workflowId, wf.name)
@@ -393,7 +447,7 @@ const onAddNode = useCallback((typeId: string) => {
         source: idMap.get(String(ed.source)) || ed.source,
         target: idMap.get(String(ed.target)) || ed.target,
         sourceHandle: ed.sourceHandle, targetHandle: ed.targetHandle,
-        style: { stroke: '#6c8cff', strokeWidth: 2.2 }, labelStyle: { fontSize: 10, fill: '#6b779f' },
+        style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 }, labelStyle: { fontSize: 10, fill: '#6b779f' },
       }))
       pushHistory()
       setNodes(nds); setEdges(eds)
@@ -548,6 +602,8 @@ const onAddNode = useCallback((typeId: string) => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onConnectEnd={onConnectEnd}
+            nodesConnectable={dragEnabled}
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ maxZoom: 0.95, padding: 0.35 }}
@@ -556,15 +612,45 @@ const onAddNode = useCallback((typeId: string) => {
             proOptions={{ hideAttribution: true }}
             onlyRenderVisibleElements={nodes.length > 40}
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null) }}
-            onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false); setAddMenu(null) }}
+            onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false); setAddMenu(null); setConnMenu(null) }}
             onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null); setAddMenu({ x: e.clientX, y: e.clientY }) }}
           >
-            <Background gap={22} color="#1a1d26" />
+            <Background gap={22} color="var(--canvas-dot)" />
             <Controls />
-            <MiniMap pannable zoomable maskColor="rgba(10,14,24,.55)" style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 12, position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
+            <MiniMap pannable zoomable maskColor="var(--vignette)" style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 12, position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
           </ReactFlow>
           {/* 视口 vignette */}
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(120% 100% at 50% 40%, transparent 62%, rgba(0,0,0,.26))', zIndex: 1 }} />
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(120% 100% at 50% 40%, transparent 62%, var(--vignette))', zIndex: 1 }} />
+
+          {/* 拖线落空：可链接端口列表（v1.3） */}
+          {connMenu && (
+            <div style={{ position: 'fixed', left: Math.min(connMenu.x, innerWidth - 300), top: Math.min(connMenu.y, innerHeight - 400), zIndex: 56, width: 288,
+              background: 'var(--overlay)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', padding: 8 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, color: 'var(--text-faint)', padding: '2px 6px 8px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span>链接到</span>
+                {connSrcNode && <span style={{ color: 'var(--text-dim)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{connSrcNode.data.title || connSrcNode.data.type_id}</span>}
+                <span style={{ color: 'var(--accent-strong)' }}>{connMenu.srcType}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-faint)' }}>{connCands.length}</span>
+              </div>
+              {connCands.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)', padding: '10px 6px 12px' }}>没有类型兼容的输入端口</div>}
+              <div className="fw-scroll" style={{ maxHeight: 330, overflowY: 'auto' }}>
+                {connCands.map((it) => (
+                  <button key={it.node.id + ':' + it.port.name}
+                    onClick={() => { makeConn(connMenu.source, connMenu.sourceHandle, it.node.id, it.port.name); setConnMenu(null) }}
+                    title={it.port.description || ''}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 8,
+                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 12 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: portDot(it.port.type), flexShrink: 0 }} />
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 550 }}>
+                      {it.node.data.title || it.node.data.type_id}
+                    </span>
+                    <span style={{ color: 'var(--text-faint)', fontSize: 10.5, flexShrink: 0 }}>{it.port.label || it.port.name} · {it.port.type}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 5, fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' }}>选择端口即时建边 · 点画布空白或 Esc 关闭</div>
+            </div>
+          )}
 
           {/* 空白右键：添加节点菜单（v1.2） */}
           {addMenu && (

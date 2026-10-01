@@ -1,11 +1,12 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle } from 'lucide-react'
+import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
 import { WorkflowPanel } from './WorkflowPanel'
 import { PluginPanel } from './PluginPanel'
+import { SettingsPanel } from './SettingsPanel'
 import { Logo } from './Logo'
 import { Canvas } from './Canvas'
 import { Timeline } from './Timeline'
@@ -13,7 +14,6 @@ import { MarketPage } from './MarketPage'
 
 export default function App() {
   const session = useAppStore((s) => s.session)
-  const dark = useAppStore((s) => s.dark)
   const specs = useAppStore((s) => s.specs)
   const setSpecs = useAppStore((s) => s.setSpecs)
   const workflowId = useAppStore((s) => s.workflowId)
@@ -26,6 +26,7 @@ export default function App() {
   const removeToast = useAppStore((s) => s.removeToast)
   const [showMarket, setShowMarket] = useState(false)
   const [showPlugin, setShowPlugin] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [engineReady, setEngineReady] = useState(false)
   const [wfMenu, setWfMenu] = useState(false)
   const [wfList, setWfList] = useState<{ id: string; name: string; updated_at: number }[]>([])
@@ -33,10 +34,11 @@ export default function App() {
   const [showTpl, setShowTpl] = useState(false)
   const [backend, setBackend] = useState<null | boolean>(null)
 
+  // 主题：亮/暗即时生效（CSS 变量覆盖集，无需重启）
+  const settings = useAppStore((s) => s.settings)
   useEffect(() => {
-    if (dark) document.documentElement.classList.add('dark')
-    else document.documentElement.classList.remove('dark')
-  }, [dark])
+    document.documentElement.dataset.theme = settings.theme
+  }, [settings.theme])
 
   // 画布右键菜单「导入节点插件」事件
   useEffect(() => {
@@ -278,6 +280,9 @@ export default function App() {
         <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
           <><Puzzle size={13} /> 插件</>
         </button>
+        <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
+          <><SettingsIcon size={13} /> 设置</>
+        </button>
         <button className="fw-btn fw-btn-primary" onClick={() => setShowMarket(true)}>
           <><Store size={14} /> 商城</>
         </button>
@@ -292,6 +297,7 @@ export default function App() {
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}
       {showPlugin && <PluginPanel onClose={() => setShowPlugin(false)} />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
       {/* 模板选择弹层 */}
       {showTpl && (

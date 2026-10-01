@@ -18,7 +18,6 @@ interface MarketItem {
 }
 
 export function MarketPage({ onClose }: { onClose: () => void }) {
-  const dark = useAppStore((s) => s.dark)
   const session = useAppStore((s) => s.session)
   const setSpecs = useAppStore((s) => s.setSpecs)
   const pushToast = useAppStore((s) => s.pushToast)

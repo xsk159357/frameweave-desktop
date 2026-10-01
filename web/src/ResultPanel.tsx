@@ -22,7 +22,6 @@ interface Props {
 }
 
 export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props) {
-  const dark = useAppStore((s) => s.dark)
   const nodeAssets = useAppStore((s) => s.nodeAssets)
   const nodeStatus = useAppStore((s) => s.nodeStatus)
   const [items, setItems] = useState<BatchItem[]>([])

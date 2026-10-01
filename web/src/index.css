@@ -57,6 +57,11 @@
   /* 字体栈 */
   --font-ui: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  /* 画布/节点附加（v1.3 设置-主题） */
+  --canvas-dot: #1a1d26;
+  --vignette: rgba(0,0,0,.26);
+  --handle-ring: rgba(10,14,24,.8);
+  --edge-stroke: #6c8cff;
   /* 动效 */
   --t-fast: .16s;
   --t-med: .24s;
@@ -79,6 +84,66 @@
   --btn-primary-grad: linear-gradient(135deg, #8b93ff 0%, #7a83f2 100%);
   --btn-success-grad: linear-gradient(135deg, #0ea5a4 0%, #4ade80 100%);
   --focus-ring: 0 0 0 3px rgba(139,147,255,.25);
+}
+
+/* ===== 亮色主题（v1.3 设置可切换：组件全走 var token，切换即时生效无需重启） ===== */
+html[data-theme='light'] {
+  --bg: #f4f5f8;
+  --bg-grad: linear-gradient(180deg, #f7f8fa 0%, #eef0f4 100%);
+  --panel: #ffffff;
+  --panel-2: #eef0f4;
+  --overlay: #e6e9f0;
+  --hover: rgba(0,0,0,.05);
+  --bg-panel: #ffffff;
+  --bg-panel-2: #eef0f4;
+  --glass: #ffffff;
+  --glass-strong: #e6e9f0;
+  --glass-hover: #dfe3ea;
+  --glass-blur: none;
+  --glass-border: 1px solid rgba(0,0,0,.1);
+  --glass-inner: inset 0 1px 0 rgba(255,255,255,.7), inset 0 -1px 0 rgba(0,0,0,.05);
+  --accent: #5b64d6;
+  --accent-strong: #4a53c4;
+  --accent-soft: rgba(91,100,214,.12);
+  --accent-grad: linear-gradient(135deg, #5b64d6 0%, #4a53c4 100%);
+  --accent2: #5b64d6;
+  --cyan: #5b64d6;
+  --brand-grad: linear-gradient(135deg, #5b64d6 0%, #4a53c4 50%, #4650c8 100%);
+  --danger: #dc4949;
+  --danger-soft: rgba(220,73,73,.12);
+  --success: #22a55a;
+  --success-soft: rgba(34,165,90,.12);
+  --running: #d9930a;
+  --running-soft: rgba(217,147,10,.12);
+  --cached: #0e8bc0;
+  --cached-soft: rgba(14,139,192,.12);
+  --text: #1c1e26;
+  --text-dim: #4a4f5c;
+  --text-faint: #6d7384;
+  --border: rgba(0,0,0,.1);
+  --border-strong: rgba(0,0,0,.16);
+  --shadow-sm: 0 1px 2px rgba(30,34,44,.1);
+  --shadow-md: 0 4px 16px rgba(30,34,44,.12);
+  --shadow-lg: 0 16px 48px rgba(30,34,44,.16);
+  --card-shadow: 0 16px 40px rgba(30,34,44,.14);
+  --canvas-dot: #d5d9e2;
+  --vignette: rgba(32,36,44,.08);
+  --handle-ring: rgba(255,255,255,.95);
+  --edge-stroke: #6a74e8;
+  --login-brand-bg: radial-gradient(900px 560px at 12% 6%, rgba(91,100,214,.13) 0%, transparent 52%), radial-gradient(760px 520px at 88% 20%, rgba(74,83,196,.09) 0%, transparent 55%), linear-gradient(168deg, #f6f7fa 0%, #eef0f5 60%, #e8ebf1 100%);
+  --login-text: #23273c;
+  --login-text-dim: #4d546e;
+  --login-text-faint: #6d7489;
+  --login-grid-line: rgba(91,100,214,.1);
+  --input-bg: #ffffff;
+  --input-focus-ring: rgba(91,100,214,.22);
+  --seg-active-shadow: 0 3px 10px rgba(91,100,214,.2);
+  --toast-err-bg: rgba(220,73,73,.12);
+  --toast-ok-bg: rgba(34,165,90,.12);
+  --hover-bg: rgba(91,100,214,.08);
+  --btn-primary-grad: linear-gradient(135deg, #5b64d6 0%, #4a53c4 100%);
+  --btn-success-grad: linear-gradient(135deg, #0ea5a4 0%, #22a55a 100%);
+  --focus-ring: 0 0 0 3px rgba(91,100,214,.25);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
