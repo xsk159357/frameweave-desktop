@@ -5,7 +5,7 @@ import {
   addEdge, useNodesState, useEdgesState, useReactFlow,
   type Connection, type Edge,
 } from '@xyflow/react'
-import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle } from 'lucide-react'
+import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon } from 'lucide-react'
 import { api, connectWS } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData } from './types'
@@ -55,6 +55,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [addQuery, setAddQuery] = useState('')
   const [connMenu, setConnMenu] = useState<{ x: number; y: number; source: string; sourceHandle: string; srcType: string } | null>(null)
+  const [showMiniMap, setShowMiniMap] = useState(false)
   const lastConnectRejected = useRef(false)
   const dragEnabled = useAppStore((s) => s.settings.dragEnabled)
   const savedRef = useRef(false)
@@ -664,7 +665,18 @@ const onAddNode = useCallback((typeId: string) => {
           >
             <Background gap={22} color="var(--canvas-dot)" />
             <Controls />
-            <MiniMap pannable zoomable maskColor="var(--vignette)" style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 12, position: 'absolute', right: 14, top: 14, bottom: 'auto', left: 'auto' }} />
+            {/* 右下角隐藏式地图：按钮点击从下方升起 */}
+            <div style={{ position: 'absolute', right: 14, bottom: 46, zIndex: 22, transform: showMiniMap ? 'translateY(0)' : 'translateY(180px)', opacity: showMiniMap ? 1 : 0, transition: 'transform .32s var(--t-ease), opacity .22s', pointerEvents: showMiniMap ? 'auto' : 'none' }}>
+              <MiniMap pannable zoomable maskColor="var(--vignette)" style={{ width: 208, height: 150, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)' }} />
+            </div>
+            <button onClick={() => setShowMiniMap(v => !v)}
+              title={showMiniMap ? '收起地图' : '展开地图'}
+              style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 23, display: 'flex', alignItems: 'center', gap: 5,
+                background: showMiniMap ? 'var(--accent-soft)' : 'var(--panel-2)', color: 'var(--text)', border: '1px solid ' + (showMiniMap ? 'var(--accent)' : 'var(--border-strong)'),
+                borderRadius: 999, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-md)', transition: 'background .16s var(--t-ease)' }}>
+              <MapIcon size={12} style={{ color: 'var(--accent-strong)' }} />
+              地图
+            </button>
           </ReactFlow>
           {/* 视口 vignette */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(120% 100% at 50% 40%, transparent 62%, var(--vignette))', zIndex: 1 }} />
