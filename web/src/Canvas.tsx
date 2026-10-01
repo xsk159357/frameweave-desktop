@@ -674,7 +674,7 @@ const onAddNode = useCallback((typeId: string) => {
             )}
             <button onClick={() => setShowMiniMap(v => !v)}
               title={showMiniMap ? '收起地图' : '展开地图'}
-              style={{ position: 'fixed', right: 14, bottom: 14, zIndex: 23, display: 'flex', alignItems: 'center', gap: 5,
+              style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 23, display: 'flex', alignItems: 'center', gap: 5,
                 background: showMiniMap ? 'var(--accent-soft)' : 'var(--panel-2)', color: 'var(--text)', border: '1px solid ' + (showMiniMap ? 'var(--accent)' : 'var(--border-strong)'),
                 borderRadius: 999, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-md)', transition: 'background .16s var(--t-ease)' }}>
               <MapIcon size={12} style={{ color: 'var(--accent-strong)' }} />
