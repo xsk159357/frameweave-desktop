@@ -50,3 +50,4 @@ Thumbs.db
 .test_popen.py
 .vt.py
 *.work
+*.work*
