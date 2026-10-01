@@ -465,5 +465,9 @@ input, select, textarea { font-family: inherit; }
 ::selection { background: rgba(139,147,255,.28); color: #fff; }
 
 /* v1.2：Splash 启动动画 */
+@keyframes fw-minimap-up {
+  from { transform: translateY(26px); opacity: 0 }
+  to { transform: translateY(0); opacity: 1 }
+}
 @keyframes fw-splash-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
 @keyframes fw-splash-bar { 0% { transform: translateX(-100%) } 55% { transform: translateX(0) } 100% { transform: translateX(100%) } }

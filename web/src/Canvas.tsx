@@ -665,13 +665,16 @@ const onAddNode = useCallback((typeId: string) => {
           >
             <Background gap={22} color="var(--canvas-dot)" />
             <Controls />
-            {/* 右下角隐藏式地图：按钮点击从下方升起 */}
-            <div style={{ position: 'absolute', right: 14, bottom: 46, zIndex: 22, transform: showMiniMap ? 'translateY(0)' : 'translateY(180px)', opacity: showMiniMap ? 1 : 0, transition: 'transform .32s var(--t-ease), opacity .22s', pointerEvents: showMiniMap ? 'auto' : 'none' }}>
-              <MiniMap pannable zoomable maskColor="var(--vignette)" style={{ width: 208, height: 150, background: 'var(--panel-2)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)' }} />
-            </div>
+            {/* 右下角隐藏式地图：按钮点击从下方升起（条件渲染 + 入场动画；显式 absolute 相对画布容器右下） */}
+            {showMiniMap && (
+              <MiniMap pannable zoomable maskColor="var(--vignette)"
+                style={{ position: 'absolute', right: 16, bottom: 16, top: 'auto', left: 'auto', zIndex: 22,
+                  width: 208, height: 150, animation: 'fw-minimap-up .32s var(--t-ease)',
+                  background: 'var(--panel-2)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)' }} />
+            )}
             <button onClick={() => setShowMiniMap(v => !v)}
               title={showMiniMap ? '收起地图' : '展开地图'}
-              style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 23, display: 'flex', alignItems: 'center', gap: 5,
+              style={{ position: 'fixed', right: 14, bottom: 14, zIndex: 23, display: 'flex', alignItems: 'center', gap: 5,
                 background: showMiniMap ? 'var(--accent-soft)' : 'var(--panel-2)', color: 'var(--text)', border: '1px solid ' + (showMiniMap ? 'var(--accent)' : 'var(--border-strong)'),
                 borderRadius: 999, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-md)', transition: 'background .16s var(--t-ease)' }}>
               <MapIcon size={12} style={{ color: 'var(--accent-strong)' }} />
