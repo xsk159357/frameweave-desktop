@@ -1,6 +1,6 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon } from 'lucide-react'
+import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon , Minus, Square, X as CloseIcon } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -188,6 +188,20 @@ export default function App() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column',
       background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
+      {/* 自定义无边框窗口栏 */}
+      <div className="fw-windowbar" style={{ height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 8px 0 12px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', WebkitAppRegion: 'drag' as any, userSelect: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <div style={{ width: 19, height: 19, borderRadius: 5, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Logo size={13} color="var(--accent)" /></div>
+          <span style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>拾帧 FrameWeave</span>
+        </div>
+        <span style={{ flex: 1 }} />
+        <div className="fw-window-controls" style={{ display: 'flex', height: '100%', alignItems: 'center', gap: 2, WebkitAppRegion: 'no-drag' as any }}>
+          <button aria-label="最小化" title="最小化" onClick={() => (window as any).frameweave?.window?.minimize()} className="fw-window-btn" style={{ width: 34, height: 26, border: 0, background: 'transparent', color: 'var(--text-faint)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={13} /></button>
+          <button aria-label="最大化" title="最大化/还原" onClick={() => (window as any).frameweave?.window?.toggleMaximize()} className="fw-window-btn" style={{ width: 34, height: 26, border: 0, background: 'transparent', color: 'var(--text-faint)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Square size={11} /></button>
+          <button aria-label="关闭" title="关闭" onClick={() => (window as any).frameweave?.window?.close()} className="fw-window-btn fw-window-close" style={{ width: 34, height: 26, border: 0, background: 'transparent', color: 'var(--text-faint)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><CloseIcon size={14} /></button>
+        </div>
+      </div>
+
       {/* 顶栏 */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', height: 52,
