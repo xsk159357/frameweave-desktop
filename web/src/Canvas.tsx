@@ -55,6 +55,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [addQuery, setAddQuery] = useState('')
   const [connMenu, setConnMenu] = useState<{ x: number; y: number; source: string; sourceHandle: string; srcType: string } | null>(null)
+  const lastConnectRejected = useRef(false)
   const dragEnabled = useAppStore((s) => s.settings.dragEnabled)
   const savedRef = useRef(false)
   const flowWrapper = useRef<HTMLDivElement>(null)
@@ -201,7 +202,12 @@ const onAddNode = useCallback((typeId: string) => {
     const dstSpec = specs.find(s => s.type_id === dstNode.data.type_id)
     const srcPort = srcSpec?.outputs.find(p => p.name === conn.sourceHandle) || srcSpec?.outputs[0]
     const dstPort = dstSpec?.inputs.find(p => p.name === conn.targetHandle) || dstSpec?.inputs[0]
-    if (srcPort && dstPort && !canConnect(srcPort.type, dstPort.type)) return
+    if (srcPort && dstPort && !canConnect(srcPort.type, dstPort.type)) {
+      // 落在不兼容端口上：标记拒绝，让 onConnectEnd 弹可链接列表（而不是什么都不显示）
+      lastConnectRejected.current = true
+      return
+    }
+    lastConnectRejected.current = false
     pushHistory()
     setEdges((eds) => addEdge({
       ...conn,
@@ -239,9 +245,12 @@ const onAddNode = useCallback((typeId: string) => {
     const from = connState?.fromNode
     const fromHandle = connState?.fromHandle
     if (!from || !fromHandle?.id) return
-    if (connState?.toNode) return // 已成功连接，onConnect 已处理
-    const fromSpec = specs.find((s) => s.type_id === from.data.type_id)
-    const srcPort = fromSpec?.outputs.find((p) => p.name === fromHandle.id)
+    const rejected = lastConnectRejected.current
+    lastConnectRejected.current = false
+    // 落空（toNode 无）或落在不兼容端口上（onConnect 已拒绝）→ 弹可链接列表
+    if (connState?.toNode && !rejected) return
+    const fromSpec = (from.data?.spec as any) || specs.find((s) => s.type_id === from.data.type_id)
+    const srcPort = fromSpec?.outputs?.find((p: any) => p.name === fromHandle.id) || fromSpec?.outputs?.[0]
     if (!srcPort) return
     setConnMenu({
       x: Math.max(8, (event as any)?.clientX ?? 0), y: Math.max(8, (event as any)?.clientY ?? 0),
@@ -255,7 +264,8 @@ const onAddNode = useCallback((typeId: string) => {
     const out: { node: (typeof nodes)[number]; port: { name: string; type: string; label?: string } }[] = []
     for (const n of nodes) {
       if (n.id === connMenu.source) continue
-      const sp = specs.find((s) => s.type_id === n.data.type_id)
+      // 端口以节点自带 spec 快照为准（画布渲染用的就是它），全局 specs 兜底
+      const sp = (n.data?.spec as any) || specs.find((s) => s.type_id === n.data.type_id)
       for (const p of (sp?.inputs || [])) {
         if (canConnect(connMenu.srcType as any, p.type as any)) out.push({ node: n, port: p })
       }
