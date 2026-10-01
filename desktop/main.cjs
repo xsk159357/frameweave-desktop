@@ -143,7 +143,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     title: '拾帧 FrameWeave',
-    backgroundColor: '#f8f9fb',
+    backgroundColor: '#0a0e18',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

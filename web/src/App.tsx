@@ -23,6 +23,7 @@ export default function App() {
   const toasts = useAppStore((s) => s.toasts)
   const removeToast = useAppStore((s) => s.removeToast)
   const [showMarket, setShowMarket] = useState(false)
+  const [engineReady, setEngineReady] = useState(false)
   const [wfMenu, setWfMenu] = useState(false)
   const [wfList, setWfList] = useState<{ id: string; name: string; updated_at: number }[]>([])
   const [tplList, setTplList] = useState<{ id: string; title: string; description: string; nodes: number }[]>([])
@@ -34,9 +35,22 @@ export default function App() {
     else document.documentElement.classList.remove('dark')
   }, [dark])
 
-  // 后端健康轮询（A4）
+  // 引擎就绪轮询（启动加速：Electron 窗口先行，界面先渲染加载层，本地引擎 health 200 后进入应用）
   useEffect(() => {
-    if (!session) return
+    let alive = true
+    let tries = 0
+    const tick = async () => {
+      try { const h = await api.health(); if (alive && h.ok) { setEngineReady(true); setBackend(true); return } } catch { /* 引擎未就绪 */ }
+      tries++
+      if (alive) { if (tries > 40) setEngineReady(true); else setTimeout(tick, 500) }
+    }
+    tick()
+    return () => { alive = false }
+  }, [])
+
+  // 后端健康轮询（A4，就绪后常驻）
+  useEffect(() => {
+    if (!session || !engineReady) return
     let alive = true
     const tick = async () => {
       try { const h = await api.health(); if (alive) setBackend(!!h.ok) } catch { if (alive) setBackend(false) }
@@ -44,7 +58,7 @@ export default function App() {
     tick()
     const it = setInterval(tick, 10000)
     return () => { alive = false; clearInterval(it) }
-  }, [session])
+  }, [session, engineReady])
 
   // 加载节点规格 + 初始化工作流
   useEffect(() => {
@@ -52,9 +66,9 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        const s = await api.specs()
+        // 启动加速：specs 与工作流列表并行拉取
+        const [s, list] = await Promise.all([api.specs(), api.listWorkflows()])
         if (alive) setSpecs(s)
-        const list = await api.listWorkflows()
         let wid = ''
         let wname = ''
         if (list.length > 0) {
@@ -137,6 +151,21 @@ export default function App() {
     })()
     return () => { alive = false }
   }, [session?.token])
+
+  if (!engineReady) {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--bg-grad)', color: 'var(--text)', gap: 18 }}>
+        <div style={{ width: 58, height: 58, borderRadius: 16, background: 'var(--brand-grad)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 800, color: '#fff',
+          boxShadow: '0 10px 40px rgba(108,140,255,.5), inset 0 1px 0 rgba(255,255,255,.32)' }}>帧</div>
+        <div style={{ fontSize: 13, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(108,140,255,.25)', borderTopColor: 'var(--accent)', animation: 'fw-spin 0.8s linear infinite' }} />
+          正在启动本地引擎…
+        </div>
+      </div>
+    )
+  }
 
   if (!session) return <LoginPage />
 

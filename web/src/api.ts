@@ -4,8 +4,12 @@ import type { NodeSpec, WfMeta, Segment } from './types'
 const BASE = 'http://127.0.0.1:8788'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000)
+  try {
   const resp = await fetch(BASE + path, {
     headers: { 'Content-Type': 'application/json' },
+    signal: ctrl.signal,
     ...init,
   })
   if (!resp.ok) {
@@ -14,6 +18,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(msg)
   }
   return resp.json() as Promise<T>
+  } finally { clearTimeout(timer) }
 }
 
 export const api = {
