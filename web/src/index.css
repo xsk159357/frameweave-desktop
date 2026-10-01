@@ -475,3 +475,8 @@ input, select, textarea { font-family: inherit; }
 .fw-window-btn:hover { background: var(--hover) !important; color: var(--text) !important; }
 .fw-window-close:hover { background: #e05252 !important; color: #fff !important; }
 html[data-theme='light'] .fw-window-close:hover { background: #d94a4a !important; }
+
+/* 无边框窗口：透明外壳 + 四角圆角裁切 */
+html, body, #root { background: transparent; overflow: hidden; border-radius: 12px; }
+.fw-app-shell { border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+html[data-theme='light'] .fw-app-shell { box-shadow: 0 12px 40px rgba(30,34,44,.16); }

@@ -186,7 +186,7 @@ export default function App() {
   if (!session) return <LoginPage />
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column',
+    <div className="fw-app-shell" style={{ height: '100%', display: 'flex', flexDirection: 'column',
       background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
       {/* 自定义无边框窗口栏 */}
       <div className="fw-windowbar" style={{ height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 8px 0 12px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', WebkitAppRegion: 'drag' as any, userSelect: 'none' }}>
