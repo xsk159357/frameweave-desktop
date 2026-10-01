@@ -109,6 +109,44 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         ...(isRunning ? { animation: 'fw-node-pulse 2.2s ease-in-out infinite' } : {}),
       }}
     >
+      {/* ===== 标题行（v1.2 恢复：纯色图标 + 标题 + GPU + 类别） ===== */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px 6px', height: 44, boxSizing: 'border-box' as const }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: solid, color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 800,
+          boxShadow: '0 2px 10px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.22)',
+        }}>{iconChar}</div>
+        <span style={{
+          fontWeight: 650, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+        }}>{title || type_id}</span>
+        {spec?.gpu_required && (
+          <span title="需要 GPU" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
+            fontSize: 8, fontWeight: 700, color: '#ffd47e', background: 'rgba(245,165,36,.14)',
+            border: '1px solid rgba(245,165,36,.35)', borderRadius: 999, padding: '1px 5px',
+          }}><Zap size={8} />GPU</span>
+        )}
+        {category && (
+          <span style={{
+            fontSize: 8.5, padding: '1px 7px', borderRadius: 999, fontWeight: 650, flexShrink: 0,
+            background: 'rgba(255,255,255,.06)', color: 'var(--text-faint)', letterSpacing: .5,
+          }}>{category}</span>
+        )}
+      </div>
+
+      {/* ===== 参数摘要行（首个非空参数） ===== */}
+      {summaryItem && (
+        <div style={{
+          margin: '0 12px 6px', padding: '3px 9px', borderRadius: 7,
+          background: 'var(--hover)', border: '1px solid var(--border)', color: 'var(--text-dim)',
+          fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          <span style={{ color: 'var(--text-faint)' }}>{summaryItem.label}: </span>{summaryItem.value}
+        </div>
+      )}
+
       {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>
