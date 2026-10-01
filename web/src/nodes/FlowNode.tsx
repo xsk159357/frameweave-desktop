@@ -221,7 +221,8 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle in"
             title={'输入: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i), background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
+            // v4.3 外观：圆心内移 5px，端口圆点完全收在卡片内，杜绝半圆探出卡边的穿模观感
+            style={{ top: portY(i), left: 5, background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
           />
           <span
             style={{
@@ -245,7 +246,8 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
             id={p.name}
             className="fw-handle out"
             title={'输出: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i), background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
+            // v4.3 外观：圆心内移 5px，端口圆点完全收在卡片内
+            style={{ top: portY(i), right: 5, background: pc(p.type), border: '1px solid rgba(10,14,24,.8)' }}
           />
           <span
             style={{
