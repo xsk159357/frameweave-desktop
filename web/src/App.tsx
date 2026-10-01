@@ -27,6 +27,8 @@ export default function App() {
   const [showMarket, setShowMarket] = useState(false)
   const [showPlugin, setShowPlugin] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showAccount, setShowAccount] = useState(false)
+  const [showWorkflowDrawer, setShowWorkflowDrawer] = useState(false)
   const [engineReady, setEngineReady] = useState(false)
   const [wfMenu, setWfMenu] = useState(false)
   const [wfList, setWfList] = useState<{ id: string; name: string; updated_at: number }[]>([])
@@ -294,19 +296,7 @@ export default function App() {
         <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
           <><Puzzle size={13} /> 插件</>
         </button>
-        <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
-          <><SettingsIcon size={13} /> 设置</>
-        </button>
-        <button className="fw-btn fw-btn-primary" onClick={() => setShowMarket(true)}>
-          <><Store size={14} /> 商城</>
-        </button>
-        {session.plan === 'member' ? (
-          <span className="fw-pill" style={{ color: 'var(--gold)', border: '1px solid #5a4a1a', background: '#2a2410' }}><Crown size={12} style={{ verticalAlign: '-2px' }} /> 会员</span>
-        ) : (
-          <span className="fw-pill" style={{ color: 'var(--trial)', border: '1px solid #2c3a5c', background: '#1a2138' }}><Sparkles size={12} style={{ verticalAlign: '-2px' }} /> 试用 · 剩 {Math.max(1, Math.ceil((session.expiresAt - Date.now() / 1000) / 86400))} 天</span>
-        )}
-        <span style={{ fontSize: 12, color: 'var(--text-faint)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.email}</span>
-        <button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().setSession(null)}>退出</button>
+        <span style={{ flex: 1 }} />
       </div>
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}
@@ -340,12 +330,34 @@ export default function App() {
 
       {/* 主体：侧栏 + 画布 */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <WorkflowPanel onOpenPlugin={() => setShowPlugin(true)} />
         <Canvas workflowId={workflowId} />
       </div>
 
       {/* 底部时间线（双击有 segments 资产的节点 / 右键查看时间线） */}
       {timelineNodeId && nodeAssets[timelineNodeId]?.segments && <Timeline nodeId={timelineNodeId} />}
+
+      {/* 右侧工作流抽屉 */}
+      <div className={'fw-workflow-drawer' + (showWorkflowDrawer ? ' open' : '')}>
+        <div className="fw-workflow-drawer-inner"><WorkflowPanel onOpenPlugin={() => setShowPlugin(true)} /></div>
+      </div>
+      <button className="fw-workflow-toggle" onClick={() => setShowWorkflowDrawer(v => !v)} title="工作流列表">
+        <FileText size={14} /> <span>工作流</span>
+      </button>
+
+      {/* 左下角竖列工具：设置 / 商城 / 账户 */}
+      <div className="fw-left-tools">
+        <button className="fw-side-tool" title="设置" onClick={() => setShowSettings(true)}><SettingsIcon size={15} /></button>
+        <button className="fw-side-tool" title="商城" onClick={() => setShowMarket(true)}><Store size={15} /></button>
+        <div className="fw-account-wrap">
+          {showAccount && <div className="fw-account-popover">
+            <div className="fw-account-name">{session.email}</div>
+            <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
+            <button onClick={() => { setShowAccount(false); useAppStore.getState().pushToast('个人中心即将开放', 'info') }}>个人中心</button>
+            <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
+          </div>}
+          <button className={'fw-side-tool' + (showAccount ? ' active' : '')} title="账户" onClick={() => setShowAccount(v => !v)}><UserCircle size={16} /></button>
+        </div>
+      </div>
 
       {/* 底部状态栏（A4） */}
       <div className="fw-statusbar">

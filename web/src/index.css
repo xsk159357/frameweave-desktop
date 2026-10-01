@@ -480,3 +480,21 @@ html[data-theme='light'] .fw-window-close:hover { background: #d94a4a !important
 html, body, #root { background: transparent; overflow: hidden; border-radius: 12px; }
 .fw-app-shell { border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
 html[data-theme='light'] .fw-app-shell { box-shadow: 0 12px 40px rgba(30,34,44,.16); }
+
+/* v1.4：右侧工作流抽屉与左下工具列 */
+.fw-workflow-drawer { position: fixed; top: 86px; right: 0; bottom: 28px; width: 232px; z-index: 80; pointer-events: none; transform: translateX(100%); transition: transform .28s var(--t-ease); }
+.fw-workflow-drawer.open { pointer-events: auto; transform: translateX(0); }
+.fw-workflow-drawer-inner { height: 100%; background: var(--bg); border-left: 1px solid var(--border-strong); box-shadow: -12px 0 32px rgba(0,0,0,.22); overflow: hidden; }
+.fw-workflow-drawer-inner > div { width: 100% !important; height: 100%; border-right: 0 !important; }
+.fw-workflow-toggle { position: fixed; right: 14px; top: 93px; z-index: 81; display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--panel-2); color: var(--text-dim); font-size: 11.5px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-md); }
+.fw-workflow-toggle:hover { background: var(--accent-soft); color: var(--text); }
+.fw-left-tools { position: fixed; left: 12px; bottom: 42px; z-index: 90; display: flex; flex-direction: column; gap: 7px; }
+.fw-side-tool { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--panel-2); color: var(--text-faint); cursor: pointer; box-shadow: var(--shadow-sm); }
+.fw-side-tool:hover, .fw-side-tool.active { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent); }
+.fw-account-wrap { position: relative; }
+.fw-account-popover { position: absolute; left: 44px; bottom: 0; width: 190px; padding: 10px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--overlay); box-shadow: var(--shadow-lg); }
+.fw-account-name { color: var(--text); font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-account-plan { color: var(--text-faint); font-size: 10.5px; margin: 3px 0 8px; }
+.fw-account-popover button { display: block; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-dim); padding: 7px 8px; text-align: left; cursor: pointer; font-size: 11.5px; }
+.fw-account-popover button:hover { background: var(--hover); color: var(--text); }
+.fw-account-popover button.danger { color: var(--danger); }
