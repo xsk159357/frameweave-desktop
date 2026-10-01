@@ -68,6 +68,10 @@ export const api = {
 
   deleteWorkflow: (id: string) =>
     req<{ok:boolean}>('/api/workflows/' + id, { method: 'DELETE' }),
+  renameWorkflow: (id: string, name: string) =>
+    req<Record<string, unknown>>('/api/workflows/' + id, {
+      method: 'PUT', body: JSON.stringify({ name }),
+    }),
 
   saveWorkflow: (id: string, nodes: unknown[], edges: unknown[]) =>
     req<Record<string, unknown>>('/api/workflows/' + id, {

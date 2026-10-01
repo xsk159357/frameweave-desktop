@@ -1,6 +1,6 @@
 // 左侧工作流列表（v1.2：替代节点库侧栏；节点添加移入画布右键菜单）
 import { useEffect, useState } from 'react'
-import { Plus, Search, FileText, Download, Trash2, Puzzle, Layers } from 'lucide-react'
+import { Plus, Search, FileText, Download, Trash2, Puzzle, Layers, PencilLine } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -18,6 +18,8 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
   const [query, setQuery] = useState('')
   const [plugCount, setPlugCount] = useState(0)
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null)
+  const [nameBox, setNameBox] = useState<null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }>(null)
+  const [nameInput, setNameInput] = useState('')
 
   const refresh = async () => {
     try { const l = await api.listWorkflows(); setList(l || []) } catch { /* ignore */ }
@@ -50,6 +52,26 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
     } catch (e: any) { pushToast('删除失败: ' + (e.message || e), 'err') }
   }
 
+  const submitName = async () => {
+    if (!nameBox) return
+    const name = nameInput.trim() || '未命名工作流'
+    const nb = nameBox
+    setNameBox(null)
+    try {
+      if (nb.mode === 'create') {
+        const c = await api.createWorkflow(name)
+        setWorkflow((c as any).id, name)
+        setTimelineNodeId(null)
+        refresh()
+      } else {
+        await api.renameWorkflow(nb.id, name)
+        refresh()
+        if (nb.id === workflowId) setWorkflow(nb.id, name)
+        pushToast('已重命名', 'ok')
+      }
+    } catch (e: any) { pushToast('失败: ' + (e.message || e), 'err') }
+  }
+
   return (
     <div style={{
       width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column',
@@ -66,13 +88,8 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
       </div>
       {/* 新建主按钮 */}
       <div style={{ padding: '2px 12px 8px' }}>
-        <button className="fw-btn fw-btn-primary" onClick={async () => {
-          try {
-            const c = await api.createWorkflow('新工作流')
-            setWorkflow((c as any).id, '新工作流')
-            setTimelineNodeId(null)
-          } catch (e: any) { pushToast('新建失败: ' + (e.message || e), 'err') }
-        }} style={{ width: '100%', padding: '7px 10px', justifyContent: 'center', fontSize: 12.5 }}>
+        <button className="fw-btn fw-btn-primary" onClick={() => { setNameInput(''); setNameBox({ mode: 'create' }) }}
+          style={{ width: '100%', padding: '7px 10px', justifyContent: 'center', fontSize: 12.5 }}>
           <><Plus size={13} /> 新建工作流</>
         </button>
       </div>
@@ -123,6 +140,11 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
           <div style={{ padding: '5px 10px', fontSize: 11, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{menu.name}</div>
           <div style={{ height: 1, background: 'var(--border)', margin: '3px 4px' }} />
           <div style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
+            onClick={() => { setNameInput(menu.name); setNameBox({ mode: 'rename', id: menu.id, name: menu.name }); setMenu(null) }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+            <PencilLine size={12} /> 重命名
+          </div>
+          <div style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
             onClick={() => window.open('http://127.0.0.1:8788/api/export/workflow/' + menu.id, '_blank')}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
             <Download size={12} /> 导出工作流 zip
@@ -131,6 +153,22 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
             onClick={() => del(menu.id)}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.1)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
             <Trash2 size={12} /> 删除
+          </div>
+        </div>
+      )}
+
+      {/* 新建/重命名命名弹层 */}
+      {nameBox && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setNameBox(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: 320, background: 'var(--overlay)', border: '1px solid var(--border-strong)', borderRadius: 14, boxShadow: 'var(--shadow-lg)', padding: '14px 16px' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>{nameBox.mode === 'create' ? '新建工作流' : '重命名工作流'}</div>
+            <input autoFocus value={nameInput} onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitName() }}
+              placeholder="输入工作流名称" style={{ width: '100%', padding: '7px 10px', borderRadius: 9, fontSize: 12.5, border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)', outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button onClick={() => setNameBox(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 9, padding: '5px 14px', fontSize: 12, color: 'var(--text-dim)', cursor: 'pointer' }}>取消</button>
+              <button onClick={submitName} className="fw-btn fw-btn-primary" style={{ padding: '5px 16px', fontSize: 12 }}>确定</button>
+            </div>
           </div>
         </div>
       )}
