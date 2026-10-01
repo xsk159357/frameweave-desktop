@@ -244,17 +244,28 @@ const onAddNode = useCallback((typeId: string) => {
   const onConnectEnd = useCallback((event: any, connState: any) => {
     const from = connState?.fromNode
     const fromHandle = connState?.fromHandle
-    if (!from || !fromHandle?.id) return
+    if (!from) return
     const rejected = lastConnectRejected.current
     lastConnectRejected.current = false
     // 落空（toNode 无）或落在不兼容端口上（onConnect 已拒绝）→ 弹可链接列表
     if (connState?.toNode && !rejected) return
-    const fromSpec = (from.data?.spec as any) || specs.find((s) => s.type_id === from.data.type_id)
-    const srcPort = fromSpec?.outputs?.find((p: any) => p.name === fromHandle.id) || fromSpec?.outputs?.[0]
-    if (!srcPort) return
+    // 源输出端口类型：三层解析（spec 匹配 → 事件 target 的 .fw-handle title → 放弃并清旧菜单）
+    const hId = fromHandle?.id || ''
+    let srcType = ''
+    const fromSpec = (from.data?.spec as any) || specs.find((s) => s.type_id === from.data?.type_id)
+    const srcPort = fromSpec?.outputs?.find((p: any) => p.name === hId)
+    if (srcPort) srcType = srcPort.type
+    if (!srcType) {
+      const tEl = (event as any)?.target as HTMLElement | null
+      const handleEl = tEl?.closest ? tEl.closest('.fw-handle') : null
+      const title = (handleEl || tEl)?.getAttribute?.('title') || ''
+      const m = /\u00b7\s*([A-Z]+)\s*$/.exec(title)
+      if (m) srcType = m[1]
+    }
+    if (!srcType) { setConnMenu(null); return } // 解析不到不再残留旧菜单
     setConnMenu({
       x: Math.max(8, (event as any)?.clientX ?? 0), y: Math.max(8, (event as any)?.clientY ?? 0),
-      source: from.id, sourceHandle: fromHandle.id, srcType: srcPort.type,
+      source: from.id, sourceHandle: hId, srcType,
     })
   }, [specs])
 
