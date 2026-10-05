@@ -129,6 +129,16 @@ export const api = {
   marketInstall: (id: string, token: string) =>
     req<{ok:boolean;message?:string}>('/api/market/items/' + id + '/install', { method: 'POST', body: JSON.stringify({ token }) }),
 
+  marketDownloadAuth: (id: string, token: string, clientVersion: string) =>
+    req<{ok:boolean;status?:string;code?:string;message?:string;item_id?:string;title?:string;version?:string;kind?:string;type_id?:string;price?:number;download?:{filename?:string;size?:number;sha256?:string;url:string};direct?:boolean}>('/api/market/items/' + encodeURIComponent(id) + '/download-auth', {
+      method: 'POST', body: JSON.stringify({ item_id: id, token, client_version: clientVersion }),
+    }),
+
+  marketInstallReport: (id: string, token: string, clientVersion: string, result: 'ok' | 'failed', error = '') =>
+    req<{ok:boolean;recorded?:boolean}>('/api/market/items/' + encodeURIComponent(id) + '/install-report', {
+      method: 'POST', body: JSON.stringify({ item_id: id, token, client_version: clientVersion, result, error }),
+    }),
+
   exportNodeUrl: (typeId: string) => '/api/export/node/' + typeId,
 
   verify: (token: string, deviceId: string) =>

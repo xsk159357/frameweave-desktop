@@ -13,6 +13,13 @@ interface MarketItem {
   price: number
   official: boolean
   downloads: number
+  installs?: number
+  version?: string
+  type_id?: string
+  sha256?: string
+  size?: number
+  min_client_version?: string
+  status?: string
   tags: string[]
   created_at: number
 }
@@ -42,21 +49,41 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
 
   const install = async (id: string) => {
     setBusy(true); setErr(''); setMsg('')
+    let reportId = id
     try {
-      const r = await api.marketInstall(id, session?.token || '')
-      if (r.ok) {
-        setMsg(r.message || '安装成功')
-        pushToast((r.message || '安装成功') + '，可在左侧节点库使用')
-        // 刷新积分
-        if (session?.token && session?.deviceId) {
-          try { const v = await api.verify(session.token, session.deviceId); if (v.ok && v.credits != null) setCredits(v.credits) } catch { /* ignore */ }
-        }
-        // F1：立即刷新节点规格，新节点立即可用（不再需要重启）
-        try { const s = await api.specs(); setSpecs(s || []) } catch { /* ignore */ }
-        load()
-      } else setErr(r.message || '安装失败')
-    } catch (e: any) { setErr(e.message || '安装失败') }
-    finally { setBusy(false) }
+      pushToast('正在获取插件下载权限…', 'info')
+      const auth = await api.marketDownloadAuth(id, session?.token || '', __APP_VERSION__)
+      if (!auth.ok || !auth.download?.url) throw new Error(auth.message || '下载授权失败')
+      reportId = auth.item_id || id
+      pushToast('正在从 GitHub 下载插件…', 'info')
+      const resp = await fetch(auth.download.url)
+      if (!resp.ok) throw new Error('下载失败: HTTP ' + resp.status)
+      const buf = await resp.arrayBuffer()
+      if (auth.download.size && buf.byteLength !== auth.download.size) throw new Error('文件大小校验失败')
+      if (auth.download.sha256) {
+        const digest = await crypto.subtle.digest('SHA-256', buf)
+        const actual = Array.from(new Uint8Array(digest)).map((x) => x.toString(16).padStart(2, '0')).join('')
+        if (actual.toLowerCase() !== auth.download.sha256.toLowerCase()) throw new Error('SHA-256 校验失败')
+      }
+      pushToast('正在安装插件…', 'info')
+      const name = auth.download.filename || (auth.type_id || id).split('/').pop() + '.zip'
+      const file = new File([buf], name, { type: 'application/zip' })
+      const installed = await api.installUserNode(file)
+      if (!installed.ok) throw new Error(installed.message || '插件安装失败')
+      await api.reloadUserNodes()
+      try { await api.marketInstallReport(reportId, session?.token || '', __APP_VERSION__, 'ok') } catch { /* 旧服务兼容 */ }
+      if (session?.token && session?.deviceId) {
+        try { const v = await api.verify(session.token, session.deviceId); if (v.ok && v.credits != null) setCredits(v.credits) } catch { /* ignore */ }
+      }
+      try { const s = await api.specs(); setSpecs(s || []) } catch { /* ignore */ }
+      setMsg('安装成功，节点已可用')
+      pushToast('插件安装成功，节点已可用', 'ok')
+      load()
+    } catch (e: any) {
+      const message = e.message || '安装失败'
+      try { await api.marketInstallReport(reportId, session?.token || '', __APP_VERSION__, 'failed', message) } catch { /* ignore */ }
+      setErr(message); pushToast('插件安装失败: ' + message, 'err')
+    } finally { setBusy(false) }
   }
 
   const publish = async (form: {kind:string;title:string;description:string;price:string;download_url:string;tags:string}) => {
@@ -133,7 +160,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
                   <span>↓ {it.downloads}</span>
                   <div style={{ flex: 1 }} />
                   {it.kind === 'node' && (
-                    <button onClick={() => install(it.id)} disabled={busy} style={{ padding: '4px 12px', borderRadius: 8, cursor: busy ? 'wait' : 'pointer', fontSize: 12, border: 'none', background: '#2a3557', color: '#c9d6ff', display: 'flex', alignItems: 'center', gap: 4 }}><Download size={13} /> 安装</button>
+                    <button onClick={() => install(it.id)} disabled={busy} style={{ padding: '4px 12px', borderRadius: 8, cursor: busy ? 'wait' : 'pointer', fontSize: 12, border: 'none', background: '#2a3557', color: '#c9d6ff', display: 'flex', alignItems: 'center', gap: 4 }}><Download size={13} /> 下载并安装</button>
                   )}
                 </div>
               </div>
