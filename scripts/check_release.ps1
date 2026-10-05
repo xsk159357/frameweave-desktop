@@ -13,7 +13,7 @@ $expected = $m.Groups[1].Value
 $exe = Get-ChildItem $Dir -Filter '*.exe' | Select-Object -First 1
 if (-not $exe) { throw 'no installer in release dir' }
 $hash = Get-FileHash $exe.FullName -Algorithm SHA512
-$actual = [Convert]::ToBase64String([byte[]]$hash.Hash)
+$hex = $hash.Hash; $bytes = New-Object byte[] ($hex.Length / 2); for ($i = 0; $i -lt $bytes.Length; $i++) { $bytes[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }; $actual = [Convert]::ToBase64String($bytes)
 $ok = $actual -eq $expected
 Write-Host ("installer: " + $exe.Name + " (" + [math]::Round($exe.Length/1MB, 1) + " MB)")
 Write-Host "expected: $expected"

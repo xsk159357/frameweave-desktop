@@ -5,6 +5,10 @@ import { AlertTriangle, PencilLine, Zap, Minus, ChevronDown, ChevronUp } from 'l
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FlowNodeData, PortType } from '../types'
 
+// NodeProps 需要 Record<string, unknown> 约束；FlowNodeData 是 interface，
+// 交叉一个索引签名即可满足（同时保留 data.expanded 等画布附加字段）。
+type FlowNodeDataType = FlowNodeData & Record<string, unknown>
+
 const statusColor: Record<string, string> = {
   pending: '#6b779f',
   queued: '#8fa3c8',
@@ -38,7 +42,9 @@ const portColor: Record<string, string> = {
 const pc = (t: string) => portColor[t] || portColor.ANY
 
 function FlowNodeInner({ id, data, selected }: NodeProps) {
-  const { type_id, title, category, params, last_params, status, error, progress, asset_ids, spec } = data
+  // NodeProps 默认 data 为宽泛类型；局部断言到画布节点数据结构（含 expanded 附加字段）
+  const d = data as FlowNodeDataType
+  const { type_id, title, category, params, last_params, status, error, progress, asset_ids, spec } = d
 
   const color = statusColor[status] || statusColor.pending
   const solid = catSolid[category] || 'var(--accent)'
@@ -59,13 +65,15 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     return ch ? ch.toUpperCase() : (title || '?').slice(0, 1)
   })()
 
-  const expanded = !!(data as any).expanded
+  const expanded = !!d.expanded
   const cardRef = useRef<HTMLDivElement>(null)
   // 点节点外部收起（走 Canvas 的 __fwSetNodeExpanded → data.expanded → 触发整列重排，收起时自动缝合间隙）
   useEffect(() => {
     if (!expanded) return
     const h = (e: MouseEvent) => {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) ;(window as any).__fwSetNodeExpanded?.(id, false)
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        ;(window as any).__fwSetNodeExpanded?.(id, false)
+      }
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -142,7 +150,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     <div
       onContextMenu={(e) => {
         e.preventDefault(); e.stopPropagation()
-        ;(window as any).__fwNodeMenu && (window as any).__fwNodeMenu({ x: e.clientX, y: e.clientY, nodeId: id, nodeTitle: (data as FlowNodeData).title })
+        ;(window as any).__fwNodeMenu && (window as any).__fwNodeMenu({ x: e.clientX, y: e.clientY, nodeId: id, nodeTitle: d.title })
       }}
       onDoubleClick={(e) => { e.stopPropagation(); openEdit() }}
       ref={cardRef}
@@ -199,7 +207,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
 
       {/* ===== 参数摘要行（首个非空参数） ===== */}
       {summaryItem && !expanded && (
-        <div onClick={() => { if ((spec?.params || []).length > 0) ;(window as any).__fwSetNodeExpanded?.(id, !expanded) }}
+        <div onClick={() => { if ((spec?.params || []).length > 0) { ;(window as any).__fwSetNodeExpanded?.(id, !expanded) } }}
           title={(spec?.params || []).length > 0 ? '点击展开配置' : ''}
           style={{
           margin: '0 12px 6px', padding: '3px 9px', borderRadius: 7, cursor: (spec?.params || []).length > 0 ? 'pointer' : 'default',

@@ -1,6 +1,6 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon , Minus, Square, X as CloseIcon } from 'lucide-react'
+import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon, UserCircle } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -40,6 +40,8 @@ export default function App() {
   const settings = useAppStore((s) => s.settings)
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme
+    // 无边框联动：原生窗口控件 Overlay 配色随主题切换（Electron 打包版）
+    try { ;(window as any).frameweave?.window?.setTitlebarTheme?.(settings.theme) } catch { /* 浏览器模式忽略 */ }
   }, [settings.theme])
 
   // 画布右键菜单「导入节点插件」事件
@@ -62,12 +64,21 @@ export default function App() {
     return () => { alive = false }
   }, [])
 
-  // 后端健康轮询（A4，就绪后常驻）
+  // 后端健康轮询（A4，就绪后常驻）+ 断连/恢复提示（WS 已 2s 自动重连，这里补 HTTP 层提示）
   useEffect(() => {
     if (!session || !engineReady) return
     let alive = true
+    let lastOk: boolean | null = null
     const tick = async () => {
-      try { const h = await api.health(); if (alive) setBackend(!!h.ok) } catch { if (alive) setBackend(false) }
+      let ok = false
+      try { const h = await api.health(); ok = !!h.ok } catch { ok = false }
+      if (!alive) return
+      setBackend(ok)
+      if (lastOk !== null && lastOk !== ok) {
+        if (ok) useAppStore.getState().pushToast('本地服务已恢复', 'ok')
+        else useAppStore.getState().pushToast('本地服务离线，正在重连…', 'err')
+      }
+      lastOk = ok
     }
     tick()
     const it = setInterval(tick, 10000)
@@ -169,7 +180,7 @@ export default function App() {
   if (!engineReady) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--bg-grad)', color: 'var(--text)', gap: 14 }}>
+        background: 'var(--bg-grad)', color: 'var(--text)', gap: 14, WebkitAppRegion: 'drag' as any }}>
         <div style={{ animation: 'fw-splash-in .6s cubic-bezier(.25,.1,.25,1)' }}>
           <Logo size={76} color="var(--accent)" />
         </div>
@@ -190,35 +201,21 @@ export default function App() {
   return (
     <div className="fw-app-shell" style={{ height: '100%', display: 'flex', flexDirection: 'column',
       background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
-      {/* 自定义无边框窗口栏 */}
-      <div className="fw-windowbar" style={{ height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 8px 0 12px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', WebkitAppRegion: 'drag' as any, userSelect: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-          <div style={{ width: 19, height: 19, borderRadius: 5, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Logo size={13} color="var(--accent)" /></div>
-          <span style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>拾帧 FrameWeave</span>
-        </div>
-        <span style={{ flex: 1 }} />
-        <div className="fw-window-controls" style={{ display: 'flex', height: '100%', alignItems: 'center', gap: 2, WebkitAppRegion: 'no-drag' as any }}>
-          <button aria-label="最小化" title="最小化" onClick={() => (window as any).frameweave?.window?.minimize()} className="fw-window-btn" style={{ width: 34, height: 26, border: 0, background: 'transparent', color: 'var(--text-faint)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={13} /></button>
-          <button aria-label="最大化" title="最大化/还原" onClick={() => (window as any).frameweave?.window?.toggleMaximize()} className="fw-window-btn" style={{ width: 34, height: 26, border: 0, background: 'transparent', color: 'var(--text-faint)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Square size={11} /></button>
-          <button aria-label="关闭" title="关闭" onClick={() => (window as any).frameweave?.window?.close()} className="fw-window-btn fw-window-close" style={{ width: 34, height: 26, border: 0, background: 'transparent', color: 'var(--text-faint)', borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><CloseIcon size={14} /></button>
-        </div>
-      </div>
-
-      {/* 顶栏 */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', height: 52,
+      {/* 顶栏（无边框方案A：整体拖拽区 + 右上预留原生控件区 150px） */}
+      <div className="fw-topbar" style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', paddingRight: 150, height: 52,
         borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
         backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
         flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 12px rgba(0,0,0,.28)',
         position: 'relative', zIndex: 10,
       }}>
-        {/* 品牌区 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 8 }}>
+        {/* 品牌区（无边框方案A：保留为拖拽窗口的主力区域） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 8, WebkitAppRegion: 'drag' as any }}>
           <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Logo size={20} color="var(--accent)" />
           </div>
           <span style={{ fontWeight: 750, fontSize: 15, letterSpacing: .2 }}>拾帧 FrameWeave</span>
-          <span className="fw-pill" style={{ border: '1px solid var(--border)', color: 'var(--text-faint)', background: 'transparent', fontWeight: 500 }}>v0.2.8</span>
+          <span className="fw-pill" style={{ border: '1px solid var(--border)', color: 'var(--text-faint)', background: 'transparent', fontWeight: 500 }}>v{__APP_VERSION__}</span>
         </div>
         {/* 工作流下拉（A3） */}
         <div style={{ position: 'relative' }}>
@@ -289,14 +286,16 @@ export default function App() {
           )}
         </div>
         <span style={{ flex: 1 }} />
-        {/* 右侧操作 */}
-        <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
-          <><RefreshCw size={13} /> 更新</>
-        </button>
-        <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
-          <><Puzzle size={13} /> 插件</>
-        </button>
-        <span style={{ flex: 1 }} />
+        {/* 右侧操作（分组：更新｜插件，预留原生控件区 150px） */}
+        <div className="fw-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
+            <><RefreshCw size={13} /> 更新</>
+          </button>
+          <span style={{ width: 1, height: 18, background: 'var(--border)' }} />
+          <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
+            <><Puzzle size={13} /> 插件</>
+          </button>
+        </div>
       </div>
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}

@@ -1,5 +1,5 @@
 // 主画布（v4 画布优先）：浮层参数面板 + 拖拽添加 + 复制粘贴 + 撤销重做 + 连线右键 + 删除确认 + 导出导入 + 取消运行
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, useReactFlow,
@@ -8,7 +8,7 @@ import {
 import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon } from 'lucide-react'
 import { api, connectWS } from './api'
 import { useAppStore } from './store'
-import { canConnect, type FlowNodeData } from './types'
+import { canConnect, type FlowNodeData, type NodeSpec } from './types'
 import { FlowNode } from './nodes/FlowNode'
 import { ParamPanel } from './ParamPanel'
 import { ResultPanel } from './ResultPanel'
@@ -161,7 +161,7 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   // 添加菜单分组（类别顺序）
   const addGroups = useMemo(() => {
     const order = ['输入', '语义', '分析', '控制', '输出', '用户节点']
-    const map = new Map<string, { type_id: string; title: string; category: string; description: string; gpu: boolean }[]>()
+    const map = new Map<string, NodeSpec[]>()
     for (const s of specs) {
       if (addQuery && !s.title.includes(addQuery) && !s.type_id.includes(addQuery)) continue
       const cat = s.category || '其他'
@@ -185,8 +185,8 @@ const onAddNode = useCallback((typeId: string) => {
   }, [createNode])
 
   // ---- 拖拽添加（D1） ----
-  const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }, [])
-  const onDrop = useCallback((e: React.DragEvent) => {
+  const onDragOver = useCallback((e: ReactDragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }, [])
+  const onDrop = useCallback((e: ReactDragEvent) => {
     e.preventDefault()
     const typeId = e.dataTransfer.getData('application/fw-node')
     if (!typeId) return
@@ -215,7 +215,7 @@ const onAddNode = useCallback((typeId: string) => {
       style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 },
       label: srcPort && dstPort ? srcPort.type + '→' + dstPort.type : '',
       labelStyle: { fontSize: 10, fill: '#6b779f' },
-    }, eds))
+    } as Edge, eds))
     setNodes((nds) => nds.map(n => n.id === conn.target ? {
       ...n, data: { ...n.data, inputs: { ...n.data.inputs, [conn.targetHandle || 'in']: conn.source } },
     } : n))
@@ -237,7 +237,7 @@ const onAddNode = useCallback((typeId: string) => {
       style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 },
       label: srcPort && dstPort ? srcPort.type + '→' + dstPort.type : '',
       labelStyle: { fontSize: 10, fill: '#6b779f' },
-    }, eds))
+    } as Edge, eds))
     setNodes((nds) => nds.map(n => n.id === target ? { ...n, data: { ...n.data, inputs: { ...n.data.inputs, [targetHandle || 'in']: source } } } : n))
   }, [nodes, specs, pushHistory, setEdges, setNodes])
 
@@ -308,7 +308,7 @@ const onAddNode = useCallback((typeId: string) => {
       style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 },
       label: connMenu.srcType + '→' + tPort.type,
       labelStyle: { fontSize: 10, fill: '#6b779f' },
-    }, eds))
+    } as Edge, eds))
     setConnMenu(null)
   }, [connMenu, specs, pushHistory, setEdges, setNodes])
 
@@ -584,7 +584,7 @@ const onAddNode = useCallback((typeId: string) => {
   const iconBtn = { ...btn, padding: '7px 9px' }
   const sep = { width: 1, alignSelf: 'stretch', margin: '4px 2px', background: 'var(--border)' }
 
-  const menuItem = (icon: React.ReactNode, label: string, sub: string, onClick: () => void) => (
+  const menuItem = (icon: ReactNode, label: string, sub: string, onClick: () => void) => (
     <div
       style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 7 }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)' }}
@@ -916,8 +916,6 @@ const reflowColumn = (nds: any[], id: string): any[] => {
 
 export const Canvas = memo(function Canvas(props: { workflowId: string }) {
   return (
-    <ReactFlowProvider>
-      <CanvasInner {...props} />
-    </ReactFlowProvider>
+    <ReactFlowProvider children={<CanvasInner {...props} />} />
   )
 })

@@ -51,3 +51,8 @@ Thumbs.db
 .vt.py
 *.work
 *.work*
+
+# ===== 本地敏感配置（阿里云邮件凭据等） =====
+.env
+*.env
+backend/.env

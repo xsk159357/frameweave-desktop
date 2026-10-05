@@ -1,6 +1,6 @@
 // 节点插件管理（v1.2）：已装列表 / 导入 zip / 打开目录 / 规范说明
 import { useEffect, useRef, useState } from 'react'
-import { X, Upload, FolderOpen, Puzzle, RefreshCw, FileCode2 } from 'lucide-react'
+import { X, Upload, FolderOpen, Puzzle, RefreshCw, FileCode2, Download } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -73,6 +73,11 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
                 <FileCode2 size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{n}</span>
                 <span style={{ flex: 1 }} />
+                <button title="导出插件包 zip（可分享/上传商城）" onClick={() => {
+                  api.exportNodeZip(n)
+                    .then(() => pushToast('已导出 ' + n, 'ok'))
+                    .catch((e: any) => pushToast('导出失败: ' + (e.message || e), 'err'))
+                }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 3, lineHeight: 0 }}><Download size={12} /></button>
                 <span className="fw-pill" style={{ fontSize: 10, color: 'var(--text-faint)' }}>声明式</span>
               </div>
             ))}

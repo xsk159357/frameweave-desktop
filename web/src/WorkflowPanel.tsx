@@ -145,7 +145,13 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
             <PencilLine size={12} /> 重命名
           </div>
           <div style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
-            onClick={() => window.open('http://127.0.0.1:8788/api/export/workflow/' + menu.id, '_blank')}
+            onClick={() => {
+              const id = menu.id
+              setMenu(null)
+              api.exportWorkflowZip(id)
+                .then(() => pushToast('工作流已导出 zip', 'ok'))
+                .catch((e: any) => pushToast('导出失败: ' + (e.message || e), 'err'))
+            }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
             <Download size={12} /> 导出工作流 zip
           </div>

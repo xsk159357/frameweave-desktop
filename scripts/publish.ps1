@@ -1,4 +1,4 @@
-# FrameWeave release publishing script
+﻿# FrameWeave release publishing script
 # Usage:
 #   pwsh scripts/publish.ps1                # pack + sign + assemble release
 #   pwsh scripts/publish.ps1 -SkipPack      # reuse existing dist artifacts

@@ -1,5 +1,5 @@
 // 左侧节点面板：搜索 + 分类 + 收藏（v3 霓虹行式）
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Star, Puzzle, Zap } from 'lucide-react'
 import { useAppStore } from './store'
 
@@ -101,7 +101,7 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
     </div>
   )
 
-  const SectionTitle = ({ children, extra, color }: { children: React.ReactNode; extra?: string; color?: string }) => (
+  const SectionTitle = ({ children, extra, color }: { children?: ReactNode; extra?: string; color?: string }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 10px 8px' }}>
       <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, color: color || 'var(--text-faint)', textTransform: 'uppercase' }}>{children}</span>
       {extra && <span className="fw-badge" style={{ background: 'var(--bg-panel-2)', color: 'var(--text-faint)' }}>{extra}</span>}
