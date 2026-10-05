@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 CARD_SECRET=os.environ.get('FRAMEWEAVE_CARD_SECRET',''); ADMIN_KEY=os.environ.get('FRAMEWEAVE_ADMIN_KEY','')
 ADMIN_ALLOW_IPS=[x.strip() for x in os.environ.get('FRAMEWEAVE_ADMIN_ALLOW_IPS','').split(',') if x.strip()]
 TRIAL_DAYS=1; DB_PATH=os.environ.get('CLOUD_DB',os.path.join(os.path.dirname(os.path.abspath(__file__)),'cloud.db'))
-AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.2.11'
+AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.2.12'
 EMAIL_RE=re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}@qq\.com$',re.I)
 ADMIN_TOKEN_TTL=28800.0
 

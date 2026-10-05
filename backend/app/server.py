@@ -55,7 +55,7 @@ DATA_DIR = _resolve_data_dir()
 
 AUTH_REVISION = "email-code-v2"
 BACKEND_PROTOCOL = 3
-app = FastAPI(title="FrameWeave Local Service", version="0.2.11")
+app = FastAPI(title="FrameWeave Local Service", version="0.2.12")
 
 # ---- 本地 API 鉴权（H3 修复）----
 # 打包版：main.cjs 生成随机令牌经 FRAMEWEAVE_LOCAL_TOKEN 注入后端与渲染进程。
@@ -318,7 +318,7 @@ def _protect_secret_params(nodes) -> None:
 # ---- 工作流 API ----
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "frameweave", "version": "0.2.11", "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
+    return {"ok": True, "service": "frameweave", "version": "0.2.12", "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
 
 @app.get("/api/system/build-info")
 async def build_info():
