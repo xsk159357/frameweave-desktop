@@ -8,7 +8,8 @@ from urllib.parse import urlparse
 CARD_SECRET=os.environ.get('FRAMEWEAVE_CARD_SECRET',''); ADMIN_KEY=os.environ.get('FRAMEWEAVE_ADMIN_KEY','')
 ADMIN_ALLOW_IPS=[x.strip() for x in os.environ.get('FRAMEWEAVE_ADMIN_ALLOW_IPS','').split(',') if x.strip()]
 TRIAL_DAYS=1; DB_PATH=os.environ.get('CLOUD_DB',os.path.join(os.path.dirname(os.path.abspath(__file__)),'cloud.db'))
-AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.2.12'
+AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.2.12'; AUTHOR_SHARE=0.8
+MARKET_FILE=os.path.join(os.path.dirname(os.path.abspath(DB_PATH)),'market_items.json')
 EMAIL_RE=re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}@qq\.com$',re.I)
 ADMIN_TOKEN_TTL=28800.0
 
@@ -39,6 +40,8 @@ def db():
  c.execute('''CREATE TABLE IF NOT EXISTS rate_limits(scope TEXT NOT NULL,key TEXT NOT NULL,window_start INTEGER NOT NULL,count INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(scope,key,window_start))''')
  c.execute('''CREATE TABLE IF NOT EXISTS admin_tokens(token TEXT PRIMARY KEY,created_at REAL NOT NULL,expires_at REAL NOT NULL)''')
  c.execute('''CREATE TABLE IF NOT EXISTS cards(id INTEGER PRIMARY KEY AUTOINCREMENT,card TEXT NOT NULL UNIQUE,plan TEXT NOT NULL,days INTEGER NOT NULL,created_at REAL NOT NULL,used_by TEXT NOT NULL DEFAULT '',used_at REAL NOT NULL DEFAULT 0,revoked INTEGER NOT NULL DEFAULT 0)''')
+ c.execute('''CREATE TABLE IF NOT EXISTS market_downloads(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL,email TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT '',price INTEGER NOT NULL DEFAULT 0,paid INTEGER NOT NULL DEFAULT 0,client_version TEXT NOT NULL DEFAULT '',device_id TEXT NOT NULL DEFAULT '',ip TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL)''')
+ c.execute('''CREATE TABLE IF NOT EXISTS market_installs(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL,email TEXT NOT NULL DEFAULT '',client_version TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL)''')
  try: c.execute('ALTER TABLE sessions ADD COLUMN status INTEGER NOT NULL DEFAULT 1')
  except Exception: pass
  try: c.execute('''CREATE INDEX IF NOT EXISTS idx_audit_created ON mail_audit(created_at)''')
@@ -183,7 +186,94 @@ def activate(b):
  if serial in used:return {'ok':False,'message':'该卡密已被使用'}
  now=time.time();s['expires_at']=max(now,float(s.get('expires_at') or now))+int(p.get('days') or 30)*86400;s['plan']='member';s['cards_used']=json.dumps(used+[serial]);save(s)
  c=db(); c.execute('UPDATE cards SET used_by=?,used_at=? WHERE card=?',(norm(s['email']),now,b.get('card','').strip())); c.commit(); c.close()
- return {'ok':True,'message':'激活成功','plan':'member','expires_at':s['expires_at']}
+# ---------- market (M20: 商城下载授权 + 安装回报) ----------
+def _ver_tuple(v):
+    parts=[]
+    for seg in re.split(r'[._-]',str(v or '').strip()):
+        if seg.isdigit(): parts.append(int(seg))
+        else: break
+    return tuple(parts[:7])
+def _load_market():
+    try:
+        if os.path.exists(MARKET_FILE):
+            with open(MARKET_FILE,'r',encoding='utf-8') as f: data=json.load(f)
+            return data if isinstance(data,dict) else {}
+    except Exception: pass
+    return {}
+def _save_market(data):
+    with open(MARKET_FILE,'w',encoding='utf-8') as f: json.dump(data,f,ensure_ascii=False,indent=2)
+def _market_item(iid):
+    return _load_market().get(iid)
+def find_by_token(tok):
+    c=db()
+    try:
+        r=c.execute('SELECT * FROM sessions WHERE token=?',(tok,)).fetchone(); return dict(r) if r else None
+    finally: c.close()
+def market_list(b=None):
+    data=_load_market()
+    items=[dict(it) for it in data.values()]
+    items.sort(key=lambda x:(not bool(x.get('official')),-int(x.get('downloads') or 0),-float(x.get('created_at') or 0)))
+    return {'ok':True,'items':items,'count':len(items)}
+def market_download_auth(b):
+    iid=str(b.get('item_id','')).strip()
+    it=_market_item(iid)
+    if it is None: return {'ok':False,'code':'item_not_found','message':'条目不存在'}
+    if it.get('status','active')!='active': return {'ok':False,'code':'item_disabled','message':'条目已下架'}
+    minv=it.get('min_client_version',''); cv=str(b.get('client_version',''))
+    if minv and (not cv or _ver_tuple(cv)<_ver_tuple(minv)):
+        return {'ok':False,'code':'client_version_too_old','message':'客户端版本过低，需要 '+minv+' 及以上','min_client_version':minv}
+    price=int(it.get('price') or 0); paid=price>0; email=''
+    if paid:
+        s=find_by_token(str(b.get('token','')))
+        if not s: return {'ok':False,'code':'login_required','message':'请先登录后再下载付费节点'}
+        if int(s.get('credits') or 0)<price: return {'ok':False,'code':'insufficient_credits','message':'积分不足'}
+        s['credits']=int(s.get('credits') or 0)-price
+        ae=norm(it.get('author',''))
+        if ae:
+            a=find(ae)
+            if a: a['credits']=int(a.get('credits') or 0)+int(price*AUTHOR_SHARE); save(a)
+        save(s); email=s['email']
+    else:
+        ss=find_by_token(str(b.get('token','')))
+        if ss: email=ss['email']
+    data=_load_market(); d=data.get(iid)
+    if d is None: return {'ok':False,'code':'item_not_found','message':'条目不存在'}
+    d['downloads']=int(d.get('downloads') or 0)+1; _save_market(data)
+    c=db(); c.execute('INSERT INTO market_downloads(item_id,email,kind,price,paid,client_version,device_id,ip,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(iid,email,it.get('kind',''),price,1 if paid else 0,cv,str(b.get('device_id','')),str(b.get('ip','')),time.time())); c.commit(); c.close()
+    fn=(it.get('type_id') or iid).replace('/','_') or 'plugin'
+    return {'ok':True,'status':'authorized','item_id':iid,'title':it.get('title',''),'version':it.get('version','1.0.0'),'kind':it.get('kind',''),'type_id':it.get('type_id',''),'price':price,
+            'download':{'filename':fn+'.zip','size':int(it.get('size') or 0),'sha256':it.get('sha256','') or '','url':it.get('download_url',''),'direct':True},
+            'direct':True,'min_client_version':minv,'client_version_ok':True}
+def market_install_report(b):
+    iid=str(b.get('item_id','')).strip()
+    it=_market_item(iid)
+    if it is None: return {'ok':False,'code':'item_not_found','message':'条目不存在'}
+    result=str(b.get('result','ok')); ok=result.lower() in ('ok','success','installed')
+    ss=find_by_token(str(b.get('token',''))); email=ss['email'] if ss else ''
+    data=_load_market()
+    if ok and iid in data:
+        data[iid]['installs']=int(data[iid].get('installs') or 0)+1; _save_market(data)
+    c=db(); c.execute('INSERT INTO market_installs(item_id,email,client_version,result,error,created_at) VALUES(?,?,?,?,?,?)',(iid,email,str(b.get('client_version','')),result or 'ok',str(b.get('error',''))[:500],time.time())); c.commit(); c.close()
+    return {'ok':True,'item_id':iid,'recorded':True,'install_count':int(data[iid].get('installs') or 0) if iid in data else 0}
+def admin_market_list(b):
+    if not admin_auth(b): return {'ok':False,'message':'未授权或登录已过期'}
+    return market_list(b)
+def admin_market_upsert(b):
+    if not admin_auth(b): return {'ok':False,'message':'未授权或登录已过期'}
+    it=b.get('item',{})
+    if not isinstance(it,dict) or not (it.get('title') or it.get('id')): return {'ok':False,'message':'item 需含 title/id'}
+    data=_load_market(); iid=str(it.get('id','')).strip() or ('it_'+uuid.uuid4().hex[:10])
+    base=data.get(iid,{})
+    for k,v in it.items():
+        if k=='id': continue
+        base[k]=v
+    base['id']=iid
+    base.setdefault('kind',it.get('kind','node')); base.setdefault('price',0)
+    base.setdefault('version',it.get('version','1.0.0') or '1.0.0')
+    base.setdefault('official',False); base.setdefault('status',it.get('status','active') or 'active')
+    base.setdefault('downloads',0); base.setdefault('installs',0); base.setdefault('created_at',time.time())
+    data[iid]=base; _save_market(data)
+    return {'ok':True,'item':base}
 
 # ---------- admin ----------
 def admin_auth(b):
@@ -247,7 +337,7 @@ def admin_card_revoke(b):
  c.execute('UPDATE cards SET revoked=1 WHERE id=?',(cid,)); c.commit(); c.close()
  return {'ok':True,'id':cid}
 
-ROUTES={'/api/auth/email/send-code':lambda b: issue_code(b.get('email',''),b.get('scene','register'),b.get('ip',''),b.get('device_id','')) if valid_email(b.get('email','')) else (False,'目前仅支持 QQ 邮箱（@qq.com）'),'/api/auth/register':register,'/api/auth/login':login,'/api/auth/password/reset':reset,'/api/auth/verify':verify,'/api/auth/activate':activate,'/api/admin/login':admin_login,'/api/admin/logout':admin_logout,'/api/admin/users':admin_users,'/api/admin/user/toggle':admin_toggle,'/api/admin/cards':admin_cards,'/api/admin/card/revoke':admin_card_revoke,'/api/admin/audit':admin_audit,'/api/admin/issue-card':admin_issue}
+ROUTES={'/api/auth/email/send-code':lambda b: issue_code(b.get('email',''),b.get('scene','register'),b.get('ip',''),b.get('device_id','')) if valid_email(b.get('email','')) else (False,'目前仅支持 QQ 邮箱（@qq.com）'),'/api/auth/register':register,'/api/auth/login':login,'/api/auth/password/reset':reset,'/api/auth/verify':verify,'/api/auth/activate':activate,'/api/admin/login':admin_login,'/api/admin/logout':admin_logout,'/api/admin/users':admin_users,'/api/admin/user/toggle':admin_toggle,'/api/admin/cards':admin_cards,'/api/admin/card/revoke':admin_card_revoke,'/api/admin/audit':admin_audit,'/api/admin/issue-card':admin_issue,'/api/market/download-auth':market_download_auth,'/api/market/install-report':market_install_report,'/api/admin/market/list':admin_market_list,'/api/admin/market/upsert':admin_market_upsert}
 ADMIN_HTML=r'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>拾帧 FrameWeave 授权后台</title>
@@ -315,7 +405,8 @@ class H(BaseHTTPRequestHandler):
   x=ADMIN_HTML.encode('utf-8');self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(x)));self.end_headers();self.wfile.write(x)
  def do_GET(self):
   path=urlparse(self.path).path
-  if path=='/api/health':self.out({'ok':True,'service':'frameweave-cloud','version':VERSION,'protocol_version':PROTOCOL_VERSION,'auth_revision':AUTH_REVISION})
+  if path=='/api/health':self.out({'ok':True,'service':'frameweave-cloud','version':VERSION,'protocol_version':PROTOCOL_VERSION,'auth_revision':AUTH_REVISION,'market':'v1'})
+  elif path=='/api/market/items' or path=='/api/market/list':self.out(market_list())
   elif path=='/admin' or path=='/admin/':self.out_html()
   else:self.out({'ok':False,'message':'Not Found'},404)
  def do_POST(self):

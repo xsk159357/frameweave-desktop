@@ -71,3 +71,35 @@ def cloud_reset_password(email: str, code: str, new_password: str) -> Optional[d
 
 def cloud_activate(email: str, card: str) -> Optional[dict]:
     return _post("/api/auth/activate", {"email": email, "card": card})
+
+
+def cloud_market_download_auth(item_id: str, token: str, client_version: str = "") -> Optional[dict]:
+    """商城下载授权/记录（云端）：授权、记账、记录下载，返回 GitHub Release 直链。"""
+    return _post("/api/market/download-auth",
+                 {"item_id": item_id, "token": token, "client_version": client_version})
+
+
+def cloud_market_install_report(item_id: str, token: str, client_version: str = "",
+                                result: str = "ok", error: str = "") -> Optional[dict]:
+    """商城安装回报（云端）：记录安装计数与流水。"""
+    return _post("/api/market/install-report",
+                 {"item_id": item_id, "token": token, "client_version": client_version,
+                  "result": result, "error": error})
+
+
+def cloud_market_items() -> Optional[list]:
+    """拉取云端商城条目列表（云化时前端浏览；不可达返回 None 由本地桩回落）。"""
+    url = cloud_url()
+    if not cloud_enabled():
+        return None
+    try:
+        req = urllib.request.Request(url + "/api/market/items",
+                                     headers={"Accept": "application/json",
+                                              "User-Agent": "FrameWeave-Client/0.2.10"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            body = json.loads(resp.read().decode() or "{}")
+            items = (body or {}).get("items")
+            return items if isinstance(items, list) else None
+    except Exception as _e:  # noqa: BLE001
+        _dbg("CLOUD_ERR path=/api/market/items err=%s" % repr(_e))
+        return None
