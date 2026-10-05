@@ -291,13 +291,28 @@ export default function App() {
         </div>
         <span style={{ flex: 1 }} />
         {/* 右侧操作（分组：更新｜插件，预留原生控件区 150px） */}
-        <div className="fw-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div className="fw-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 7, position: 'relative' }}>
+          {showAccount && <div className="fw-account-popover" style={{ top: 38, right: 0, left: 'auto', bottom: 'auto' }}>
+            <div className="fw-account-name">{session.email}</div>
+            <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
+            <button onClick={() => { setShowAccount(false); useAppStore.getState().pushToast('个人中心即将开放', 'info') }}>个人中心</button>
+            <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
+          </div>}
           <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
             <><RefreshCw size={13} /> 更新</>
           </button>
           <span style={{ width: 1, height: 18, background: 'var(--border)' }} />
           <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
             <><Puzzle size={13} /> 插件</>
+          </button>
+          <button className="fw-btn fw-btn-ghost" title="打开商城" onClick={() => setShowMarket(true)}>
+            <><Store size={13} /> 商城</>
+          </button>
+          <button className={'fw-btn fw-btn-ghost' + (showAccount ? ' active' : '')} title="账户" onClick={() => setShowAccount(v => !v)}>
+            <><UserCircle size={13} /> 账户</>
+          </button>
+          <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
+            <><SettingsIcon size={13} /> 设置</>
           </button>
         </div>
       </div>
@@ -346,21 +361,6 @@ export default function App() {
       <button className="fw-workflow-toggle" onClick={() => setShowWorkflowDrawer(v => !v)} title="工作流列表">
         <FileText size={14} /> <span>工作流</span>
       </button>
-
-      {/* 左下角竖列工具：设置 / 商城 / 账户 */}
-      <div className="fw-left-tools">
-        <button className="fw-side-tool" title="设置" onClick={() => setShowSettings(true)}><SettingsIcon size={15} /></button>
-        <button className="fw-side-tool" title="商城" onClick={() => setShowMarket(true)}><Store size={15} /></button>
-        <div className="fw-account-wrap">
-          {showAccount && <div className="fw-account-popover">
-            <div className="fw-account-name">{session.email}</div>
-            <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
-            <button onClick={() => { setShowAccount(false); useAppStore.getState().pushToast('个人中心即将开放', 'info') }}>个人中心</button>
-            <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
-          </div>}
-          <button className={'fw-side-tool' + (showAccount ? ' active' : '')} title="账户" onClick={() => setShowAccount(v => !v)}><UserCircle size={16} /></button>
-        </div>
-      </div>
 
       {/* 底部状态栏（A4） */}
       <div className="fw-statusbar">

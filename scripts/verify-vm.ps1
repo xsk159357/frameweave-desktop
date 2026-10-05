@@ -31,7 +31,7 @@ if (-not $SkipRevert) {
   } else {
     Write-Host "[vm] 无 base-clean 快照 → 卸载 Guest 内旧版 FrameWeave"
     & $Vmrun -gu $GuestUser -gp $GuestPass copyFileFromHostToGuest $Vmx (Join-Path $root ".tmp\vm-uninstall.ps1") "C:\fw-uninstall.ps1" 2>&1 | Out-Host
-    $ures = & $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -active-window "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File C:\fw-uninstall.ps1" 2>&1
+    $ures = & $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -interactive "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File C:\fw-uninstall.ps1" 2>&1
     $ures | ForEach-Object { Write-Host "   [vm:guest] " $_ }
     Start-Sleep -Seconds 5
   }
@@ -54,7 +54,7 @@ Start-Sleep -Seconds 25
 # 4) 推送校验脚本并执行
 Write-Host "[vm] 4/5 执行 Guest 内校验（进程/后端/无边框窗口风格）"
 & $Vmrun -gu $GuestUser -gp $GuestPass copyFileFromHostToGuest $Vmx (Join-Path $root ".tmp\vm-check.ps1") "C:\fw-check.ps1" 2>&1 | Out-Host
-$res = & $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -active-window "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File C:\fw-check.ps1" 2>&1
+$res = & $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -interactive "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File C:\fw-check.ps1" 2>&1
 $res | ForEach-Object { Write-Host "   " $_ }
 
 # 5) 截图
