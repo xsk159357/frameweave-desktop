@@ -283,9 +283,25 @@ class MarketPublish(BaseModel):
     download_url: str = ""
     tags: List[str] = []
     source_zip: str = ""  # 本地桩：内联 zip 路径（正式版无此字段）
+    version: str = "1.0.0"
+    type_id: str = ""
+    sha256: str = ""
+    size: int = 0
+    min_client_version: str = ""
+    status: str = "active"
 
 class MarketInstall(BaseModel):
     token: str = ""
+
+class MarketDownloadAuth(BaseModel):
+    token: str = ""
+    client_version: str = ""
+
+class MarketInstallReport(BaseModel):
+    token: str = ""
+    client_version: str = ""
+    result: str = "ok"
+    error: str = ""
 
 
 _SECRET_KEY_RE = __import__("re").compile(r"(key|secret|token|password|api)", __import__("re").IGNORECASE)
@@ -704,6 +720,11 @@ if DEV_ENDPOINTS:
 # ---- 商城 API（M18 本地桩） ----
 @app.get("/api/market/items")
 async def market_items(q: str = "", kind: str = "", official: str = ""):
+    # 云化时优先返回云端条目（含 GitHub Release 直链元数据），云端不可达回落本地桩。
+    if cloud_gateway.cloud_enabled():
+        cloud_items = await asyncio.to_thread(cloud_gateway.cloud_market_items)
+        if cloud_items is not None:
+            return {"items": cloud_items, "count": len(cloud_items)}
     items = market_svc.list_items(q, kind, official)
     return {"items": items, "count": len(items)}
 
@@ -715,15 +736,31 @@ async def market_publish(body: MarketPublish):
         raise HTTPException(400, "标题与作者必填")
     item = market_svc.publish(body.kind, body.title, body.description, body.author,
                               body.price, body.download_url, body.tags,
-                              source_zip=body.source_zip)
+                              source_zip=body.source_zip, version=body.version,
+                              type_id=body.type_id, sha256=body.sha256, size=body.size,
+                              min_client_version=body.min_client_version,
+                              status=body.status)
     return {"ok": True, "item": item}
 
-@app.get("/api/market/items/{item_id}")
-async def market_item_detail(item_id: str):
-    it = market_svc.get(item_id)
-    if it is None:
-        raise HTTPException(404, "条目不存在")
-    return it
+@app.post("/api/market/items/{item_id}/download-auth")
+async def market_download_auth(item_id: str, body: MarketDownloadAuth):
+    """下载授权/记录接口：返回 GitHub Release 直链（服务器不代理文件）。
+
+    云化时转发云端授权/记账；离线/dev 回落本地桩。
+    """
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_market_download_auth(item_id, body.token, body.client_version)
+        return resp or {"ok": False, "code": "cloud_unavailable", "message": "云端授权服务不可用"}
+    return market_svc.download_auth(item_id, body.token, license_svc, body.client_version)
+
+@app.post("/api/market/items/{item_id}/install-report")
+async def market_install_report(item_id: str, body: MarketInstallReport):
+    """安装回报：客户端装完/失败后回报，云端/本地记录安装计数与流水。"""
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_market_install_report(
+            item_id, body.token, body.client_version, body.result, body.error)
+        return resp or {"ok": False, "code": "cloud_unavailable", "message": "云端授权服务不可用"}
+    return market_svc.install_report(item_id, body.token, body.client_version, body.result, body.error)
 
 @app.post("/api/market/items/{item_id}/install")
 async def market_install(item_id: str, body: MarketInstall):
