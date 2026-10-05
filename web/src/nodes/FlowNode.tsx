@@ -133,7 +133,8 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     return null
   })()
   // —— v046：节点高度恒定（不随编辑变化，杜绝表单撑高覆盖相邻节点的穿模）；状态区固定 36px ——
-  const summaryH = !expanded && summaryItem ? 20 : 0
+  // 摘要行含 padding + 底部间距，预留完整高度避免第一组端口压住摘要文字
+  const summaryH = !expanded && summaryItem ? 28 : 0
   const cfgItems = (spec?.params || []).length
   // 内镶参数区：全展开不滚动（紧凑行高 44），位于端口圆点下方；高度估算与 Canvas estNodeH 保持一致
   const cfgH = expanded ? 24 + cfgItems * 46 + 12 : 0

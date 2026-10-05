@@ -880,7 +880,8 @@ const GAP = 14
 const estNodeH = (d: any): number => {
   const p = d?.spec?.params || []
   const hasVal = d?.params && p.some((pl: any) => { const v = (d.params || {})[pl.name]; return v !== undefined && v !== null && String(v) !== '' })
-  const sumH = !d?.expanded && hasVal ? 20 : 0
+  // 与 FlowNode.summaryH 保持一致，避免自动排布高度与实际节点不一致
+  const sumH = !d?.expanded && hasVal ? 28 : 0
   const cfgH = d?.expanded ? 24 + p.length * 46 + 12 : 0
   const ins = d?.spec?.inputs?.length || 0
   const outs = d?.spec?.outputs?.length || 0
