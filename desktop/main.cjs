@@ -1,5 +1,5 @@
 // Electron 主进程：启动本地 Python 后端 + 加载前端
-const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { spawn } = require('child_process')
 const path = require('path')
@@ -44,6 +44,11 @@ let backendProc = null
 const BACKEND_PORT = 8788
 
 // 找到本机后端 Python
+function killStaleBackendTree() {
+  if (process.platform !== 'win32') return
+  try { require('child_process').execFileSync('taskkill.exe', ['/IM', 'frameweave-backend.exe', '/T', '/F'], { stdio: 'ignore' }) } catch { /* no stale process */ }
+}
+
 function findBackendCommand() {
   const isPacked = app.isPackaged
   const base = isPacked ? process.resourcesPath : path.join(__dirname, '..')
@@ -75,11 +80,12 @@ function probePort() {
       res.on('end', () => {
         try {
           const j = JSON.parse(body)
-          resolve(j && (j.status === 'ok' || j.app === 'frameweave' || j.ok) ? 'frameweave' : 'other')
+          const compatible = j && j.service === 'frameweave' && j.protocol_version === 3 && j.auth_revision === 'email-code-v2'
+          resolve(compatible ? 'frameweave' : (j ? 'other' : null))
         } catch { resolve('other') }
       })
     })
-    req.on('error', () => resolve(null)) // 端口未监听或无响应 → 空闲
+    req.on('error', () => resolve(null))
     req.setTimeout(1200, () => { req.destroy(); resolve('other') })
   })
 }
@@ -118,10 +124,14 @@ async function startBackend() {
     return false  // 上层负责退出，不再开窗
   }
   try {
+    killStaleBackendTree()
     const { cmd, backendMain } = findBackendCommand()
+    // H3 修复：打包模式生成随机本地 API 令牌（dev 模式不注入，后端回落 dev-local-token）
+    const localToken = app.isPackaged ? require('crypto').randomBytes(16).toString('hex') : ''
+    const extraEnv = localToken ? { FRAMEWEAVE_LOCAL_TOKEN: localToken } : {}
     backendProc = backendMain
-      ? spawn(cmd, ['-u', backendMain], { env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, stdio: 'ignore' })
-      : spawn(cmd, [], { env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }, stdio: 'ignore' })
+      ? spawn(cmd, ['-u', backendMain], { env: { ...process.env, ...extraEnv, PYTHONIOENCODING: 'utf-8' }, stdio: 'ignore' })
+      : spawn(cmd, [], { env: { ...process.env, ...extraEnv, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }, stdio: 'ignore' })
     const ok = await waitForBackend()
     fwLog('[boot] waitForBackend =>', ok)
     if (!ok) {
@@ -143,8 +153,13 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     title: '拾帧 FrameWeave',
-    backgroundColor: '#0a0e18',
+    backgroundColor: '#0e0f14',
     autoHideMenuBar: true,
+    // ---- 无边框（方案A）：隐藏系统标题栏 + 原生窗口控件 Overlay（Windows/Linux） ----
+    titleBarStyle: 'hidden',
+    ...(process.platform !== 'darwin'
+      ? { titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#a2a8b8' : '#596176', height: 52 } }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -172,7 +187,32 @@ function createWindow() {
   }
 
   mainWindow.on('closed', () => { mainWindow = null })
+
+  // 最大化状态变化推送给渲染层（无边框方案A：Overlay 控件状态联动）
+  mainWindow.on('maximize', () => { mainWindow && mainWindow.webContents.send('window:maximized-changed', true) })
+  mainWindow.on('unmaximize', () => { mainWindow && mainWindow.webContents.send('window:maximized-changed', false) })
 }
+
+// ---- 窗口控制 IPC（无边框方案A：titleBarOverlay 原生控件 + 渲染层控制桥） ----
+ipcMain.on('window:minimize', () => { if (mainWindow) mainWindow.minimize() })
+ipcMain.on('window:toggle-maximize', () => {
+  if (!mainWindow) return
+  mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize()
+})
+ipcMain.on('window:close', () => { if (mainWindow) mainWindow.close() })
+ipcMain.handle('window:is-maximized', () => (mainWindow ? mainWindow.isMaximized() : false))
+// 主题联动：浅/深色切换时同步 titleBarOverlay 原生控件配色（无边框方案A 补全）
+ipcMain.on('window:set-titlebar-overlay', (_e, theme) => {
+  if (!mainWindow || process.platform === 'darwin') return
+  const isLight = String(theme || '').toLowerCase() === 'light'
+  try {
+    mainWindow.setTitleBarOverlay({
+      color: '#00000000',                     // 透明：直接显示窗口内容背景
+      symbolColor: isLight ? '#596176' : '#a2a8b8', // 与 --text-dim 一致
+      height: 52,
+    })
+  } catch { /* 低版本 Electron 无 setTitleBarOverlay 时静默 */ }
+})
 
 app.whenReady().then(async () => {
   fwLog('[boot] app ready, version=', app.getVersion())
@@ -191,9 +231,15 @@ function setupAutoUpdate() {
     console.log('[updater] 开发模式跳过自动更新')
     return
   }
-  // 更新源 URL 可被环境变量覆盖（企业部署）
-  const feedUrl = process.env.FRAMEWEAVE_UPDATE_URL || 'https://update.example.com/frameweave'
-  autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl })
+  // 更新源：默认使用打包时写入的 app-update.yml（build.publish = github provider）；
+  // 显式设置 FRAMEWEAVE_UPDATE_URL 时覆盖为 generic（联调/企业部署用）
+  const feedUrl = process.env.FRAMEWEAVE_UPDATE_URL
+  if (feedUrl) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl })
+    console.log('[updater] 使用覆盖更新源:', feedUrl)
+  } else {
+    console.log('[updater] 使用打包配置更新源 (github provider)')
+  }
 
   autoUpdater.autoDownload = false      // 用户确认后下载
   autoUpdater.autoInstallOnAppQuit = true

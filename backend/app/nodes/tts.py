@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import uuid
 from typing import Any, Dict
 
 from ..assets import Asset
@@ -130,7 +131,8 @@ class TTSNode(NodeBase):
                 payload={"segments": []})}
 
         if engine == "edge":
-            out_path = os.path.join(out_dir, f"tts_{os.getpid()}.{params.get('output_format', 'mp3')}")
+            # 唯一文件名：并发批量时同进程同秒也会生成不同文件（M1 修复，避免互相覆盖）
+            out_path = os.path.join(out_dir, f"tts_{os.getpid()}_{uuid.uuid4().hex[:8]}.{params.get('output_format', 'mp3')}")
             rate = str(params.get("rate", "+0%"))
             pitch = str(params.get("pitch", "+0Hz"))
             voice = params.get("voice", "zh-CN-XiaoxiaoNeural")
@@ -203,7 +205,10 @@ class TTSNode(NodeBase):
         env = dict(os.environ)
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONPATH"] = "C:/Users/Administrator/fw-patch"
+        # M10 修复：PYTHONPATH 不再写死本机路径，改为环境变量 FW_PATCH_DIR（未设置则不注入）
+        _patch = os.environ.get("FW_PATCH_DIR", "")
+        if _patch:
+            env["PYTHONPATH"] = _patch
         proc = subprocess.Popen(
             [venv_py, "-u", srv],
             env=env, stdout=logf, stderr=subprocess.STDOUT,

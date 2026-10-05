@@ -1,6 +1,6 @@
 {
   "name": "frameweave-desktop",
-  "version": "0.2.8",
+  "version": "0.2.11",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
@@ -49,8 +49,9 @@
     ],
     "publish": [
       {
-        "provider": "generic",
-        "url": "https://update.example.com/frameweave"
+        "provider": "github",
+        "owner": "xsk159357",
+        "repo": "frameweave-desktop"
       }
     ]
   },

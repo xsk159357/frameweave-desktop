@@ -3,12 +3,21 @@ import type { NodeSpec, WfMeta, Segment } from './types'
 
 const BASE = 'http://127.0.0.1:8788'
 
+// H3 修复：本地 API 鉴权令牌 —— 打包版从 preload 桥取随机值，dev 回落固定值
+function localToken(): string {
+  const w = (window as any).frameweave
+  if (w && w.localToken) return w.localToken
+  const saved = localStorage.getItem('fw_local_token')
+  if (saved) return saved
+  return 'dev-local-token'
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 8000)
   try {
   const resp = await fetch(BASE + path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-FW-Local-Token': localToken(), ...(init?.headers || {}) },
     signal: ctrl.signal,
     ...init,
   })
@@ -25,7 +34,7 @@ async function reqMulti<T>(path: string, fd: FormData): Promise<T> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 20000)
   try {
-    const resp = await fetch(BASE + path, { method: 'POST', body: fd, signal: ctrl.signal })
+    const resp = await fetch(BASE + path, { method: 'POST', body: fd, signal: ctrl.signal, headers: { 'X-FW-Local-Token': localToken() } })
     if (!resp.ok) {
       let msg = resp.statusText
       try { const j = await resp.json(); msg = j.detail || j.message || msg } catch { /* ignore */ }
@@ -90,6 +99,21 @@ export const api = {
       method: 'POST', body: JSON.stringify({ email, password, device_id: deviceId }),
     }),
 
+  sendEmailCode: (email: string, scene: 'register' | 'reset_password') =>
+    req<{ok:boolean;message?:string;expires_in?:number;retry_after?:number}>('/api/auth/email/send-code', {
+      method: 'POST', body: JSON.stringify({ email, scene }),
+    }),
+
+  register: (email: string, code: string, password: string, deviceId: string) =>
+    req<{ok:boolean;session?:{token:string;email:string;expires_at:number;plan?:string;credits?:number;device_id?:string};message?:string}>('/api/auth/register', {
+      method: 'POST', body: JSON.stringify({ email, code, password, device_id: deviceId }),
+    }),
+
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    req<{ok:boolean;message?:string}>('/api/auth/password/reset', {
+      method: 'POST', body: JSON.stringify({ email, code, new_password: newPassword }),
+    }),
+
   activate: (email: string, card: string) =>
     req<{ok:boolean;message?:string;plan?:string;expires_at?:number}>('/api/auth/activate', {
       method: 'POST', body: JSON.stringify({ email, card }),
@@ -100,7 +124,7 @@ export const api = {
     req<{items:any[];count:number}>('/api/market/items?q=' + encodeURIComponent(q) + '&kind=' + encodeURIComponent(kind) + '&official=' + encodeURIComponent(official)),
 
   marketPublish: (body: {kind:string;title:string;description:string;author:string;price:number;download_url:string;tags:string[]}) =>
-    req<{ok:boolean;item?:any}>('/api/market/items', { method: 'POST', body: JSON.stringify(body) }),
+    req<{ok:boolean;item?:any;message?:string}>('/api/market/items', { method: 'POST', body: JSON.stringify(body) }),
 
   marketInstall: (id: string, token: string) =>
     req<{ok:boolean;message?:string}>('/api/market/items/' + id + '/install', { method: 'POST', body: JSON.stringify({ token }) }),
@@ -109,7 +133,7 @@ export const api = {
 
   verify: (token: string, deviceId: string) =>
     req<{ok:boolean;reason?:string;plan?:string;credits?:number;expires_at?:number;device_kick?:boolean}>(
-      '/api/auth/verify?token=' + encodeURIComponent(token) + '&device_id=' + encodeURIComponent(deviceId)),
+      '/api/auth/verify', { method: 'POST', body: JSON.stringify({ token, device_id: deviceId }) }),
 
   storeSecret: (name: string, value: string) =>
     req<{ok:boolean}>('/api/secrets/' + encodeURIComponent(name), {
@@ -128,6 +152,30 @@ export const api = {
     req<{ok:boolean}>('/api/workflows/' + workflowId + '/nodes/' + nodeId + '/reset', {
       method: 'POST', body: JSON.stringify({ force }),
     }),
+
+  // ---- 导出（M18 补全：节点 zip / 工作流 zip，blob 下载） ----
+  exportNodeZip: async (typeId: string) => {
+    const resp = await fetch(BASE + '/api/export/node/' + encodeURIComponent(typeId), {
+      headers: { 'X-FW-Local-Token': localToken() },
+    })
+    if (!resp.ok) throw new Error('导出失败: HTTP ' + resp.status)
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = String(typeId).split('/').pop() + '.zip'; a.click()
+    URL.revokeObjectURL(url)
+  },
+  exportWorkflowZip: async (id: string) => {
+    const resp = await fetch(BASE + '/api/export/workflow/' + encodeURIComponent(id), {
+      headers: { 'X-FW-Local-Token': localToken() },
+    })
+    if (!resp.ok) throw new Error('导出失败: HTTP ' + resp.status)
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'workflow-' + id + '.zip'; a.click()
+    URL.revokeObjectURL(url)
+  },
 }
 
 // WebSocket 事件订阅

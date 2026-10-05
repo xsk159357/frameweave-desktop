@@ -289,12 +289,19 @@ def _build_jianying_draft(segs, video_path, vname, duration, audio_path, subs, w
 
 
 def _build_pr_xml(segs, video_path, vname, width, height, duration):
-    """Premiere Pro XML（粗略版）。"""
+    """Premiere Pro XML（粗略版）。M5 修复：名称/路径做 XML 转义，防 & < > 破坏工程。"""
+    import xml.sax.saxutils as sax
+
+    def esc(t):
+        return sax.escape(str(t))
+
+    vname_esc = esc(vname)
+    path_esc = esc(video_path.replace(os.sep, "/"))
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<xmeml version="4">',
         '<project id="frameweave">',
-        f'<name>FrameWeave {vname}</name>',
+        f'<name>FrameWeave {vname_esc}</name>',
         '<sequence id="seq1">',
         f'<duration>{int(duration * 25)}</duration>',
         '<rate><timebase>25</timebase></rate>',
@@ -306,10 +313,10 @@ def _build_pr_xml(segs, video_path, vname, width, height, duration):
     for s in segs:
         st = int(s["start"] * 25)
         du = int(s["duration"] * 25)
-        lines.append(f'<clipitem id="c{st}"><name>{vname}</name>'
+        lines.append(f'<clipitem id="c{st}"><name>{vname_esc}</name>'
                      f'<start>{st}</start><end>{st + du}</end>'
                      f'<in>{st}</in><out>{st + du}</out>'
-                     f'<file id="f{st}"><pathurl>file://localhost/{video_path.replace(os.sep, "/")}</pathurl></file>'
+                     f'<file id="f{st}"><pathurl>file://localhost/{path_esc}</pathurl></file>'
                      f'</clipitem>')
     lines += ['</track>', '</sequence>', '</project>', '</xmeml>']
     return "\n".join(lines)

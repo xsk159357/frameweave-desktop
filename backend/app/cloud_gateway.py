@@ -1,9 +1,8 @@
-"""云端授权网关（M19 对接位）。
+"""云端授权网关（M19 对接位，已正式云化）。
 
-本地桩：未配置时全部走本地校验（开发/单机）。
-云化：设置环境变量 FRAMEWEAVE_CLOUD_URL 后，登录/校验/激活改走远程授权服务器
-（服务端 JWT + 签名卡密 + 设备绑定 + 手机号主键 + 无离线宽限）。
-正式上线前需：公网服务器 + 域名(HTTPS) + 阿里云/腾讯云 SMS + 服务端实现。
+默认云端：https://frameweave.ameaaos.com（雨云日本，openresty HTTPS 反代 127.0.0.1:8789）。
+默认即云化：登录/校验/激活走远程授权服务器（签名卡密 + 设备绑定 + 无离线宽限）。
+本地桩/开发：显式设置环境变量 FRAMEWEAVE_CLOUD_URL=""（空）即回落本地校验。
 """
 from __future__ import annotations
 import json
@@ -11,7 +10,10 @@ import os
 import urllib.request
 from typing import Optional
 
-CLOUD_URL = os.environ.get("FRAMEWEAVE_CLOUD_URL", "").rstrip("/")
+def cloud_url() -> str:
+    return os.environ.get("FRAMEWEAVE_CLOUD_URL", "https://frameweave.ameaaos.com").rstrip("/")
+
+CLOUD_URL = ""
 
 def _dbg(msg: str) -> None:
     try:
@@ -26,17 +28,20 @@ def _dbg(msg: str) -> None:
 
 
 def cloud_enabled() -> bool:
-    return bool(CLOUD_URL)
+    return bool(cloud_url())
 
 
 def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
-    _dbg("CLOUD_URL=%r enabled=%s path=%s" % (CLOUD_URL, cloud_enabled(), path))
+    url = cloud_url()
+    _dbg("CLOUD_URL=%r enabled=%s path=%s" % (url, cloud_enabled(), path))
     if not cloud_enabled():
         return None
     try:
-        req = urllib.request.Request(CLOUD_URL + path,
+        req = urllib.request.Request(url + path,
                                      data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json"},
+                                     headers={"Content-Type": "application/json",
+                                              "User-Agent": "FrameWeave-Client/0.2.10",
+                                              "Accept": "application/json"},
                                      method="POST")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             _body = json.loads(resp.read().decode() or "{}")
@@ -54,6 +59,15 @@ def cloud_login(email: str, password: str, device_id: str) -> Optional[dict]:
 def cloud_verify(token: str, device_id: str) -> Optional[dict]:
     return _post("/api/auth/verify", {"token": token, "device_id": device_id})
 
+
+def cloud_email_code(email: str, scene: str) -> Optional[dict]:
+    return _post("/api/auth/email/send-code", {"email": email, "scene": scene})
+
+def cloud_register(email: str, code: str, password: str, device_id: str) -> Optional[dict]:
+    return _post("/api/auth/register", {"email": email, "code": code, "password": password, "device_id": device_id})
+
+def cloud_reset_password(email: str, code: str, new_password: str) -> Optional[dict]:
+    return _post("/api/auth/password/reset", {"email": email, "code": code, "new_password": new_password})
 
 def cloud_activate(email: str, card: str) -> Optional[dict]:
     return _post("/api/auth/activate", {"email": email, "card": card})

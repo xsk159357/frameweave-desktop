@@ -63,8 +63,14 @@ def _parse_card(card: str) -> Optional[dict]:
         return None
 
 
-def _new_session(email: str, device_id: str) -> dict:
+def _hash_pw(password: str, salt: str) -> str:
+    """兼容现有账号的密码哈希；新密码后续迁移到 scrypt/Argon2id。"""
+    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+
+
+def _new_session(email: str, device_id: str, password: str = "") -> dict:
     now = time.time()
+    salt = uuid.uuid4().hex[:8]
     return {
         "user_id": uuid.uuid4().hex[:12],
         "email": email,
@@ -75,6 +81,8 @@ def _new_session(email: str, device_id: str) -> dict:
         "credits": 0,                    # 积分（预留，M18/M19）
         "cards_used": [],                # 已使用卡密 serial（防重复）
         "last_verified": now,
+        "salt": salt,
+        "password_hash": _hash_pw(password, salt) if password else "",
     }
 
 
@@ -108,31 +116,54 @@ class LicenseService:
         return None
 
     # ---------- 账号生命周期 ----------
-    def register(self, email: str, password: str, device_id: str = "") -> dict:
+    def register_verified(self, email: str, password: str, device_id: str = "") -> dict:
         """注册（本地桩）：新会员账号 + N 天试用。密码兼容字段。"""
         email = (email or "").strip().lower()
-        if not email or "@" not in email:
+        if not email or "@" not in email or not email.endswith("@qq.com"):
             return {"ok": False, "message": "邮箱格式不正确"}
         if self._find_by_email(email) is not None:
             return {"ok": False, "message": "该邮箱已注册，请直接登录"}
-        session = _new_session(email, device_id)
+        session = _new_session(email, device_id, password)
         self._sessions[session["user_id"]] = session
         self._save()
         return {"ok": True, "session": self._public(session), "plan": session["plan"]}
+
+    def reset_password(self, email: str, password: str) -> dict:
+        email = (email or "").strip().lower()
+        s = self._find_by_email(email)
+        if s is None:
+            return {"ok": False, "message": "账号不存在"}
+        s["salt"] = uuid.uuid4().hex[:8]
+        s["password_hash"] = _hash_pw(password, s["salt"])
+        self._save()
+        return {"ok": True, "message": "密码重置成功"}
 
     def login(self, email: str, password: str, device_id: str = "") -> dict:
         """登录：已注册账号校验；未注册自动注册（保持旧行为）。
         M17 设备绑定：1 账号 1 设备。新设备登录 → 旧设备下线（返回 device_kick）。
         M19 云化：配置 FRAMEWEAVE_CLOUD_URL 后改走云端授权。"""
         # 云端优先（服务端主键：手机号绑定 + JWT + 设备踢下线）
+        # 云端不可达：正式语义下拒绝服务（无离线宽限），绝不回落本地桩
         if cloud_gateway.cloud_enabled():
             resp = cloud_gateway.cloud_login(email, password, device_id)
-            if resp is not None:
-                return resp
+            if resp is None:
+                return {"ok": False, "message": "无法连接云端授权服务器，请联网后重试"}
+            return resp
         email = (email or "").strip().lower()
         s = self._find_by_email(email)
         if s is None:
-            return self.register(email, password, device_id)
+            return {"ok": False, "message": "该邮箱尚未注册，请先注册"}
+        # 密码校验（本地桩，H1 修复）：新账号已存哈希，必须匹配
+        if s.get("password_hash"):
+            if not password or _hash_pw(password, s.get("salt", "")) != s["password_hash"]:
+                return {"ok": False, "message": "密码不正确"}
+        else:
+            # 旧账号（无哈希，历史数据）：首次登录用本次密码绑定，之后校验
+            if password:
+                s["salt"] = uuid.uuid4().hex[:8]
+                s["password_hash"] = _hash_pw(password, s["salt"])
+            else:
+                return {"ok": False, "message": "该账号需设置密码后才能登录"}
         now = time.time()
         kick = None
         old_device = s.get("device_id")
@@ -153,8 +184,9 @@ class LicenseService:
         M19 云化：云端签发/校验签名卡密。"""
         if cloud_gateway.cloud_enabled():
             resp = cloud_gateway.cloud_activate(email, card)
-            if resp is not None:
-                return resp
+            if resp is None:
+                return {"ok": False, "message": "无法连接云端授权服务器，请联网后重试"}
+            return resp
         email = (email or "").strip().lower()
         payload = _parse_card(card)
         if payload is None:
@@ -182,8 +214,9 @@ class LicenseService:
         M19 云化：云端在线校验（不可达即视为离线不允许使用）。"""
         if cloud_gateway.cloud_enabled():
             resp = cloud_gateway.cloud_verify(token, device_id)
-            if resp is not None:
-                return resp
+            if resp is None:
+                return {"ok": False, "reason": "无法连接云端授权服务器，请联网后重试"}
+            return resp
         for s in self._sessions.values():
             if s.get("token") == token:
                 now = time.time()
@@ -202,7 +235,11 @@ class LicenseService:
         """"管理后台"发行卡密（本地桩/云端预演）。"""
         return _issue_card(plan, days)
 
-    def _public(self, s: dict) -> dict:
+    def register(self, email: str, password: str, device_id: str = "") -> dict:
+        """兼容旧调用：正式注册必须先通过邮箱验证码。"""
+        return {"ok": False, "message": "注册需要邮箱验证码"}
+
+    def _public(self, s: dict):
         return {
             "user_id": s["user_id"], "email": s["email"], "token": s["token"],
             "plan": s.get("plan", "trial"), "expires_at": s.get("expires_at"),

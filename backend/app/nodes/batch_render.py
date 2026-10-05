@@ -212,9 +212,9 @@ class BatchRenderNode(NodeBase):
         sub_asset = store.save_asset(Asset(id="", kind=PortType.SUBTITLE.value),
                                      payload=subs)
 
-        # 渲染（subprocess 阻塞 -> to_thread）
-        out_name = _render_template(str(params.get("output_prefix", "batch_")) + name,
-                                    item.get("_vars") or global_vars)
+        # 渲染（subprocess 阻塞 -> to_thread）；输出名追加条目序号避免同名条目互相覆盖（M1）
+        out_name = (_render_template(str(params.get("output_prefix", "batch_")) + name,
+                                     item.get("_vars") or global_vars) + "_" + str(idx))
         out = await asyncio.to_thread(
             self._render_sync, render_cls, ctx, video_asset, seg_asset,
             tts_asset, sub_asset, params, out_name)

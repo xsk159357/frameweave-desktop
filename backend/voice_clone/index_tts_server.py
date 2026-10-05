@@ -10,8 +10,14 @@
 """
 import os, sys, base64, io, time, json, traceback, threading
 
-sys.path.insert(0, r"C:/Users/Administrator/fw-patch")          # wetext ASCII 副本
-CODE_DIR = r"F:/1223/解说工坊/FrameWeave/backend/models/index-tts-code"
+# M10 修复：硬编码路径改为环境变量优先（FW_PATCH_DIR / INDEX_TTS_CODE_DIR），
+# 便于换机与打包分发；未设置时回退到本机开发默认路径。
+_patch = os.environ.get("FW_PATCH_DIR", r"C:/Users/Administrator/fw-patch")  # wetext ASCII 副本
+if _patch and os.path.isdir(_patch):
+    sys.path.insert(0, _patch)
+CODE_DIR = os.environ.get("INDEX_TTS_CODE_DIR", r"F:/1223/解说工坊/FrameWeave/backend/models/index-tts-code")
+if not os.path.isdir(CODE_DIR):
+    print("[indextts] WARN: INDEX_TTS_CODE_DIR 不存在: %s（设置环境变量指定正确路径）" % CODE_DIR, flush=True)
 sys.path.insert(0, CODE_DIR)
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["HF_HUB_CACHE"] = os.path.join(CODE_DIR, "checkpoints", "hf_cache")
