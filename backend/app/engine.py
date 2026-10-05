@@ -1,6 +1,7 @@
 """图执行引擎：DAG 校验、拓扑排序、增量缓存、状态回调、并行执行。"""
 from __future__ import annotations
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -246,7 +247,9 @@ class Engine:
                 parts.append(up.asset_ids[port_name])
             else:
                 parts.append("none")
-        return json.dumps(parts, ensure_ascii=False)[:512]
+        # 哈希而非截断：避免长参数下缓存键碰撞（M3 修复）
+        raw = json.dumps(parts, ensure_ascii=False)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
     # ---------- 执行 ----------
     async def execute(self, wf: Workflow, run_node_ids: Optional[Set[str]] = None,
@@ -338,6 +341,7 @@ class Engine:
 
     async def _run_one(self, wf: Workflow, nid: str) -> bool:
         node = wf.nodes[nid]
+        saved_ids: List[str] = []  # 本次运行已落盘资产（失败/取消时回滚，防孤儿残留）
         try:
             cls = get_class(node.type_id)
             spec = get_spec(node.type_id)
@@ -394,10 +398,12 @@ class Engine:
                     continue
                 if isinstance(val, Asset):
                     self.store.save_asset(val)
+                    saved_ids.append(val.id)
                     node.asset_ids[spec_p.name] = val.id
                 elif isinstance(val, (dict, list, str, int, float, bool)):
                     asset = Asset(id="", kind=spec_p.type.value, meta={"node": nid, "port": spec_p.name})
                     asset = self.store.save_asset(asset, payload=val)
+                    saved_ids.append(asset.id)
                     node.asset_ids[spec_p.name] = asset.id
 
             node.status = NodeStatus.SUCCESS
@@ -417,10 +423,18 @@ class Engine:
                         "progress": 1.0, "asset_ids": node.asset_ids})
             return True
         except asyncio.CancelledError:
+            for aid in saved_ids:
+                try: self.store.delete(aid)
+                except Exception: pass
+            node.asset_ids = {}
             node.status = NodeStatus.CANCELLED
             self._emit({"type": "node_update", "node_id": nid, "status": "cancelled"})
             return False
         except Exception as e:
+            for aid in saved_ids:
+                try: self.store.delete(aid)
+                except Exception: pass
+            node.asset_ids = {}
             node.status = NodeStatus.FAILED
             node.error = f"{type(e).__name__}: {e}"
             node.finished_at = time.time()

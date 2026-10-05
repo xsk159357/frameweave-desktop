@@ -77,17 +77,44 @@ class AssetStore:
         with open(asset.path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def delete(self, aid: str) -> None:
-        asset = self.get(aid)
-        if asset:
-            if asset.path and os.path.exists(asset.path):
-                try: os.remove(asset.path)
-                except OSError: pass
-            mp = self._meta_path(aid)
-            if os.path.exists(mp):
-                try: os.remove(mp)
-                except OSError: pass
+    def _remove_files(self, aid: str, meta_path: str) -> None:
+        """删除资产文件与元数据（容忍损坏/缺失，不依赖 get 解析）。"""
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            p = data.get("path", "") if isinstance(data, dict) else ""
+        except Exception:
+            p = ""
+        if p and os.path.exists(p):
+            try: os.remove(p)
+            except OSError: pass
+        try: os.remove(meta_path)
+        except OSError: pass
         self._cache.pop(aid, None)
+
+    def delete(self, aid: str) -> None:
+        mp = self._meta_path(aid)
+        if os.path.exists(mp):
+            self._remove_files(aid, mp)
+
+    def prune_orphans(self, keep: Optional[set] = None) -> int:
+        """删除未被引用的孤儿资产（元数据 + 文件），返回删除数量。
+
+        中间资产唯一的持久引用是引擎缓存索引（cache_index.json）；
+        部分落盘失败/重跑覆盖留下的无引用资产文件即孤儿，统一在此清理。
+        单个元数据损坏不阻止其余清理（delete 不依赖 get 解析）。
+        """
+        keep = keep or set()
+        removed = 0
+        for fname in os.listdir(self.meta_dir):
+            if not fname.endswith(".json"):
+                continue
+            aid = fname[:-5]
+            if aid in keep:
+                continue
+            self._remove_files(aid, self._meta_path(aid))
+            removed += 1
+        return removed
 
 
 def file_fingerprint(path: str, chunk: int = 1 << 20) -> str:

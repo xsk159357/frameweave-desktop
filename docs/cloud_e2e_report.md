@@ -34,8 +34,17 @@
 - 宿主 8900 反代进程会被 DSH pwsh 的 Job Object 回收（Start-Process 子进程随 pwsh 结束被杀）；当前用 run_in_background 前台跑 node 保持；彻底持久化建议宿主计划任务（schtasks 方案尚未验证通过）。
 - cloud_gateway.py 已加 `_dbg` 调试日志（`FRAMEWEAVE_DEBUG_LOG` env 开关，默认关闭），保留以便排查。
 
-## 遗留待办（不进本次提交范围）
+## 遗留待办（已闭环，v0.2.11 实测确认）
 
-- cloud_gateway 云端不可达时回落本地桩——正式版应视为离线不允许使用
-- backend 无鉴权（本地调用者直接可用）——云化发布前必修
-- 畸形 body 返回 500
+- [x] cloud_gateway 云端不可达时回落本地桩——正式版应视为离线不允许使用
+      → 已修复：全部 6 个 auth 路由（login/verify/register/reset/send-code/activate）在 cloud_enabled() 时
+        云端不可达（resp=None）返回 {"ok":false,"message":"云端授权服务不可用"}，不回落本地桩；
+        仅显式 FRAMEWEAVE_CLOUD_URL=""（dev）才走本地 license_svc。
+        实测（云端指向不可达 127.0.0.1:9999）：login/send-code/activate 均返回"云端授权服务不可用"。
+- [x] backend 无鉴权（本地调用者直接可用）——云化发布前必修
+      → 已修复（H3）：local_token_guard 中间件保护 /api/secrets*、/api/export*、/api/assets* 全部 +
+        POST/PUT/DELETE 写操作；/api/auth/*、/api/specs、/api/templates、/ws 保持开放（登录前必须可达）。
+        实测：无 token 访问 /api/export → 401；带 X-FW-Local-Token → 200。
+- [x] 畸形 body 返回 500
+      → 已修复：RequestValidationError→422 结构化 errors、JSONDecodeError→400、兜底→500 统一结构。
+        实测：畸形 JSON → 422 json_invalid；缺字段 → 422 missing。

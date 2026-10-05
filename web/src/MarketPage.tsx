@@ -142,13 +142,13 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* 发布表单 */}
-        {showPublish && <PublishForm onCancel={() => setShowPublish(false)} onSubmit={publish} />}
+        {showPublish && <PublishForm onCancel={() => setShowPublish(false)} onSubmit={publish} push={pushToast} />}
       </div>
     </div>
   )
 }
 
-function PublishForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (f: any) => void }) {
+function PublishForm({ onCancel, onSubmit, push }: { onCancel: () => void; onSubmit: (f: any) => void; push: (m: string, k?: 'ok' | 'err') => void }) {
   const [kind, setKind] = useState('node')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -156,6 +156,24 @@ function PublishForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
   const [downloadUrl, setDownloadUrl] = useState('')
   const [tags, setTags] = useState('')
   const [sending, setSending] = useState(false)
+  const [nodes, setNodes] = useState<string[]>([])
+  const [wfs, setWfs] = useState<{ id: string; name: string }[]>([])
+  const [pick, setPick] = useState('')
+
+  useEffect(() => {
+    api.userNodes().then((r) => setNodes(r.nodes || [])).catch(() => { /* ignore */ })
+    api.listWorkflows().then((r) => setWfs(r || [])).catch(() => { /* ignore */ })
+  }, [])
+  useEffect(() => { setPick('') }, [kind])
+
+  const exportZip = async () => {
+    if (!pick) { push('请先选择要导出的' + (kind === 'node' ? '节点' : '工作流'), 'err'); return }
+    try {
+      if (kind === 'node') await api.exportNodeZip(pick)
+      else await api.exportWorkflowZip(pick)
+      push('已导出 ' + pick + '（zip 可上传网盘取直链）', 'ok')
+    } catch (e: any) { push('导出失败: ' + (e.message || e), 'err') }
+  }
 
   const input: any = {
     width: '100%', border: '1px solid ' + ('var(--border)'), borderRadius: 8,
@@ -174,12 +192,23 @@ function PublishForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
             </button>
           ))}
         </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <select style={{ ...input, marginBottom: 0, flex: 1, color: 'inherit', background: '#141828' }} value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">{kind === 'node' ? '选择要导出的节点…' : '选择要导出的工作流…'}</option>
+            {(kind === 'node' ? nodes.map((n) => ({ id: n, name: n })) : wfs).map((it) => (
+              <option key={it.id} value={it.id}>{it.name}</option>
+            ))}
+          </select>
+          <button onClick={exportZip} style={{ padding: '7px 12px', borderRadius: 8, cursor: 'pointer', border: '1px solid ' + ('var(--border)'), background: '#2a3557', color: '#c9d6ff', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+            <Download size={13} /> 导出 {kind === 'node' ? '节点' : '工作流'} zip
+          </button>
+        </div>
         <input style={input} placeholder="标题 *" value={title} onChange={(e) => setTitle(e.target.value)} />
         <textarea style={{ ...input, minHeight: 60, resize: 'vertical' }} placeholder="描述" value={description} onChange={(e) => setDescription(e.target.value)} />
         <input style={input} placeholder="价格（积分，0 = 免费）" type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
         <input style={input} placeholder="网盘直链（百度/123 分享直链，可留空）" value={downloadUrl} onChange={(e) => setDownloadUrl(e.target.value)} />
         <input style={input} placeholder="标签（逗号分隔，如 文案, 视频）" value={tags} onChange={(e) => setTags(e.target.value)} />
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 10 }}>提示：先导出节点/工作流得到 zip，上传到网盘取直链后填在上方；本地桩可留空直链仅作演示。</div>
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 10 }}>提示：上方可直接导出所选节点/工作流 zip，上传到网盘取直链后填入下方；本地桩可留空直链仅作演示。</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onCancel} style={{ padding: '6px 14px', borderRadius: 8, cursor: 'pointer', border: '1px solid ' + ('var(--border)'), background: 'transparent', color: 'var(--text-faint)', fontSize: 13 }}>取消</button>
           <button onClick={() => { setSending(true); onSubmit({ kind, title, description, price, download_url: downloadUrl, tags }) }} disabled={!title || sending} style={{ padding: '6px 16px', borderRadius: 8, cursor: sending || !title ? 'wait' : 'pointer', border: 'none', background: '#3a5bd9', color: '#fff', fontSize: 13 }}>发布</button>

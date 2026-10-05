@@ -8,10 +8,13 @@ import json
 import os
 import sys
 import zipfile
+import asyncio
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import UploadFile, File, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import UploadFile, File, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .assets import AssetStore
@@ -24,6 +27,19 @@ from .draft_validator import validate_jianying_draft
 from .secrets import store_secret, read_secret, list_secret_names, delete_secret
 from .wfstore import WorkflowStore
 from .market import MarketService
+from . import email_service, cloud_gateway
+
+# 读取 backend/.env（不覆盖宿主机已有环境变量）
+def _load_local_env():
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if not _line or _line.startswith("#") or "=" not in _line: continue
+                _key, _value = _line.split("=", 1)
+                os.environ.setdefault(_key.strip(), _value.strip().strip("\"\'"))
+_load_local_env()
 
 def _resolve_data_dir():
     """数据目录：源码模式用 backend/data；PyInstaller 打包模式用 %APPDATA%/FrameWeave。"""
@@ -37,7 +53,83 @@ def _resolve_data_dir():
 
 DATA_DIR = _resolve_data_dir()
 
-app = FastAPI(title="FrameWeave Local Service", version="0.1.0")
+AUTH_REVISION = "email-code-v2"
+BACKEND_PROTOCOL = 3
+app = FastAPI(title="FrameWeave Local Service", version="0.2.11")
+
+# ---- 本地 API 鉴权（H3 修复）----
+# 打包版：main.cjs 生成随机令牌经 FRAMEWEAVE_LOCAL_TOKEN 注入后端与渲染进程。
+# 源码/dev：回落到固定 dev-local-token（vite 前端同值）。
+LOCAL_TOKEN = os.environ.get("FRAMEWEAVE_LOCAL_TOKEN", "") or "dev-local-token"
+
+
+def _local_token_ok(tok: str) -> bool:
+    if tok == LOCAL_TOKEN:
+        return True
+    # dev 联调（FRAMEWEAVE_DEV_ENDPOINTS=1）额外放行 dev 令牌
+    if os.environ.get("FRAMEWEAVE_DEV_ENDPOINTS") == "1" and tok == "dev-local-token":
+        return True
+    return False
+
+
+@app.middleware("http")
+async def local_token_guard(request: Request, call_next):
+    """本地 API 鉴权（纵深防御，防本机恶意网页/进程劫持本地服务）。
+
+    保护面：
+      - /api/secrets*           全部（密钥明文读写删）
+      - /api/export/*           全部（导出工作流/节点包）
+      - /api/assets/*           全部（媒体文件与结构化资产读取）
+      - 写操作                  POST/PUT/DELETE 的
+                                workflows / market / user_nodes / util / draft
+    说明：
+      - /api/auth/*、/api/specs、/api/templates、/ws 保持开放（登录前必须可达）。
+      - 渲染进程所有请求均带 X-FW-Local-Token（打包版为随机令牌，dev 回落常量），
+        因此加严不会影响前端。
+    """
+    path = request.url.path
+    method = request.method.upper()
+    if path.startswith("/api/auth") or path == "/api/health" or path.startswith("/ws"):
+        return await call_next(request)
+    need = False
+    if path.startswith("/api/secrets") or path.startswith("/api/export") or path.startswith("/api/assets"):
+        need = True
+    elif method in ("POST", "PUT", "DELETE") and path.startswith(
+            ("/api/workflows", "/api/market", "/api/user_nodes", "/api/util", "/api/draft")):
+        need = True
+    if need:
+        tok = request.headers.get("X-FW-Local-Token", "")
+        if not _local_token_ok(tok):
+            return JSONResponse({"ok": False, "message": "本地授权令牌无效"}, status_code=401)
+    return await call_next(request)
+
+
+# ---- 统一异常处理（畸形容器防 500） ----
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError):
+    """请求体/参数校验失败：返回规范 422（不再让畸形 body 落到 500）。"""
+    return JSONResponse(
+        {"ok": False, "message": "请求参数校验失败", "errors": exc.errors()[:5]},
+        status_code=422,
+    )
+
+
+@app.exception_handler(json.JSONDecodeError)
+async def _json_handler(request: Request, exc: json.JSONDecodeError):
+    """请求体不是合法 JSON：规范 400。"""
+    return JSONResponse({"ok": False, "message": "请求体不是合法 JSON"}, status_code=400)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_handler(request: Request, exc: Exception):
+    """兜底：未捕获异常返回规范 500 结构，不泄露内部细节（HTTPException 由内置 handler 优先处理）。"""
+    import logging
+    try:
+        logging.getLogger("uvicorn.error").error(
+            "unhandled: %s %s -> %s", request.method, request.url.path, repr(exc))
+    except Exception:
+        pass
+    return JSONResponse({"ok": False, "message": "服务器内部错误"}, status_code=500)
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,6 +147,21 @@ declarative.scan()
 store = AssetStore(os.path.join(DATA_DIR, "assets"))
 wfstore = WorkflowStore(os.path.join(DATA_DIR, "workflows"))
 declarative.set_user_nodes_dir(os.path.join(DATA_DIR, "user_nodes"))
+
+# 启动清理：删除未被缓存索引引用的孤儿中间资产（部分落盘失败 / 重跑覆盖残留）
+try:
+    _cache_path = os.path.join(store.root, "cache_index.json")
+    _keep: Set[str] = set()
+    if os.path.exists(_cache_path):
+        with open(_cache_path, "r", encoding="utf-8") as _f:
+            _idx = json.load(_f) or {}
+        for _entry in _idx.values():
+            _keep.update((_entry.get("assets") or {}).values())
+    _n = store.prune_orphans(_keep)
+    if _n:
+        print(f"[prune] 启动清理孤儿资产 {_n} 个")
+except Exception as _e:  # noqa: BLE001
+    print("[prune] 跳过:", _e)
 
 # 迁移 v0.2.3 及以前装进程序目录的用户节点（打包版旧位置 _internal/user_nodes）
 try:
@@ -148,6 +255,21 @@ class LoginRequest(BaseModel):
     password: str
     device_id: str = ""
 
+class EmailCodeRequest(BaseModel):
+    email: str
+    scene: str = "register"
+
+class RegisterRequest(BaseModel):
+    email: str
+    code: str
+    password: str
+    device_id: str = ""
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
 class ActivateRequest(BaseModel):
     email: str
     card: str
@@ -166,10 +288,41 @@ class MarketInstall(BaseModel):
     token: str = ""
 
 
+_SECRET_KEY_RE = __import__("re").compile(r"(key|secret|token|password|api)", __import__("re").IGNORECASE)
+
+
+def _protect_secret_params(nodes) -> None:
+    """工作流保存时把 key 类参数明文替换为 @secret: 保险箱引用（DPAPI 密文落盘，H5 修复）。
+
+    值匹配密钥类字段名（key/secret/token/password/api）且不是 @secret: 引用时：
+    存入本机保险箱（secrets.py，DPAPI 加密），params 中改为 @secret:fw_wf_<节点>_<字段>。
+    加密失败时保留原文（本地非 Windows 环境降级）。
+    """
+    from . import secrets as _secrets
+    for nd in nodes or []:
+        params = nd.get("params") or {}
+        nid = str(nd.get("id", "n"))
+        for name, val in list(params.items()):
+            if not isinstance(val, str) or not val or val.startswith("@secret:"):
+                continue
+            if not _SECRET_KEY_RE.search(str(name)):
+                continue
+            sec_name = f"fw_wf_{nid}_{name}"
+            try:
+                _secrets.store_secret(sec_name, val)
+                params[name] = "@secret:" + sec_name
+            except Exception:  # noqa: BLE001
+                pass  # 非 Windows / DPAPI 不可用：保留原文（单机降级）
+
+
 # ---- 工作流 API ----
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "frameweave", "version": "0.1.0"}
+    return {"ok": True, "service": "frameweave", "version": "0.2.11", "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
+
+@app.get("/api/system/build-info")
+async def build_info():
+    return {"ok": True, "service": "frameweave", "version": "0.2.10", "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
 
 # ---- 用户节点（声明式插件） ----
 @app.get("/api/user_nodes")
@@ -306,6 +459,7 @@ async def list_wf():
 async def create_wf(body: WFCreate):
     wf = wfstore.create(body.name)
     if body.nodes:
+        _protect_secret_params(body.nodes)
         from .engine import GraphNode
         wf.nodes = {}
         for nd in body.nodes:
@@ -341,6 +495,7 @@ async def update_wf(wfid: str, body: WFUpdate):
     if body.name is not None:
         wf.name = body.name
     if body.nodes is not None:
+        _protect_secret_params(body.nodes)
         from .engine import GraphNode
         old_by_id = {nid: n for nid, n in wf.nodes.items()}
         wf.nodes = {}
@@ -486,12 +641,55 @@ async def get_asset_file(aid: str):
 
 
 # ---- 授权 API（本地桩） ----
+@app.post("/api/auth/email/send-code")
+async def send_email_code(body: EmailCodeRequest):
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_email_code(body.email, body.scene)
+        return resp or {"ok": False, "message": "云端授权服务不可用"}
+    if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
+    if body.scene not in ("register", "reset_password"): return {"ok": False, "code": "INVALID_SCENE", "message": "验证码场景不正确"}
+    ok, message = await asyncio.to_thread(email_service.issue_code, body.email, body.scene)
+    return {"ok": ok, "message": message, "expires_in": 300, "retry_after": 60}
+
+@app.post("/api/auth/register")
+async def register(body: RegisterRequest):
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_register(body.email, body.code, body.password, body.device_id)
+        return resp or {"ok": False, "message": "云端授权服务不可用"}
+    if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
+    if len(body.password) < 8: return {"ok": False, "code": "WEAK_PASSWORD", "message": "密码至少 8 位"}
+    verified, message = await asyncio.to_thread(email_service.verify_code, body.email, "register", body.code)
+    if not verified: return {"ok": False, "message": message}
+    return license_svc.register_verified(body.email, body.password, body.device_id)
+
+@app.post("/api/auth/password/reset")
+async def reset_password(body: ResetPasswordRequest):
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_reset_password(body.email, body.code, body.new_password)
+        return resp or {"ok": False, "message": "云端授权服务不可用"}
+    if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
+    if len(body.new_password) < 8: return {"ok": False, "message": "密码至少 8 位"}
+    verified, message = await asyncio.to_thread(email_service.verify_code, body.email, "reset_password", body.code)
+    if not verified: return {"ok": False, "message": message}
+    result = license_svc.reset_password(body.email, body.new_password)
+    if not result.get("ok"):
+        return {"ok": True, "message": "如果该邮箱已注册，密码重置将完成"}
+    return result
+
 @app.post("/api/auth/login")
 async def login(body: LoginRequest):
+    if not email_service.valid_qq_email(body.email):
+        return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_login(body.email, body.password, body.device_id)
+        return resp or {"ok": False, "message": "云端授权服务不可用"}
     return license_svc.login(body.email, body.password, body.device_id)
 
 @app.post("/api/auth/activate")
 async def activate(body: ActivateRequest):
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_activate(body.email, body.card)
+        return resp or {"ok": False, "message": "云端授权服务不可用"}
     return license_svc.activate_card(body.email, body.card)
 
 if DEV_ENDPOINTS:
@@ -593,9 +791,16 @@ if DEV_ENDPOINTS:
         return {"ok": False, "message": "账号不存在"}
 
 
-@app.get("/api/auth/verify")
-async def verify(token: str):
-    return license_svc.verify(token)
+@app.api_route("/api/auth/verify", methods=["GET", "POST"])
+async def verify(token: str = "", device_id: str = "", body: dict = None):
+    """订阅校验：兼容 GET(query) 与 POST(body)，契约与云端一致。"""
+    body = body or {}
+    if cloud_gateway.cloud_enabled():
+        resp = cloud_gateway.cloud_verify(token or body.get("token", ""), device_id or body.get("device_id", ""))
+        return resp or {"ok": False, "reason": "云端授权服务不可用"}
+    token = token or str(body.get("token") or "")
+    device_id = device_id or str(body.get("device_id") or "")
+    return license_svc.verify(token, device_id)
 
 
 # ---- WebSocket ----
