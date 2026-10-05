@@ -156,11 +156,13 @@ export default function App() {
     } catch (e: any) { useAppStore.getState().pushToast('创建失败: ' + (e.message || e), 'err') }
   }
 
-  // M17：启动在线校验
+  // M17：在线校验（启动即验 + 每 30s 周期轮询）
+  // 产品策略：账号登录制，单端在线——同一账号在新设备登录后，旧设备立即被踢下线。
+  // 云端 verify 检测到 device_id 不匹配即返回失败（device_kick），此处在周期轮询中发现即清会话回登录页。
   useEffect(() => {
     if (!session || !session.deviceId) return
     let alive = true
-    ;(async () => {
+    const check = async () => {
       try {
         const v = await api.verify(session.token, session.deviceId)
         if (!alive) return
@@ -173,8 +175,10 @@ export default function App() {
           window.alert(v.reason || '授权校验失败，请重新登录')
         }
       } catch (e: any) { console.error('在线校验失败', e) }
-    })()
-    return () => { alive = false }
+    }
+    check()
+    const timer = window.setInterval(check, 30000)
+    return () => { alive = false; window.clearInterval(timer) }
   }, [session?.token])
 
   if (!engineReady) {

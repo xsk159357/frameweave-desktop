@@ -50,7 +50,10 @@ export function LoginPage() {
     try {
       if (!email.toLowerCase().endsWith('@qq.com') || password.length < 8) { setErr('请输入 QQ 邮箱和至少 8 位密码'); return }
       const r = await api.login(email, password, deviceId)
-      if (r.ok && r.session) setSession({ token: r.session.token, email: r.session.email, expiresAt: r.session.expires_at, plan: r.session.plan || 'trial', credits: r.session.credits || 0, deviceId })
+      if (r.ok && r.session) {
+        if (r.device_kick?.message) setMsg(r.device_kick.message)
+        setSession({ token: r.session.token, email: r.session.email, expiresAt: r.session.expires_at, plan: r.session.plan || 'trial', credits: r.session.credits || 0, deviceId })
+      }
       else setErr(r.message || '登录失败')
     } catch (e: any) { setErr(e.message || '登录失败') } finally { setBusy(false) }
   }
