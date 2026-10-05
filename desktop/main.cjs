@@ -226,7 +226,27 @@ app.whenReady().then(async () => {
 // ---- 自动更新（electron-updater） ----
 let updateInProgress = false
 
+function sendUpdateStatus(type, message, version = '') {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:status', { type, message, version })
+  }
+}
+
 function setupAutoUpdate() {
+  // 前端可主动触发检查；开发模式也返回明确反馈，避免按钮无反应
+  ipcMain.on('check-for-update', () => {
+    if (!app.isPackaged) {
+      sendUpdateStatus('info', '开发模式暂不检查更新')
+      return
+    }
+    sendUpdateStatus('info', '正在检查更新…')
+    autoUpdater.checkForUpdates().catch((e) => {
+      const msg = e && e.message || String(e)
+      fwLog('[updater] check 失败(ipc):', msg)
+      sendUpdateStatus('error', '检查更新失败：' + msg)
+    })
+  })
+
   if (!app.isPackaged) {
     console.log('[updater] 开发模式跳过自动更新')
     return
@@ -246,6 +266,7 @@ function setupAutoUpdate() {
 
   autoUpdater.on('update-available', (info) => {
     const v = info && info.version
+    sendUpdateStatus('info', '发现新版本 ' + v + '，请在弹窗中确认下载', v)
     mainWindow && mainWindow.webContents.send('update:available', v)
     if (mainWindow && !updateInProgress) {
       dialog.showMessageBox(mainWindow, {
@@ -266,6 +287,7 @@ function setupAutoUpdate() {
 
   autoUpdater.on('update-not-available', () => {
     console.log('[updater] 已是最新版本')
+    sendUpdateStatus('ok', '当前已是最新版本')
   })
 
   autoUpdater.on('download-progress', (p) => {
@@ -291,14 +313,9 @@ function setupAutoUpdate() {
 
   autoUpdater.on('error', (err) => {
     updateInProgress = false
-    console.error('[updater] 更新失败:', err && err.message)
-  })
-
-  // 前端可主动触发检查
-  ipcMain.on('check-for-update', () => {
-    autoUpdater.checkForUpdates().catch((e) => {
-      fwLog('[updater] check 失败(ipc):', e && e.message || e)
-    })
+    const msg = err && err.message || String(err)
+    console.error('[updater] 更新失败:', msg)
+    sendUpdateStatus('error', '更新检查失败：' + msg)
   })
 
   // 启动 5 秒后检查（无网/更新源不通时静默失败，不再产生 unhandledRejection）

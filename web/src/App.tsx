@@ -44,6 +44,15 @@ export default function App() {
     try { ;(window as any).frameweave?.window?.setTitlebarTheme?.(settings.theme) } catch { /* 浏览器模式忽略 */ }
   }, [settings.theme])
 
+  // 自动更新状态反馈：按钮点击、最新版本、错误、开发模式均显示 toast
+  useEffect(() => {
+    const onStatus = (s: any) => {
+      const kind = s?.type === 'error' ? 'err' : s?.type === 'ok' ? 'ok' : 'info'
+      useAppStore.getState().pushToast(s?.message || '更新状态未知', kind)
+    }
+    try { const w = (window as any).frameweave; w?.onUpdateStatus?.(onStatus) } catch { /* 浏览器模式 */ }
+  }, [])
+
   // 画布右键菜单「导入节点插件」事件
   useEffect(() => {
     const h = () => setShowPlugin(true)

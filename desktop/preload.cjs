@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('frameweave', {
   checkForUpdate: () => ipcRenderer.send('check-for-update'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, v) => cb(v)),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
+  onUpdateStatus: (cb) => ipcRenderer.on('update:status', (_e, s) => cb(s)),
   // 窗口控制桥（无边框方案A：titleBarOverlay 原生控件 + 渲染层可编程控制）
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
