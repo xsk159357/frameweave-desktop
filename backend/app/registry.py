@@ -31,9 +31,7 @@ def get_spec(type_id: str) -> NodeSpec:
     return get_class(type_id).spec()
 
 
-_KNOWN_NODE_MODULES = [
-    "ai_narrate", "asr", "tts", "video_render",
-]
+_KNOWN_NODE_MODULES = []
 
 def autodiscover() -> None:
     """自动导入 nodes 包下所有模块以触发 register（兼容 PyInstaller frozen 环境）。"""
