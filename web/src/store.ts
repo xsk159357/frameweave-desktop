@@ -72,7 +72,8 @@ function loadSettings(): AppSettings {
     const legacy = localStorage.getItem('fw_theme')
     if (legacy === 'light') return { theme: 'light', dragEnabled: true }
   } catch { /* 忽略损坏 */ }
-  return { theme: 'dark', dragEnabled: true }
+  // 新用户默认亮色；用户切换后通过 fw_settings_v1 持久化
+  return { theme: 'light', dragEnabled: true }
 }
 
 function loadSession(): SessionInfo | null {

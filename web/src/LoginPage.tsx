@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Logo } from './Logo'
 import {
-  Mail, Lock, CheckCircle2, AlertCircle,
+  Mail, Lock, CheckCircle2, AlertCircle, Sun, Moon,
   Layers, Workflow, Sparkles, ShieldCheck, DownloadCloud,
 } from 'lucide-react'
 import { api } from './api'
@@ -10,6 +10,8 @@ import { useAppStore } from './store'
 
 export function LoginPage() {
   const setSession = useAppStore((s) => s.setSession)
+  const settings = useAppStore((s) => s.settings)
+  const setSettings = useAppStore((s) => s.setSettings)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -91,6 +93,15 @@ export function LoginPage() {
     <div className="lp-root">
       <div className="lp-grid-bg" />
       <div className="lp-glow" style={{ width: 520, height: 520, left: '-80px', top: '-80px', background: 'rgba(139,147,255,.32)' }} />
+      <button
+        className="lp-theme-toggle"
+        onClick={() => setSettings({ theme: settings.theme === 'light' ? 'dark' : 'light' })}
+        title={settings.theme === 'light' ? '切换到暗色主题' : '切换到亮色主题'}
+        aria-label={settings.theme === 'light' ? '切换到暗色主题' : '切换到亮色主题'}
+      >
+        {settings.theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+        <span>{settings.theme === 'light' ? '暗色' : '亮色'}</span>
+      </button>
 
       {/* 全新品牌场景：创作工作台视觉，不复用旧功能列表结构 */}
       <section className="lp-hero" aria-label="FrameWeave AI 视频创作工作台">
