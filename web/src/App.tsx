@@ -35,6 +35,7 @@ export default function App() {
   const [tplList, setTplList] = useState<{ id: string; title: string; description: string; nodes: number }[]>([])
   const [showTpl, setShowTpl] = useState(false)
   const [backend, setBackend] = useState<null | boolean>(null)
+  const [authNotice, setAuthNotice] = useState('')
 
   // 主题：亮/暗即时生效（CSS 变量覆盖集，无需重启）
   const settings = useAppStore((s) => s.settings)
@@ -181,7 +182,7 @@ export default function App() {
           }
         } else {
           useAppStore.getState().setSession(null)
-          window.alert(v.reason || '授权校验失败，请重新登录')
+          setAuthNotice(v.reason || '授权校验失败，请重新登录')
         }
       } catch (e: any) { console.error('在线校验失败', e) }
     }
@@ -209,7 +210,26 @@ export default function App() {
       </div>
     )
   }
-  if (!session) return <LoginPage />
+  if (!session) return (
+    <>
+      <LoginPage />
+      {authNotice && (
+        <div className="fw-auth-modal" role="dialog" aria-modal="true" aria-labelledby="fw-auth-title">
+          <div className="fw-auth-modal-card">
+            <div className="fw-auth-modal-icon"><Crown size={22} /></div>
+            <div className="fw-auth-modal-content">
+              <div id="fw-auth-title" className="fw-auth-modal-title">订阅需要续费</div>
+              <div className="fw-auth-modal-text">{authNotice}</div>
+              <div className="fw-auth-modal-actions">
+                <button className="fw-btn fw-btn-ghost" onClick={() => setAuthNotice('')}>知道了</button>
+                <button className="fw-btn fw-btn-primary" onClick={() => setAuthNotice('')}>前往续费</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
 
   return (
     <div className="fw-app-shell" style={{ height: '100%', display: 'flex', flexDirection: 'column',
