@@ -49,6 +49,16 @@ Set-Content -Path $nsiFile -Value $nsi -Encoding UTF8
 # 4) makensis 编译
 Write-Host "[build] 4/4 makensis 编译（压缩大文件，需几分钟）"
 Push-Location $build
-try { & $mk /V2 $nsiFile 2>&1 | Out-Host; if ($LASTEXITCODE -ne 0) { throw "makensis 失败" } } finally { Pop-Location }
+try {
+  # NativeCommandError 防护：makensis 压缩大文件时 stderr 有正常输出，
+  # EAP=Stop 下会被包装成终止异常（假失败 exit=1）。与其他段一致：
+  # 临时降为 Continue，以 $LASTEXITCODE 为准判断真实成败。
+  $eap3 = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  & $mk /V2 $nsiFile 2>&1 | Out-Host
+  $c3 = $LASTEXITCODE
+  $ErrorActionPreference = $eap3
+  if ($c3 -ne 0) { throw "makensis 失败 (exit=$c3)" }
+} finally { Pop-Location }
 if (-not (Test-Path $out)) { throw "安装包未生成" }
 Write-Host "[build] ✅ 安装包: $out ($([math]::Round((Get-Item $out).Length/1MB,1)) MB)"
