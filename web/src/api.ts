@@ -27,6 +27,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(msg)
   }
   return resp.json() as Promise<T>
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw new Error('请求超时：云端授权服务暂时无响应，请检查网络后重试')
+    if (e instanceof TypeError && /fetch|network|failed/i.test(String(e.message || e))) throw new Error('无法连接本地服务，请稍后重试')
+    throw e
   } finally { clearTimeout(timer) }
 }
 

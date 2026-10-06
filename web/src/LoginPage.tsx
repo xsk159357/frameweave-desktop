@@ -55,7 +55,10 @@ export function LoginPage() {
         setSession({ token: r.session.token, email: r.session.email, expiresAt: r.session.expires_at, plan: r.session.plan || 'trial', credits: r.session.credits || 0, deviceId })
       }
       else setErr(r.message || '登录失败')
-    } catch (e: any) { setErr(e.message || '登录失败') } finally { setBusy(false) }
+    } catch (e: any) {
+      const message = e?.message || '登录失败'
+      setErr(message.includes('超时') || message.includes('无法连接') ? message : '登录失败：' + message)
+    } finally { setBusy(false) }
   }
 
   const doRegister = async () => {
