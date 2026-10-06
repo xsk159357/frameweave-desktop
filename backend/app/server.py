@@ -142,11 +142,11 @@ app.add_middleware(
 )
 
 # ---- 初始化 ----
+declarative.set_user_nodes_dir(os.path.join(DATA_DIR, "user_nodes"))
 autodiscover()
 declarative.scan()
 store = AssetStore(os.path.join(DATA_DIR, "assets"))
 wfstore = WorkflowStore(os.path.join(DATA_DIR, "workflows"))
-declarative.set_user_nodes_dir(os.path.join(DATA_DIR, "user_nodes"))
 
 # 启动清理：删除未被缓存索引引用的孤儿中间资产（部分落盘失败 / 重跑覆盖残留）
 try:

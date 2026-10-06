@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import os
 import zipfile
+import importlib.util
+import sys
 from typing import Any, Dict, List, Optional, Type
 
 from .nodespec import NodeBase, NodeSpec, PortSpec
@@ -35,6 +37,7 @@ def set_user_nodes_dir(path: str) -> None:
     USER_NODES_DIR = path
 
 _decl: Dict[str, Type[NodeBase]] = {}
+_plugin_modules: Dict[str, Any] = {}
 
 
 # ---------- manifest -> NodeSpec ----------
@@ -189,12 +192,48 @@ class DeclarativeNode(NodeBase):
 
 
 def _make_class(manifest: Dict[str, Any]) -> Type[NodeBase]:
-    """为每个 manifest 生成绑定类（保持 registry 的 get_class 模式）。"""
+    """为声明式 manifest 生成节点类。"""
     class _N(DeclarativeNode):
         pass
     _N._manifest = manifest
     _N.__name__ = "Decl_" + manifest.get("type_id", "x").replace("/", "_").replace("-", "_")
     return _N
+
+
+def _make_python_class(manifest: Dict[str, Any], package_dir: str) -> Type[NodeBase]:
+    """加载官方/社区 Python 插件；插件仍通过 NodeBase ctx 运行，类型契约来自 manifest。"""
+    entry = str(manifest.get("entrypoint", "node.py"))
+    entry_path = os.path.abspath(os.path.join(package_dir, entry))
+    base = os.path.abspath(package_dir)
+    if not entry_path.startswith(base + os.sep) or not os.path.isfile(entry_path):
+        raise ValueError("插件 entrypoint 非法或不存在")
+    module_name = "frameweave_plugin_" + manifest.get("type_id", "plugin").replace("/", "_").replace("-", "_")
+    spec_obj = importlib.util.spec_from_file_location(module_name, entry_path)
+    if spec_obj is None or spec_obj.loader is None:
+        raise ImportError("无法加载插件 entrypoint")
+    module = importlib.util.module_from_spec(spec_obj)
+    sys.modules[module_name] = module
+    spec_obj.loader.exec_module(module)
+    impl = getattr(module, manifest.get("class_name", "PluginNode"), None)
+    if impl is None:
+        raise ValueError("插件 class_name 不存在: " + str(manifest.get("class_name")))
+    _plugin_modules[manifest.get("type_id", module_name)] = module
+    class _P(NodeBase):
+        @classmethod
+        def spec(cls) -> NodeSpec:
+            return _spec_from_manifest(manifest)
+        async def setup(self, ctx):
+            obj = impl()
+            self._impl_obj = obj
+            if hasattr(obj, "setup"):
+                result = obj.setup(ctx)
+                if result is not None:
+                    await result
+        async def run(self, ctx, inputs, params):
+            obj = getattr(self, "_impl_obj", None) or impl()
+            return await obj.run(ctx, inputs, params)
+    _P.__name__ = "Plugin_" + manifest.get("type_id", "x").replace("/", "_").replace("-", "_")
+    return _P
 
 
 # ---------- 扫描 / 安装 ----------
@@ -214,7 +253,10 @@ def scan() -> int:
             type_id = data.get("type_id", "")
             if not type_id:
                 continue
-            _decl[type_id] = _make_class(data)
+            if data.get("runtime") == "python":
+                _decl[type_id] = _make_python_class(data, os.path.join(USER_NODES_DIR, entry))
+            else:
+                _decl[type_id] = _make_class(data)
             count += 1
         except Exception as e:  # noqa: BLE001
             print(f"[declarative] 插件包加载失败 {entry}: {e}")
