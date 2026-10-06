@@ -2,7 +2,7 @@
   "type_id": "core/subtitle_compose",
   "title": "字幕装配",
   "category": "输出",
-  "description": "字幕高级样式：花字/特效/逐句卡点动画",
+  "description": "字幕高级样式",
   "version": "1.0.0",
   "runtime": "python",
   "entrypoint": "node.py",
