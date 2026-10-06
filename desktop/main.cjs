@@ -232,6 +232,21 @@ function sendUpdateStatus(type, message, version = '') {
   }
 }
 
+function friendlyUpdateError(err) {
+  const raw = String(err && err.message || err || '')
+  const lower = raw.toLowerCase()
+  if (lower.includes('app-update.yml') || lower.includes('cannot parse releases feed')) {
+    return '更新源暂时不可用，请稍后重试'
+  }
+  if (lower.includes('timed_out') || lower.includes('timeout') || lower.includes('enotfound') || lower.includes('network')) {
+    return '网络暂时不可用，请检查网络后重试'
+  }
+  if (lower.includes('403') || lower.includes('401')) {
+    return '更新源访问被拒绝，请稍后重试'
+  }
+  return '更新检查失败，请稍后重试'
+}
+
 function setupAutoUpdate() {
   // 前端可主动触发检查；开发模式也返回明确反馈，避免按钮无反应
   ipcMain.on('check-for-update', () => {
@@ -243,7 +258,7 @@ function setupAutoUpdate() {
     autoUpdater.checkForUpdates().catch((e) => {
       const msg = e && e.message || String(e)
       fwLog('[updater] check 失败(ipc):', msg)
-      sendUpdateStatus('error', '检查更新失败：' + msg)
+      sendUpdateStatus('error', friendlyUpdateError(e))
     })
   })
 
@@ -315,7 +330,8 @@ function setupAutoUpdate() {
     updateInProgress = false
     const msg = err && err.message || String(err)
     console.error('[updater] 更新失败:', msg)
-    sendUpdateStatus('error', '更新检查失败：' + msg)
+    fwLog('[updater] 更新失败:', msg)
+    sendUpdateStatus('error', friendlyUpdateError(err))
   })
 
   // 启动 5 秒后检查（无网/更新源不通时静默失败，不再产生 unhandledRejection）
