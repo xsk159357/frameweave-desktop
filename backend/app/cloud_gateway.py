@@ -7,6 +7,8 @@
 from __future__ import annotations
 import json
 import os
+import socket
+import threading
 import urllib.request
 from typing import Optional
 
@@ -15,6 +17,12 @@ def cloud_url() -> str:
 
 CLOUD_URL = ""
 CLIENT_VERSION = "0.2.12"  # 与 desktop/package.json / server.APP_VERSION 保持一致
+
+# urllib 默认遵循系统地址顺序；部分 VM 的 IPv6 可解析但不可出网。
+# 仅在一次请求失败后临时优先 IPv4，不修改全局 socket 配置。
+_IPV4_FALLBACK_LOCK = threading.Lock()
+_IPV4_FALLBACK_DONE = False
+
 
 def _dbg(msg: str) -> None:
     try:
@@ -32,6 +40,25 @@ def cloud_enabled() -> bool:
     return bool(cloud_url())
 
 
+def _urlopen_ipv4(req, timeout: int):
+    """单次请求强制 IPv4，保留 HTTPS SNI/证书校验的原始主机名。"""
+    original = socket.getaddrinfo
+
+    def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+        rows = original(host, port, family, type, proto, flags)
+        filtered = [row for row in rows if row[0] == socket.AF_INET]
+        if not filtered:
+            raise OSError("no IPv4 address available for %s" % host)
+        return filtered
+
+    with _IPV4_FALLBACK_LOCK:
+        socket.getaddrinfo = ipv4_only
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        finally:
+            socket.getaddrinfo = original
+
+
 def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
     url = cloud_url()
     _dbg("CLOUD_URL=%r enabled=%s path=%s" % (url, cloud_enabled(), path))
@@ -44,13 +71,24 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
                                               "User-Agent": "FrameWeave-Client/" + CLIENT_VERSION,
                                               "Accept": "application/json"},
                                      method="POST")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            _body = json.loads(resp.read().decode() or "{}")
-            _dbg("CLOUD_OK path=%s resp=%s" % (path, str(_body)[:200]))
-            return _body
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                _body = json.loads(resp.read().decode() or "{}")
+                _dbg("CLOUD_OK path=%s family=default resp=%s" % (path, str(_body)[:200]))
+                return _body
+        except Exception as _first_err:  # noqa: BLE001
+            _dbg("CLOUD_RETRY_IPV4 path=%s err=%s" % (path, repr(_first_err)))
+            try:
+                with _urlopen_ipv4(req, timeout) as resp:
+                    _body = json.loads(resp.read().decode() or "{}")
+                    _dbg("CLOUD_OK path=%s family=ipv4 resp=%s" % (path, str(_body)[:200]))
+                    return _body
+            except Exception as _second_err:  # noqa: BLE001
+                _dbg("CLOUD_ERR path=%s err=%s" % (path, repr(_second_err)))
+                return None  # 云端不可达：正式版拒绝离线回落
     except Exception as _e:  # noqa: BLE001
         _dbg("CLOUD_ERR path=%s err=%s" % (path, repr(_e)))
-        return None  # 云端不可达：本地桩回落（正式版这里应视为离线不允许使用）
+        return None
 
 
 def cloud_login(email: str, password: str, device_id: str) -> Optional[dict]:
@@ -97,10 +135,21 @@ def cloud_market_items() -> Optional[list]:
         req = urllib.request.Request(url + "/api/market/items",
                                      headers={"Accept": "application/json",
                                               "User-Agent": "FrameWeave-Client/" + CLIENT_VERSION})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            body = json.loads(resp.read().decode() or "{}")
-            items = (body or {}).get("items")
-            return items if isinstance(items, list) else None
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                body = json.loads(resp.read().decode() or "{}")
+                items = (body or {}).get("items")
+                return items if isinstance(items, list) else None
+        except Exception as _first_err:
+            _dbg("CLOUD_RETRY_IPV4 path=/api/market/items err=%s" % repr(_first_err))
+            try:
+                with _urlopen_ipv4(req, 8) as resp:
+                    body = json.loads(resp.read().decode() or "{}")
+                    items = (body or {}).get("items")
+                    return items if isinstance(items, list) else None
+            except Exception as _second_err:
+                _dbg("CLOUD_ERR path=/api/market/items err=%s" % repr(_second_err))
+                return None
     except Exception as _e:  # noqa: BLE001
         _dbg("CLOUD_ERR path=/api/market/items err=%s" % repr(_e))
         return None
