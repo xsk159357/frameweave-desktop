@@ -36,6 +36,7 @@ export default function App() {
   const [showTpl, setShowTpl] = useState(false)
   const [backend, setBackend] = useState<null | boolean>(null)
   const [authNotice, setAuthNotice] = useState('')
+  const [subscriptionExpired, setSubscriptionExpired] = useState(() => !!session?.expiresAt && session.expiresAt <= Date.now())
 
   // 主题：亮/暗即时生效（CSS 变量覆盖集，无需重启）
   const settings = useAppStore((s) => s.settings)
@@ -180,9 +181,17 @@ export default function App() {
           if (v.plan && v.plan !== session.plan) {
             useAppStore.getState().setSession({ ...session, plan: v.plan, credits: v.credits ?? session.credits, expiresAt: v.expires_at ?? session.expiresAt })
           }
+          const expired = !!v.expires_at && v.expires_at * 1000 <= Date.now()
+          setSubscriptionExpired(expired)
         } else {
-          useAppStore.getState().setSession(null)
-          setAuthNotice(v.reason || '授权校验失败，请重新登录')
+          const reason = v.reason || '授权校验失败，请重新登录'
+          if (/过期|到期|续费/.test(reason)) {
+            setSubscriptionExpired(true)
+            setAuthNotice(reason)
+          } else {
+            useAppStore.getState().setSession(null)
+            setAuthNotice(reason)
+          }
         }
       } catch (e: any) { console.error('在线校验失败', e) }
     }
@@ -377,7 +386,7 @@ export default function App() {
 
       {/* 主体：侧栏 + 画布 */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <Canvas workflowId={workflowId} />
+        <Canvas workflowId={workflowId} readOnly={subscriptionExpired} />
       </div>
 
       {/* 底部时间线（双击有 segments 资产的节点 / 右键查看时间线） */}
@@ -385,7 +394,7 @@ export default function App() {
 
       {/* 右侧工作流抽屉 */}
       <div className={'fw-workflow-drawer' + (showWorkflowDrawer ? ' open' : '')}>
-        <div className="fw-workflow-drawer-inner"><WorkflowPanel onOpenPlugin={() => setShowPlugin(true)} /></div>
+        <div className="fw-workflow-drawer-inner"><WorkflowPanel readOnly={subscriptionExpired} onOpenPlugin={() => { if (!subscriptionExpired) setShowPlugin(true) }} /></div>
       </div>
       <button className="fw-workflow-toggle" onClick={() => setShowWorkflowDrawer(v => !v)} title="工作流列表">
         <FileText size={14} /> <span>工作流</span>

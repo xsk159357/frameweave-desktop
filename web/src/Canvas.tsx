@@ -18,7 +18,7 @@ const portDot = (t: string) => (({ VIDEO: '#4f8ef7', IMAGE: '#7c8cf8', AUDIO: '#
 const nodeTypes = { flow: FlowNode }
 let nodeSeq = 0
 
-function CanvasInner({ workflowId }: { workflowId: string }) {
+function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; readOnly?: boolean }) {
   const specs = useAppStore((s) => s.specs)
   const nodeStatus = useAppStore((s) => s.nodeStatus)
   const nodeError = useAppStore((s) => s.nodeError)
@@ -64,6 +64,10 @@ function CanvasInner({ workflowId }: { workflowId: string }) {
   const copyRef = useRef<{ nodes: any[]; edges: Edge[] } | null>(null)
   const paramTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { screenToFlowPosition } = useReactFlow()
+  const guarded = useCallback((action: () => void) => {
+    if (readOnly) { pushToast('订阅已到期，请续费后继续使用', 'info'); return }
+    action()
+  }, [readOnly, pushToast])
 
   // ---- 撤销 / 重做（D3） ----
   const historyRef = useRef<{ nodes: any[]; edges: Edge[] }[]>([])
@@ -314,6 +318,7 @@ const onAddNode = useCallback((typeId: string) => {
 
   // ---- 更新节点参数 ----
   const updateParams = useCallback((nodeId: string, patch: Record<string, string>) => {
+    if (readOnly) { pushToast('订阅已到期，请续费后继续使用', 'info'); return }
     if (!paramTimer.current) { pushHistory(); paramTimer.current = setTimeout(() => { paramTimer.current = null }, 600) }
     setNodes((nds) => nds.map((n) => n.id === nodeId ? {
       ...n, data: { ...n.data, params: { ...n.data.params, ...patch } },
@@ -537,7 +542,7 @@ const onAddNode = useCallback((typeId: string) => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement
       const inInput = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!readOnly) save(); else pushToast('订阅已到期，请续费后继续使用', 'info'); return }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return }
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (!inInput) copySelection(); return }
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (!inInput) paste(); return }
@@ -602,7 +607,7 @@ const onAddNode = useCallback((typeId: string) => {
       {/* ===== 工具栏（A5 瘦身） ===== */}
       <div style={toolbar}>
         <button
-          onClick={() => running ? cancelRun() : run('all')}
+          onClick={() => guarded(() => running ? cancelRun() : run('all'))}
           style={{
             ...btn, border: 'none',
             background: running ? 'rgba(248,113,113,.9)' : 'var(--btn-primary-grad)',
@@ -612,8 +617,8 @@ const onAddNode = useCallback((typeId: string) => {
         >
           {running ? <><Square size={13} /> 停止</> : <><Play size={15} /> 一键出片</>}
         </button>
-        <button style={btn} onClick={() => run('downstream')}><ArrowDown size={13} /> 仅下游</button>
-        <button style={btn} onClick={save}>{saving ? '保存中…' : <><Save size={13} /> 保存</>}</button>
+        <button style={btn} onClick={() => guarded(() => run('downstream'))} disabled={readOnly}><ArrowDown size={13} /> 仅下游</button>
+        <button style={btn} onClick={() => guarded(save)} disabled={readOnly}>{saving ? '保存中…' : <><Save size={13} /> 保存</>}</button>
         <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', cursor: 'pointer', userSelect: 'none' }}>
           <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
           自动布局
@@ -648,10 +653,11 @@ const onAddNode = useCallback((typeId: string) => {
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
+            nodesDraggable={!readOnly}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onConnectEnd={onConnectEnd}
-            nodesConnectable={dragEnabled}
+            nodesConnectable={dragEnabled && !readOnly}
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ maxZoom: 0.95, padding: 0.35 }}
@@ -915,7 +921,7 @@ const reflowColumn = (nds: any[], id: string): any[] => {
   return out
 }
 
-export const Canvas = memo(function Canvas(props: { workflowId: string }) {
+export const Canvas = memo(function Canvas(props: { workflowId: string; readOnly?: boolean }) {
   return (
     <ReactFlowProvider children={<CanvasInner {...props} />} />
   )

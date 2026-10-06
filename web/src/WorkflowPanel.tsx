@@ -6,9 +6,10 @@ import { useAppStore } from './store'
 
 interface Props {
   onOpenPlugin: () => void
+  readOnly?: boolean
 }
 
-export function WorkflowPanel({ onOpenPlugin }: Props) {
+export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
   const workflowId = useAppStore((s) => s.workflowId)
   const setWorkflow = useAppStore((s) => s.setWorkflow)
   const dirty = useAppStore((s) => s.dirty)
@@ -88,7 +89,7 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
       </div>
       {/* 新建主按钮 */}
       <div style={{ padding: '2px 12px 8px' }}>
-        <button className="fw-btn fw-btn-primary" onClick={() => { setNameInput(''); setNameBox({ mode: 'create' }) }}
+        <button className="fw-btn fw-btn-primary" disabled={readOnly} onClick={() => { setNameInput(''); setNameBox({ mode: 'create' }) }}
           style={{ width: '100%', padding: '7px 10px', justifyContent: 'center', fontSize: 12.5 }}>
           <><Plus size={13} /> 新建工作流</>
         </button>
@@ -140,7 +141,7 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
           <div style={{ padding: '5px 10px', fontSize: 11, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{menu.name}</div>
           <div style={{ height: 1, background: 'var(--border)', margin: '3px 4px' }} />
           <div style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
-            onClick={() => { setNameInput(menu.name); setNameBox({ mode: 'rename', id: menu.id, name: menu.name }); setMenu(null) }}
+            onClick={() => { if (!readOnly) { setNameInput(menu.name); setNameBox({ mode: 'rename', id: menu.id, name: menu.name }); setMenu(null) } }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
             <PencilLine size={12} /> 重命名
           </div>
@@ -156,7 +157,7 @@ export function WorkflowPanel({ onOpenPlugin }: Props) {
             <Download size={12} /> 导出工作流 zip
           </div>
           <div style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 7 }}
-            onClick={() => del(menu.id)}
+            onClick={() => { if (!readOnly) del(menu.id) }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.1)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
             <Trash2 size={12} /> 删除
           </div>
