@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('frameweave', {
   backendPort: 8788,
-  version: '0.1.0',
+  version: '0.2.12',
   // H3 修复：本地 API 鉴权令牌（打包版主进程注入随机值；dev 回落常量）
   localToken: process.env.FRAMEWEAVE_LOCAL_TOKEN || 'dev-local-token',
   // 运行日志（黑匣子）：渲染进程写 debug.log

@@ -56,7 +56,9 @@ DATA_DIR = _resolve_data_dir()
 
 AUTH_REVISION = "email-code-v2"
 BACKEND_PROTOCOL = 3
-app = FastAPI(title="FrameWeave Local Service", version="0.2.12")
+# 版本唯一真源：desktop/package.json（bump 时同步此常量 + cloud_server.py VERSION + preload/cloud_gateway）
+APP_VERSION = "0.2.12"
+app = FastAPI(title="FrameWeave Local Service", version=APP_VERSION)
 
 # ---- 本地 API 鉴权（H3 修复）----
 # 打包版：main.cjs 生成随机令牌经 FRAMEWEAVE_LOCAL_TOKEN 注入后端与渲染进程。
@@ -348,11 +350,11 @@ def _protect_secret_params(nodes) -> None:
 # ---- 工作流 API ----
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "frameweave", "version": "0.2.12", "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
+    return {"ok": True, "service": "frameweave", "version": APP_VERSION, "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
 
 @app.get("/api/system/build-info")
 async def build_info():
-    return {"ok": True, "service": "frameweave", "version": "0.2.10", "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
+    return {"ok": True, "service": "frameweave", "version": APP_VERSION, "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
 
 # ---- 用户节点（声明式插件） ----
 @app.get("/api/user_nodes")

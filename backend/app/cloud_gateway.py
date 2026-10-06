@@ -14,6 +14,7 @@ def cloud_url() -> str:
     return os.environ.get("FRAMEWEAVE_CLOUD_URL", "https://frameweave.ameaaos.com").rstrip("/")
 
 CLOUD_URL = ""
+CLIENT_VERSION = "0.2.12"  # 与 desktop/package.json / server.APP_VERSION 保持一致
 
 def _dbg(msg: str) -> None:
     try:
@@ -40,7 +41,7 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
         req = urllib.request.Request(url + path,
                                      data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json",
-                                              "User-Agent": "FrameWeave-Client/0.2.10",
+                                              "User-Agent": "FrameWeave-Client/" + CLIENT_VERSION,
                                               "Accept": "application/json"},
                                      method="POST")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -95,7 +96,7 @@ def cloud_market_items() -> Optional[list]:
     try:
         req = urllib.request.Request(url + "/api/market/items",
                                      headers={"Accept": "application/json",
-                                              "User-Agent": "FrameWeave-Client/0.2.10"})
+                                              "User-Agent": "FrameWeave-Client/" + CLIENT_VERSION})
         with urllib.request.urlopen(req, timeout=8) as resp:
             body = json.loads(resp.read().decode() or "{}")
             items = (body or {}).get("items")
