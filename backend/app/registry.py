@@ -32,8 +32,7 @@ def get_spec(type_id: str) -> NodeSpec:
 
 
 _KNOWN_NODE_MODULES = [
-    "ai_narrate", "asr", "batch_render", "draft_export",
-    "scene_detect", "tts", "video_render",
+    "ai_narrate", "asr", "tts", "video_render",
 ]
 
 def autodiscover() -> None:
