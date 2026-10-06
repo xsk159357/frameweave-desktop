@@ -28,7 +28,7 @@ Get-ChildItem $nodesDir -Directory -Filter 'core_*' | Sort-Object Name | ForEach
   Remove-Item $stage -Recurse -Force
   $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
   $size = (Get-Item $zip).Length
-  $tag = "$TagPrefix-$slug-v$($m.version)"
+  $tag = "$slug-v$($m.version)"
   $rows += [pscustomobject]@{
     id = $slug; kind = 'node'; title = $m.title; description = $m.description
     author = 'official'; price = 0; official = $true; version = $m.version
