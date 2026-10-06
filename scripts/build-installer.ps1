@@ -39,6 +39,20 @@ try {
 } finally { Pop-Location }
 if (-not (Test-Path (Join-Path $unpacked "FrameWeave.exe"))) { throw "win-unpacked 未生成" }
 
+# electron-builder 的 --dir + 手写 NSIS 路径不会自动生成 app-update.yml。
+# electron-updater 在 GitHub provider 模式下启动时从 resources/app-update.yml 读取更新源。
+$resourcesDir = Join-Path $unpacked "resources"
+$appUpdateYml = Join-Path $resourcesDir "app-update.yml"
+$appUpdate = @(
+  'provider: github'
+  'owner: xsk159357'
+  'repo: frameweave-desktop'
+  'releaseType: release'
+) -join "`r`n"
+Set-Content -Path $appUpdateYml -Value $appUpdate -Encoding UTF8
+if (-not (Test-Path $appUpdateYml)) { throw "app-update.yml 未生成" }
+Write-Host "[build] app-update.yml 已写入: $appUpdateYml"
+
 # 3) 生成 NSIS 脚本（模板注入版本/路径）
 Write-Host "[build] 3/4 生成 NSIS 脚本"
 $tpl = Get-Content (Join-Path $PSScriptRoot "nsis\frameweave.nsi.tpl") -Raw -Encoding UTF8
