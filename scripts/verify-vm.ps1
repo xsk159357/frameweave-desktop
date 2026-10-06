@@ -37,14 +37,20 @@ if (-not $SkipRevert) {
   }
 }
 
-# 1) 复制安装包
+# 1) 复制安装包到 Guest
 Write-Host "[vm] 1/5 复制安装包到 Guest"
-& $Vmrun -gu $GuestUser -gp $GuestPass copyFileFromHostToGuest $Vmx $Installer "C:\fw-setup.exe" 2>&1 | Out-Host
+$guestSetup = "C:\Users\$GuestUser\Desktop\FrameWeave-Setup-latest.exe"
+$copyOut = & $Vmrun -gu $GuestUser -gp $GuestPass copyFileFromHostToGuest $Vmx $Installer $guestSetup 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { throw "复制安装包到 Guest 失败: $copyOut" }
 
 # 2) 静默安装
 Write-Host "[vm] 2/5 静默安装 (NSIS /S)"
-& $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -interactive "C:\fw-setup.exe" "/S" 2>&1 | Out-Host
-Start-Sleep -Seconds 20
+$runOut = & $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -noWait $guestSetup "/S" 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { throw "启动 Guest 安装器失败: $runOut" }
+Start-Sleep -Seconds 30
+$targetExe = "C:\Users\Administrator\AppData\Local\Programs\FrameWeave\FrameWeave.exe"
+$exists = (& $Vmrun -gu $GuestUser -gp $GuestPass fileExistsInGuest $Vmx $targetExe 2>&1 | Out-String)
+if ($exists -notmatch 'exists') { throw "VM 安装未生成目标文件: $targetExe / $exists" }
 
 # 3) 启动应用
 Write-Host "[vm] 3/5 启动 FrameWeave"

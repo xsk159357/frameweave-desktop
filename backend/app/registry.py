@@ -34,36 +34,5 @@ def get_spec(type_id: str) -> NodeSpec:
 _KNOWN_NODE_MODULES = []
 
 def autodiscover() -> None:
-    """自动导入 nodes 包下所有模块以触发 register（兼容 PyInstaller frozen 环境）。"""
-    import importlib
-    import pkgutil
-    import app.nodes as nodes_pkg
-    try:
-        mods = [m.name for m in pkgutil.iter_modules(nodes_pkg.__path__)]
-    except Exception:
-        mods = []
-    if not mods:
-        # PyInstaller frozen：nodes 模块已作为 hiddenimports 打入
-        import importlib.util
-        mods = []
-        if hasattr(nodes_pkg, "__path__"):
-            # 已 import app.nodes 后其命名空间仍可能为空；直接用 spec 列表
-            import app.nodes  # noqa: F401
-            for n in sorted(dir(app.nodes)):
-                if n.startswith("nodes_"):
-                    mods.append(n)
-        if not mods:
-            # 显式尝试已知模块名（与 packaging spec 的 hiddenimports 对应）
-            import app.nodes
-            for n in sorted(dir(app.nodes)):
-                # 过滤内置/包属性，找出模块对象
-                obj = getattr(app.nodes, n)
-                if hasattr(obj, "__file__") or isinstance(obj, type):
-                    continue
-                mods.append(n)
-        declarative.scan()
-    for m in _KNOWN_NODE_MODULES:
-        try:
-            importlib.import_module(f"app.nodes.{m}")
-        except Exception as e:
-            print(f"[nodes] 注册失败 {m}: {e}")
+    """扫描官方/社区插件目录；核心业务节点不再从 app.nodes 内置导入。"""
+    declarative.scan()
