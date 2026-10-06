@@ -234,13 +234,13 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
             </div>
           )}
           {preview.kind === 'JSON' && preview.content && (
-            <pre style={{ whiteSpace: 'pre-wrap', background: '#0a0e18',
+            <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--panel-2)',
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {JSON.stringify(preview.content, null, 2).slice(0, 2500)}
             </pre>
           )}
           {preview.kind === 'STRING' && preview.content && (
-            <pre style={{ whiteSpace: 'pre-wrap', background: '#0a0e18',
+            <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--panel-2)',
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {String((preview.content as any).text || JSON.stringify(preview.content)).slice(0, 2500)}
             </pre>

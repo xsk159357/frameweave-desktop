@@ -560,7 +560,7 @@ input, select, textarea { font-family: inherit; }
 .fw-shortcut {
   position: absolute; right: 14px; top: 54px; z-index: 60; width: 300px;
   border-radius: 16px; padding: 14px; font-size: 12px;
-  background: rgba(24,30,54,.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  background: var(--overlay); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-strong); box-shadow: var(--glass-inner), var(--shadow-lg);
 }
 .fw-shortcut .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border); }

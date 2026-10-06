@@ -361,7 +361,7 @@ export default function App() {
 
       {/* 模板选择弹层 */}
       {showTpl && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(6,8,16,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTpl(false)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(8,10,18,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTpl(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{
             width: 560, maxWidth: '90vw', borderRadius: 18, padding: 18,
             background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',

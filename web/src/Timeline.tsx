@@ -88,7 +88,7 @@ export function Timeline({ nodeId }: { nodeId: string }) {
                   top: 7, bottom: 7, borderRadius: 6, cursor: 'pointer',
                   background: 'rgba(139,147,255,.16)',
                   border: '1px solid rgba(139,147,255,.4)', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: 10, color: '#b9c4ff', overflow: 'hidden',
+                  justifyContent: 'center', fontSize: 10, color: 'var(--accent-strong)', overflow: 'hidden',
                   fontWeight: 600, boxShadow: '0 0 10px rgba(108,140,255,.22), inset 0 1px 0 rgba(255,255,255,.14)',
                   transition: 'filter .15s, box-shadow var(--t-fast)',
                 }}>
