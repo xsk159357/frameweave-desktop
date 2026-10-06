@@ -18,7 +18,14 @@ Get-ChildItem $nodesDir -Directory -Filter 'core_*' | Sort-Object Name | ForEach
   $filename = "$slug-$($m.version).zip"
   $zip = Join-Path $OutputDir $filename
   if (Test-Path $zip) { Remove-Item $zip -Force }
-  Compress-Archive -Path (Join-Path $_.FullName '*') -DestinationPath $zip -CompressionLevel Optimal
+  # 保留插件包顶层目录，匹配 install_zip 要求：<package>/manifest.json
+  $stage = Join-Path $OutputDir (".stage-" + $slug)
+  if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+  New-Item -ItemType Directory -Force -Path $stage | Out-Null
+  $pkgDir = Join-Path $stage $slug
+  Copy-Item $_.FullName $pkgDir -Recurse -Force
+  Compress-Archive -Path $pkgDir -DestinationPath $zip -CompressionLevel Optimal
+  Remove-Item $stage -Recurse -Force
   $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
   $size = (Get-Item $zip).Length
   $tag = "$TagPrefix-$slug-v$($m.version)"
