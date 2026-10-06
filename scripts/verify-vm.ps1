@@ -48,7 +48,7 @@ Start-Sleep -Seconds 20
 
 # 3) 启动应用
 Write-Host "[vm] 3/5 启动 FrameWeave"
-& $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -interactive "C:\Program Files\FrameWeave\FrameWeave.exe" "" 2>&1 | Out-Host
+& $Vmrun -gu $GuestUser -gp $GuestPass runProgramInGuest $Vmx -interactive "C:\Users\Administrator\AppData\Local\Programs\FrameWeave\FrameWeave.exe" "" 2>&1 | Out-Host
 Start-Sleep -Seconds 25
 
 # 4) 推送校验脚本并执行
