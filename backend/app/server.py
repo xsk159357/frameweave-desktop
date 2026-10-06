@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import zipfile
+import shutil
 import asyncio
 from typing import Any, Dict, List, Optional, Set
 
@@ -142,7 +143,20 @@ app.add_middleware(
 )
 
 # ---- 初始化 ----
-declarative.set_user_nodes_dir(os.path.join(DATA_DIR, "user_nodes"))
+# 官方节点以插件包随安装包分发；启动时合并到用户插件目录，不覆盖用户版本。
+_declarative_user_dir = os.path.join(DATA_DIR, "user_nodes")
+os.makedirs(_declarative_user_dir, exist_ok=True)
+_bundled_nodes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_nodes")
+try:
+    if os.path.isdir(_bundled_nodes_dir) and os.path.abspath(_bundled_nodes_dir) != os.path.abspath(_declarative_user_dir):
+        for _entry in os.listdir(_bundled_nodes_dir):
+            _src = os.path.join(_bundled_nodes_dir, _entry)
+            _dst = os.path.join(_declarative_user_dir, _entry)
+            if os.path.isdir(_src) and not os.path.exists(_dst):
+                shutil.copytree(_src, _dst)
+except Exception as _e:  # noqa: BLE001
+    print("[plugins] 官方插件合并跳过:", _e)
+declarative.set_user_nodes_dir(_declarative_user_dir)
 autodiscover()
 declarative.scan()
 store = AssetStore(os.path.join(DATA_DIR, "assets"))
