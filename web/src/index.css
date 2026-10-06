@@ -606,6 +606,24 @@ input, select, textarea { font-family: inherit; }
 .lp-root { -webkit-app-region: drag; user-select: none; }
 .lp-root input, .lp-root button, .lp-root .lp-card, .lp-root .lp-msg { -webkit-app-region: no-drag; user-select: auto; }
 
+/* 个人中心 */
+.fw-profile-modal { position: fixed; inset: 0; z-index: 2500; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(8,10,18,.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.fw-profile-card { width: min(520px, calc(100vw - 48px)); padding: 22px; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--overlay); color: var(--text); box-shadow: var(--shadow-lg); }
+.fw-profile-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.fw-profile-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 750; }
+.fw-profile-sub { margin-top: 4px; color: var(--text-faint); font-size: 12px; }
+.fw-profile-close { border: 0; background: transparent; color: var(--text-faint); font-size: 24px; cursor: pointer; line-height: 1; }
+.fw-profile-email { margin-top: 18px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text-dim); font-size: 13px; }
+.fw-profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.fw-profile-stat { display: grid; grid-template-columns: 20px 1fr; gap: 2px 7px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--accent-strong); }
+.fw-profile-stat span { color: var(--text-faint); font-size: 11px; }
+.fw-profile-stat b { color: var(--text); font-size: 13px; grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-profile-section { margin-top: 18px; }
+.fw-profile-label { margin-bottom: 7px; color: var(--text-faint); font-size: 11px; font-weight: 700; letter-spacing: .8px; }
+.fw-profile-activate { display: flex; gap: 8px; }
+.fw-profile-activate input { min-width: 0; flex: 1; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--input-bg); color: var(--text); outline: none; }
+.fw-profile-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
 /* 授权状态弹窗：替代原生 alert，统一霜幕视觉并适配亮/暗主题 */
 .fw-auth-modal { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(8,10,18,.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: fw-auth-fade .18s ease-out both; }
 .fw-auth-modal-card { width: min(440px, calc(100vw - 48px)); display: flex; gap: 16px; padding: 22px; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--overlay); color: var(--text); box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-soft); animation: fw-auth-pop .22s var(--t-ease) both; }

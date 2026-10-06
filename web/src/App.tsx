@@ -1,6 +1,6 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon, UserCircle } from 'lucide-react'
+import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -36,6 +36,8 @@ export default function App() {
   const [showTpl, setShowTpl] = useState(false)
   const [backend, setBackend] = useState<null | boolean>(null)
   const [authNotice, setAuthNotice] = useState('')
+  const [showProfile, setShowProfile] = useState(false)
+  const [profileCard, setProfileCard] = useState('')
   const [subscriptionExpired, setSubscriptionExpired] = useState(() => !!session?.expiresAt && session.expiresAt <= Date.now())
 
   // 主题：亮/暗即时生效（CSS 变量覆盖集，无需重启）
@@ -200,6 +202,19 @@ export default function App() {
     return () => { alive = false; window.clearInterval(timer) }
   }, [session?.token])
 
+  const activateCard = async () => {
+    const card = profileCard.trim()
+    if (!card) { useAppStore.getState().pushToast('请输入卡密', 'err'); return }
+    try {
+      const r = await api.activate(session?.email || '', card)
+      if (!r.ok) throw new Error(r.message || '激活失败')
+      useAppStore.getState().setSession({ ...(session as any), plan: r.plan || 'member', expiresAt: (r.expires_at || 0) * 1000 })
+      setSubscriptionExpired(false)
+      setProfileCard('')
+      useAppStore.getState().pushToast('卡密激活成功', 'ok')
+    } catch (e: any) { useAppStore.getState().pushToast(e.message || '激活失败', 'err') }
+  }
+
   if (!engineReady) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -222,6 +237,22 @@ export default function App() {
   if (!session) return (
     <>
       <LoginPage />
+      {showProfile && (
+        <div className="fw-profile-modal" onClick={() => setShowProfile(false)}>
+          <div className="fw-profile-card" onClick={(e) => e.stopPropagation()}>
+            <div className="fw-profile-head"><div><div className="fw-profile-title"><UserCircle size={20} />个人中心</div><div className="fw-profile-sub">账号与订阅管理</div></div><button className="fw-profile-close" onClick={() => setShowProfile(false)}>×</button></div>
+            <div className="fw-profile-email">{session?.email}</div>
+            <div className="fw-profile-grid">
+              <div className="fw-profile-stat"><Crown size={16} /><span>套餐</span><b>{session?.plan === 'member' ? '会员' : '试用'}</b></div>
+              <div className="fw-profile-stat"><CreditCard size={16} /><span>到期时间</span><b>{session?.expiresAt ? new Date(session.expiresAt).toLocaleDateString('zh-CN') : '未设置'}</b></div>
+              <div className="fw-profile-stat"><Sparkles size={16} /><span>积分</span><b>{session?.credits ?? 0}</b></div>
+              <div className="fw-profile-stat"><Monitor size={16} /><span>绑定设备</span><b>{session?.deviceId ? session.deviceId.slice(0, 18) : '本机'}</b></div>
+            </div>
+            <div className="fw-profile-section"><div className="fw-profile-label">卡密激活</div><div className="fw-profile-activate"><input value={profileCard} onChange={(e) => setProfileCard(e.target.value)} placeholder="输入 FW- 开头的卡密" /><button className="fw-btn fw-btn-primary" onClick={activateCard}>激活</button></div></div>
+            <div className="fw-profile-actions"><button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().pushToast('续费请联系管理员获取卡密', 'info')}>续费说明</button><button className="fw-btn fw-btn-danger" onClick={() => useAppStore.getState().setSession(null)}><LogOut size={14} />退出登录</button></div>
+          </div>
+        </div>
+      )}
       {authNotice && (
         <div className="fw-auth-modal" role="dialog" aria-modal="true" aria-labelledby="fw-auth-title">
           <div className="fw-auth-modal-card">
@@ -333,7 +364,7 @@ export default function App() {
           {showAccount && <div className="fw-account-popover" style={{ top: 38, right: 0, left: 'auto', bottom: 'auto' }}>
             <div className="fw-account-name">{session.email}</div>
             <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
-            <button onClick={() => { setShowAccount(false); useAppStore.getState().pushToast('个人中心即将开放', 'info') }}>个人中心</button>
+            <button onClick={() => { setShowAccount(false); setProfileCard(''); setShowProfile(true) }}>个人中心</button>
             <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
           </div>}
           <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
