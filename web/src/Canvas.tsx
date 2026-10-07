@@ -649,6 +649,17 @@ const onAddNode = useCallback((typeId: string) => {
           ref={flowWrapper} style={{ flex: 1, position: 'relative', background: 'var(--bg-grad)', backgroundAttachment: 'fixed' }}
           onDragOver={onDragOver} onDrop={onDrop}
         >
+          {nodes.length === 0 && specs.length > 0 && (
+            <div className="fw-empty-canvas" aria-label="空工作流引导">
+              <div className="fw-empty-canvas-mark"><span>＋</span></div>
+              <div className="fw-empty-canvas-title">从一个节点开始编排</div>
+              <div className="fw-empty-canvas-text">右键画布添加节点，或从左侧工作流面板管理项目</div>
+              <button className="fw-btn fw-btn-primary" onClick={() => onAddNode(specs[0].type_id)}>
+                添加第一个节点
+              </button>
+              <div className="fw-empty-canvas-hint">支持拖拽、连线与一键出片</div>
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}

@@ -415,21 +415,18 @@ export default function App() {
         </div>
       )}
 
-      {/* 主体：侧栏 + 画布 */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <Canvas workflowId={workflowId} readOnly={subscriptionExpired} />
+      {/* 主体：工作流导航 + 中央画布（方案 B：画布为焦点，导航固定可见） */}
+      <div className="fw-main-layout">
+        <aside className="fw-workspace-sidebar" aria-label="工作流导航">
+          <WorkflowPanel readOnly={subscriptionExpired} onOpenPlugin={() => { if (!subscriptionExpired) setShowPlugin(true) }} />
+        </aside>
+        <main className="fw-canvas-stage">
+          <Canvas workflowId={workflowId} readOnly={subscriptionExpired} />
+        </main>
       </div>
 
       {/* 底部时间线（双击有 segments 资产的节点 / 右键查看时间线） */}
       {timelineNodeId && nodeAssets[timelineNodeId]?.segments && <Timeline nodeId={timelineNodeId} />}
-
-      {/* 右侧工作流抽屉 */}
-      <div className={'fw-workflow-drawer' + (showWorkflowDrawer ? ' open' : '')}>
-        <div className="fw-workflow-drawer-inner"><WorkflowPanel readOnly={subscriptionExpired} onOpenPlugin={() => { if (!subscriptionExpired) setShowPlugin(true) }} /></div>
-      </div>
-      <button className="fw-workflow-toggle" onClick={() => setShowWorkflowDrawer(v => !v)} title="工作流列表">
-        <FileText size={14} /> <span>工作流</span>
-      </button>
 
       {/* 底部状态栏（A4） */}
       <div className="fw-statusbar">
