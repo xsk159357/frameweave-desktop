@@ -303,6 +303,18 @@ def admin_users(b):
   d['expiring_soon']=bool(d.get('expires_at') and d.get('plan')=='member' and float(d['expires_at'])>now and float(d['expires_at'])-now<7*86400)
   out.append(d)
  return {'ok':True,'users':out}
+def admin_extend_subscription(b):
+ if not admin_auth(b): return {'ok':False,'message':'未授权或登录已过期'}
+ e=norm(b.get('email',''))
+ try: days=int(b.get('days',0))
+ except Exception: days=0
+ if not valid_email(e): return {'ok':False,'message':'邮箱格式不正确'}
+ if days < 1 or days > 3650: return {'ok':False,'message':'加时时长需为 1-3650 天'}
+ s=find(e)
+ if not s: return {'ok':False,'message':'用户不存在'}
+ now=time.time(); old=float(s.get('expires_at') or 0); base=max(now,old); new_exp=base+days*86400
+ s['expires_at']=new_exp; s['plan']='member'; save(s)
+ return {'ok':True,'email':e,'days':days,'expires_at':new_exp,'plan':'member'}
 def admin_toggle(b):
  if not admin_auth(b): return {'ok':False,'message':'未授权或登录已过期'}
  e=norm(b.get('email','')); s=find(e)
@@ -337,7 +349,7 @@ def admin_card_revoke(b):
  c.execute('UPDATE cards SET revoked=1 WHERE id=?',(cid,)); c.commit(); c.close()
  return {'ok':True,'id':cid}
 
-ROUTES={'/api/auth/email/send-code':lambda b: issue_code(b.get('email',''),b.get('scene','register'),b.get('ip',''),b.get('device_id','')) if valid_email(b.get('email','')) else (False,'目前仅支持 QQ 邮箱（@qq.com）'),'/api/auth/register':register,'/api/auth/login':login,'/api/auth/password/reset':reset,'/api/auth/verify':verify,'/api/auth/activate':activate,'/api/admin/login':admin_login,'/api/admin/logout':admin_logout,'/api/admin/users':admin_users,'/api/admin/user/toggle':admin_toggle,'/api/admin/cards':admin_cards,'/api/admin/card/revoke':admin_card_revoke,'/api/admin/audit':admin_audit,'/api/admin/issue-card':admin_issue,'/api/market/download-auth':market_download_auth,'/api/market/install-report':market_install_report,'/api/admin/market/list':admin_market_list,'/api/admin/market/upsert':admin_market_upsert}
+ROUTES={'/api/auth/email/send-code':lambda b: issue_code(b.get('email',''),b.get('scene','register'),b.get('ip',''),b.get('device_id','')) if valid_email(b.get('email','')) else (False,'目前仅支持 QQ 邮箱（@qq.com）'),'/api/auth/register':register,'/api/auth/login':login,'/api/auth/password/reset':reset,'/api/auth/verify':verify,'/api/auth/activate':activate,'/api/admin/login':admin_login,'/api/admin/logout':admin_logout,'/api/admin/users':admin_users,'/api/admin/user/toggle':admin_toggle,'/api/admin/user/extend':admin_extend_subscription,'/api/admin/cards':admin_cards,'/api/admin/card/revoke':admin_card_revoke,'/api/admin/audit':admin_audit,'/api/admin/issue-card':admin_issue,'/api/market/download-auth':market_download_auth,'/api/market/install-report':market_install_report,'/api/admin/market/list':admin_market_list,'/api/admin/market/upsert':admin_market_upsert}
 ADMIN_HTML=r'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>拾帧 FrameWeave 授权后台</title>
@@ -379,7 +391,7 @@ async function render(){
  const a=await call('/audit');
  const c=await call('/cards');
  const expiring=u.users.filter(x=>x.expiring_soon);
- const usr=u.users.map(x=>'<tr><td>'+esc(x.email)+(x.expiring_soon?'<br><span class="badge warn">即将到期</span>':'')+'</td><td>'+esc(x.plan)+'</td><td>'+fmt(x.expires_at)+'</td><td>'+(x.hash_type=='scrypt'?'<span class="badge ok">scrypt</span>':'<span class="badge off">sha256</span>')+'</td><td>'+esc(x.credits)+'</td><td>'+(x.status==1?'<span class="badge ok">启用</span>':'<span class="badge off">禁用</span>')+'</td><td><button onclick="toggleUser(\''+esc(x.email)+'\')">'+(x.status==1?'禁用':'启用')+'</button></td></tr>').join('');
+ const usr=u.users.map(x=>'<tr><td>'+esc(x.email)+(x.expiring_soon?'<br><span class="badge warn">即将到期</span>':'')+'</td><td>'+esc(x.plan)+'</td><td>'+fmt(x.expires_at)+'</td><td>'+(x.hash_type=='scrypt'?'<span class="badge ok">scrypt</span>':'<span class="badge off">sha256</span>')+'</td><td>'+esc(x.credits)+'</td><td>'+(x.status==1?'<span class="badge ok">启用</span>':'<span class="badge off">禁用</span>')+'</td><td><input class="extendDays" data-email="'+esc(x.email)+'" type="number" min="1" max="3650" value="30" style="width:55px"><button onclick="extendUser(\''+esc(x.email)+'\',this.previousElementSibling.value)">加时</button> <button onclick="toggleUser(\''+esc(x.email)+'\')">'+(x.status==1?'禁用':'启用')+'</button></td></tr>').join('');
  const logs=(a.logs||[]).map(l=>'<tr><td>'+fmt(l.created_at)+'</td><td>'+esc(l.email)+'</td><td>'+esc(l.scene)+'</td><td>'+esc(l.ip)+'</td><td>'+(l.result=='sent'?'<span class="badge ok">成功</span>':'<span class="badge off">失败</span>')+'</td><td>'+esc(l.reason)+'</td></tr>').join('');
  const cards=(c&&c.cards||[]).map(x=>'<tr><td>'+x.id+'</td><td style="font-family:monospace;font-size:11px">'+esc(x.card)+'</td><td>'+esc(x.plan)+'</td><td>'+x.days+'</td><td>'+fmt(x.created_at)+'</td><td>'+esc(x.used_by||'-')+'</td><td>'+(x.revoked==1?'<span class="badge off">已作废</span>':(x.used_by?'<span class="badge ok">已使用</span>':'<span class="badge">未使用</span>'))+'</td><td>'+(x.revoked==1?'-':'<button onclick="revokeCard('+x.id+')">作废</button>')+'</td></tr>').join('');
  document.getElementById('app').innerHTML='<header><h1>拾帧 FrameWeave 授权后台</h1><button class="sec" onclick="logout()">退出登录</button></header><main>'
@@ -391,6 +403,7 @@ async function render(){
  +'<div class="card"><h2>邮件发送审计</h2><div style="overflow-x:auto"><table><tr><th>时间</th><th>邮箱</th><th>场景</th><th>IP</th><th>结果</th><th>原因</th></tr>'+logs+'</table></div></div>'
  +'</main>';
 }
+async function extendUser(email,days){const r=await call('/user/extend',{email,days});if(r.ok){toast('已增加 '+r.days+' 天');render()}else{toast(r.message||'加时失败')}}
 async function toggleUser(email){const r=await call('/user/toggle',{email});if(r.ok){toast(r.status==1?'已启用':'已禁用');render()}else{toast(r.message||'操作失败')}}
 async function revokeCard(id){if(!confirm('确认作废该卡密？作废后不可恢复'))return;const r=await call('/card/revoke',{id});if(r.ok){toast('已作废');render()}else{toast(r.message||'操作失败')}}
 async function issue(){const plan=document.getElementById('plan').value;const days=parseInt(document.getElementById('days').value)||30;const count=parseInt(document.getElementById('count').value)||1;const r=await call('/issue-card',{plan,days,count});if(r.ok){const el=document.getElementById('cards');el.style.display='block';el.textContent=r.cards.join('\n');toast('已签发 '+count+' 张')}else{toast(r.message||'签发失败')}}
