@@ -140,8 +140,10 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
           </div>
         ))}
         {categories.length === 0 && (
-          <div style={{ color: 'var(--text-faint)', fontSize: 12, padding: '20px 4px', textAlign: 'center' }}>
-            无匹配节点
+          <div style={{ color: 'var(--text-faint)', fontSize: 12, padding: '20px 10px', textAlign: 'center', lineHeight: 1.7 }}>
+            {specs.length === 0
+              ? <>节点库为空。<br />请到「商城」安装节点后自动出现。</>
+              : '无匹配节点'}
           </div>
         )}
       </div>

@@ -23,7 +23,6 @@ from .engine import Engine
 from .license import LicenseService
 from .registry import autodiscover, list_specs
 from . import declarative
-from .templates import oneclick_template
 from .draft_validator import validate_jianying_draft
 from .secrets import store_secret, read_secret, list_secret_names, delete_secret
 from .wfstore import WorkflowStore
@@ -145,19 +144,9 @@ app.add_middleware(
 )
 
 # ---- 初始化 ----
-# 官方节点以插件包随安装包分发；启动时合并到用户插件目录，不覆盖用户版本。
+# 安装包只含本体：节点不再随安装包分发，全部经商城/插件市场安装到用户数据目录（%APPDATA%/FrameWeave/user_nodes）。
 _declarative_user_dir = os.path.join(DATA_DIR, "user_nodes")
 os.makedirs(_declarative_user_dir, exist_ok=True)
-_bundled_nodes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_nodes")
-try:
-    if os.path.isdir(_bundled_nodes_dir) and os.path.abspath(_bundled_nodes_dir) != os.path.abspath(_declarative_user_dir):
-        for _entry in os.listdir(_bundled_nodes_dir):
-            _src = os.path.join(_bundled_nodes_dir, _entry)
-            _dst = os.path.join(_declarative_user_dir, _entry)
-            if os.path.isdir(_src) and not os.path.exists(_dst):
-                shutil.copytree(_src, _dst)
-except Exception as _e:  # noqa: BLE001
-    print("[plugins] 官方插件合并跳过:", _e)
 declarative.set_user_nodes_dir(_declarative_user_dir)
 autodiscover()
 declarative.scan()
@@ -179,25 +168,6 @@ try:
 except Exception as _e:  # noqa: BLE001
     print("[prune] 跳过:", _e)
 
-# 迁移 v0.2.3 及以前装进程序目录的用户节点（打包版旧位置 _internal/user_nodes）
-try:
-    legacy_nodes = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_nodes")
-    new_nodes = declarative.USER_NODES_DIR
-    if os.path.isdir(legacy_nodes) and os.path.abspath(legacy_nodes) != os.path.abspath(new_nodes)             and not os.path.isdir(new_nodes) and os.listdir(legacy_nodes):
-        os.makedirs(new_nodes, exist_ok=True)
-        for entry in os.listdir(legacy_nodes):
-            src = os.path.join(legacy_nodes, entry)
-            if os.path.isfile(src) and entry.endswith(".zip"):
-                continue  # 跳过临时下载包
-            dst = os.path.join(new_nodes, entry)
-            if not os.path.exists(dst):
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
-        print(f"[migrate] 用户节点已从旧安装目录迁移到 {new_nodes}")
-except Exception as e:  # noqa: BLE001
-    print("[migrate] 用户节点迁移跳过:", e)
 license_svc = LicenseService(DATA_DIR)
 market_svc = MarketService(DATA_DIR)
 
@@ -454,34 +424,17 @@ async def validate_draft(body: dict):
 
 @app.get("/api/templates")
 async def list_templates():
-    """内置工作流模板列表。"""
-    return [
-        {
-            "id": "oneclick",
-            "title": "一条龙 · 15分钟出片",
-            "description": "导入视频 → 场景检测 → AI文案 → 配音 → 字幕 → 渲染+草稿导出",
-            "nodes": len(oneclick_template()["nodes"]),
-        },
-    ]
+    """工作流模板列表。
+
+    节点与模板不再随安装包分发：安装包只含本体，模板由商城/插件市场提供。
+    未安装任何模板时返回空列表（前端据此引导去商城安装节点/模板）。
+    """
+    return []
 
 @app.post("/api/workflows/from-template/{tpl_id}", status_code=201)
 async def create_wf_from_template(tpl_id: str):
-    """按模板创建工作流。"""
-    if tpl_id != "oneclick":
-        raise HTTPException(404, "模板不存在")
-    data = oneclick_template()
-    wf = wfstore.create(data["name"])
-    from .engine import GraphNode
-    wf.nodes = {}
-    for nd in data["nodes"]:
-        n = GraphNode(id=nd["id"], type_id=nd["type"],
-                      x=nd.get("x", 0), y=nd.get("y", 0),
-                      params=nd.get("params", {}),
-                      inputs=nd.get("inputs") or {})
-        wf.nodes[n.id] = n
-    wf.edges = data["edges"]
-    wfstore.save(wf)
-    return wf.to_dict()
+    """按模板创建工作流（模板来自商城/插件市场；本体不内置模板）。"""
+    raise HTTPException(404, "模板未安装（请从商城安装节点与模板）")
 
 @app.get("/api/workflows")
 async def list_wf():

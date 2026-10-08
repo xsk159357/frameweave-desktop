@@ -10,8 +10,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('../voice_clone', 'voice_clone'),
-        # 官方核心节点以插件包形式随安装包分发，运行时扫描 user_nodes。
-        ('../user_nodes', 'user_nodes'),
+        # 节点不再随安装包分发：安装包只含本体；节点全部经商城/插件市场安装到用户数据目录。
     ],
     hiddenimports=[
         'app.declarative',

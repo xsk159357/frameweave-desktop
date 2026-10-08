@@ -64,6 +64,13 @@ export default function App() {
     return () => window.removeEventListener('fw-open-plugins', h)
   }, [])
 
+  // 画布空态「去商城安装节点」事件 → 打开商城面板
+  useEffect(() => {
+    const h = () => setShowMarket(true)
+    window.addEventListener('fw-open-market', h)
+    return () => window.removeEventListener('fw-open-market', h)
+  }, [])
+
   // 引擎就绪轮询（启动加速：Electron 窗口先行，界面先渲染加载层，本地引擎 health 200 后进入应用）
   useEffect(() => {
     let alive = true
@@ -112,19 +119,9 @@ export default function App() {
         if (list.length > 0) {
           wid = list[0].id; wname = (list[0] as any).name || ''
         } else {
-          try {
-            const tpls = await api.listTemplates()
-            if (tpls.length > 0) {
-              const created = await api.createFromTemplate(tpls[0].id)
-              wid = (created as any).id; wname = (created as any).name || ''
-            } else {
-              const created = await api.createWorkflow('我的第一个工作流')
-              wid = (created as any).id; wname = '我的第一个工作流'
-            }
-          } catch {
-            const created = await api.createWorkflow('我的第一个工作流')
-            wid = (created as any).id; wname = '我的第一个工作流'
-          }
+          // 节点/模板来自商城：无工作流时直接建空工作流（画布空态引导去商城装节点）
+          const created = await api.createWorkflow('我的第一个工作流')
+          wid = (created as any).id; wname = '我的第一个工作流'
         }
         if (alive) setWorkflow(wid, wname)
       } catch (e: any) {
@@ -409,7 +406,11 @@ export default function App() {
                   <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.description} · {t.nodes} 节点</div>
                 </div>
               ))}
-              {tplList.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>暂无模板</div>}
+              {tplList.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.7, padding: '4px 2px' }}>
+                  暂无模板。<br />节点与模板由商城提供——请先到<strong>「商城」</strong>安装节点后，再从商城/导出导入工作流模板。
+                </div>
+              )}
             </div>
           </div>
         </div>

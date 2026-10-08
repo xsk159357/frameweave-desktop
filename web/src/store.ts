@@ -94,7 +94,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   specs: [],
-  setSpecs: (specs) => set({ specs }),
+  setSpecs: (specs) => {
+    set({ specs })
+    // 节点库变化后广播（画布/侧栏/右键菜单联动刷新）
+    try { window.dispatchEvent(new Event('fw-nodes-installed')) } catch { /* 浏览器环境忽略 */ }
+  },
 
   workflowId: '',
   workflowName: '',

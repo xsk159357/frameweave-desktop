@@ -5,7 +5,7 @@ import {
   addEdge, useNodesState, useEdgesState, useReactFlow,
   type Connection, type Edge,
 } from '@xyflow/react'
-import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon } from 'lucide-react'
+import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon, Store, RefreshCw } from 'lucide-react'
 import { api, connectWS } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData, type NodeSpec } from './types'
@@ -20,6 +20,7 @@ let nodeSeq = 0
 
 function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; readOnly?: boolean }) {
   const specs = useAppStore((s) => s.specs)
+  const setSpecs = useAppStore((s) => s.setSpecs)
   const nodeStatus = useAppStore((s) => s.nodeStatus)
   const nodeError = useAppStore((s) => s.nodeError)
   const nodeProgress = useAppStore((s) => s.nodeProgress)
@@ -104,6 +105,15 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
       return { ...n, data: { ...d, status: st, error: er, progress: pr, asset_ids: as } }
     }))
   }, [nodeStatus, nodeError, nodeProgress, nodeAssets, setNodes])
+
+  // 节点安装后自动刷新 specs（商城/插件面板安装成功时触发 fw-nodes-installed）
+  useEffect(() => {
+    const h = () => {
+      api.specs().then(setSpecs).catch(() => {})
+    }
+    window.addEventListener('fw-nodes-installed', h)
+    return () => window.removeEventListener('fw-nodes-installed', h)
+  }, [setSpecs])
 
   // WebSocket 事件
   useEffect(() => {
@@ -698,6 +708,40 @@ const onAddNode = useCallback((typeId: string) => {
               地图
             </button>
           </ReactFlow>
+
+          {/* 空态引导：本体未安装任何节点（节点来自商城/插件市场） */}
+          {specs.length === 0 && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                pointerEvents: 'auto', maxWidth: 420, textAlign: 'center', padding: '30px 34px',
+                background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+                border: 'var(--glass-border)', borderRadius: 20, boxShadow: 'var(--glass-inner), var(--shadow-lg)',
+              }}>
+                <div style={{ fontSize: 15, fontWeight: 750, color: 'var(--text)', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--accent)', fontWeight: 800 }}>FrameWeave</span> 节点库为空
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.7, marginBottom: 16 }}>
+                  本安装包只包含软件本体（画布引擎 / 授权 / 商城）。<br />
+                  节点能力通过<strong>「商城」</strong>安装——安装后自动出现在左侧节点库与右键菜单。
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button className="fw-btn fw-btn-primary" onClick={() => { window.dispatchEvent(new Event('fw-open-market')) }}>
+                    <><Store size={13} /> 去商城安装节点</>
+                  </button>
+                  <button className="fw-btn fw-btn-ghost" onClick={() => { window.dispatchEvent(new Event('fw-open-plugins')) }}>
+                    <><Puzzle size={13} /> 导入节点插件</>
+                  </button>
+                  <button className="fw-btn fw-btn-ghost" onClick={async () => { await api.reloadUserNodes(); setSpecs(await api.specs()); pushToast('节点库已刷新', 'ok') }}>
+                    <><RefreshCw size={13} /> 刷新节点</>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 视口 vignette */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(120% 100% at 50% 40%, transparent 62%, var(--vignette))', zIndex: 1 }} />
 
