@@ -72,16 +72,17 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
                                               "Accept": "application/json"},
                                      method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            # VM 网络优先走 IPv4；若 IPv4 失败，再回退系统默认地址族（含 IPv6）。
+            with _urlopen_ipv4(req, timeout) as resp:
                 _body = json.loads(resp.read().decode() or "{}")
-                _dbg("CLOUD_OK path=%s family=default resp=%s" % (path, str(_body)[:200]))
+                _dbg("CLOUD_OK path=%s family=ipv4 resp=%s" % (path, str(_body)[:200]))
                 return _body
         except Exception as _first_err:  # noqa: BLE001
-            _dbg("CLOUD_RETRY_IPV4 path=%s err=%s" % (path, repr(_first_err)))
+            _dbg("CLOUD_RETRY_DEFAULT path=%s err=%s" % (path, repr(_first_err)))
             try:
-                with _urlopen_ipv4(req, timeout) as resp:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
                     _body = json.loads(resp.read().decode() or "{}")
-                    _dbg("CLOUD_OK path=%s family=ipv4 resp=%s" % (path, str(_body)[:200]))
+                    _dbg("CLOUD_OK path=%s family=default resp=%s" % (path, str(_body)[:200]))
                     return _body
             except Exception as _second_err:  # noqa: BLE001
                 _dbg("CLOUD_ERR path=%s err=%s" % (path, repr(_second_err)))
