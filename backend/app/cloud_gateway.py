@@ -1,6 +1,6 @@
 """云端授权网关（M19 对接位，已正式云化）。
 
-默认云端：https://frameweave.ameaaos.com（雨云日本，openresty HTTPS 反代 127.0.0.1:8789）。
+默认云端：https://shouquan.frameweave.top（韩国授权服务器 43.108.23.200，Cloudflare HTTPS 反代 127.0.0.1:8789）。
 默认即云化：登录/校验/激活走远程授权服务器（签名卡密 + 设备绑定 + 无离线宽限）。
 本地桩/开发：显式设置环境变量 FRAMEWEAVE_CLOUD_URL=""（空）即回落本地校验。
 """
@@ -13,7 +13,7 @@ import urllib.request
 from typing import Optional
 
 def cloud_url() -> str:
-    return os.environ.get("FRAMEWEAVE_CLOUD_URL", "https://frameweave.ameaaos.com").rstrip("/")
+    return os.environ.get("FRAMEWEAVE_CLOUD_URL", "https://shouquan.frameweave.top").rstrip("/")
 
 CLOUD_URL = ""
 CLIENT_VERSION = "0.2.12"  # 与 desktop/package.json / server.APP_VERSION 保持一致

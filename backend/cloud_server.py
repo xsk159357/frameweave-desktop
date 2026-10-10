@@ -186,6 +186,7 @@ def activate(b):
  if serial in used:return {'ok':False,'message':'该卡密已被使用'}
  now=time.time();s['expires_at']=max(now,float(s.get('expires_at') or now))+int(p.get('days') or 30)*86400;s['plan']='member';s['cards_used']=json.dumps(used+[serial]);save(s)
  c=db(); c.execute('UPDATE cards SET used_by=?,used_at=? WHERE card=?',(norm(s['email']),now,b.get('card','').strip())); c.commit(); c.close()
+ return {'ok':True,'message':'激活成功','plan':'member','expires_at':s['expires_at']}
 # ---------- market (M20: 商城下载授权 + 安装回报) ----------
 def _ver_tuple(v):
     parts=[]
@@ -193,17 +194,28 @@ def _ver_tuple(v):
         if seg.isdigit(): parts.append(int(seg))
         else: break
     return tuple(parts[:7])
+def _clean_key(k):
+    # 防御：剔除键中的 BOM / 零宽 / 控制字符 / 空白，避免磁盘文件混入不可见字符导致
+    # download-auth item_not_found（历史线上事故：键含不可见字符，json 键匹配失败）。
+    return ''.join(ch for ch in (k or '') if not (ch.isspace() or ord(ch) < 32))
 def _load_market():
     try:
         if os.path.exists(MARKET_FILE):
             with open(MARKET_FILE,'r',encoding='utf-8') as f: data=json.load(f)
-            return data if isinstance(data,dict) else {}
+            if isinstance(data,dict):
+                cleaned={}; changed=False
+                for k,v in data.items():
+                    ck=_clean_key(k)
+                    if ck != k: changed=True
+                    if ck: cleaned[ck]=v
+                if changed: _save_market(cleaned)
+                return cleaned
     except Exception: pass
     return {}
 def _save_market(data):
     with open(MARKET_FILE,'w',encoding='utf-8') as f: json.dump(data,f,ensure_ascii=False,indent=2)
 def _market_item(iid):
-    return _load_market().get(iid)
+    return _load_market().get(_clean_key(iid))
 def find_by_token(tok):
     c=db()
     try:

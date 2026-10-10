@@ -1,11 +1,11 @@
 # Update FrameWeave cloud authorization server
-# Usage: pwsh scripts/update-cloud-auth.ps1 [-CheckOnly]
+# Usage: pwsh scripts/update-cloud-auth.ps1 [-CheckOnly] [-Server 43.108.23.200]
 # Credentials (never stored in this repo):
-#   1) env FW_SERVER_PASSWORD   (recommended for one-off)
+#   1) env FW_SERVER_PASSWORD   (recommended for one-off; Korea alias: FW_KOREA_PASSWORD)
 #   2) file $HOME\.frameweave\server.env   (local machine secret, key FW_SERVER_PASSWORD)
 #   3) SSH key $HOME\.ssh\frameweave_auth  (preferred, no password needed)
 param(
-  [string]$Server = "154.36.178.119",
+  [string]$Server = "43.108.23.200",
   [int]$Port = 22,
   [string]$User = "root",
   [string]$CloudDir = "/opt/frameweave-cloud",
@@ -21,6 +21,7 @@ Write-Host "[update] source: $resolved"
 
 # --- credentials resolution ---
 $pw = $env:FW_SERVER_PASSWORD
+if (-not $pw) { $pw = $env:FW_KOREA_PASSWORD }   # Korea migration alias (env-only)
 $envFile = Join-Path $HOME ".frameweave\server.env"
 if (-not $pw -and (Test-Path -LiteralPath $envFile)) {
   $line = (Get-Content -LiteralPath $envFile -Raw) -split "\r?\n" | Where-Object { $_ -match "^FW_SERVER_PASSWORD=" } | Select-Object -First 1
