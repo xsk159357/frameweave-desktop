@@ -10,7 +10,7 @@ import os
 from typing import Any, Dict
 
 from ..assets import Asset
-from ..llm import chat
+from ..providers import get_provider
 from ..nodespec import NodeBase, NodeSpec, PortSpec, PortType
 from ..registry import register
 
@@ -75,6 +75,9 @@ class TranslateNode(NodeBase):
 
         store = ctx["store"]
 
+        # P2（t4）：LLM 经 Provider SPI 解析（默认 OpenAI 兼容，第三方可注册替换）
+        llm = get_provider("llm")
+
         # 翻译文案
         out_script = None
         if script_asset is not None:
@@ -85,8 +88,8 @@ class TranslateNode(NodeBase):
                 + "只输出译文，不要解释。\n\n" + src
             )
             try:
-                result = chat([{"role": "user", "content": prompt}], api_key, base_url, model,
-                              temperature=0.4, max_tokens=4096)
+                result = llm.chat([{"role": "user", "content": prompt}], api_key, base_url, model,
+                                  temperature=0.4, max_tokens=4096)
             except Exception as e:
                 raise RuntimeError("翻译失败: %s" % e)
             out_script = store.save_asset(
@@ -105,8 +108,8 @@ class TranslateNode(NodeBase):
                     + "只输出翻译结果，格式与输入一致（每行 [编号] 译文）。\n\n" + numbered
                 )
                 try:
-                    result = chat([{"role": "user", "content": prompt}], api_key, base_url, model,
-                                  temperature=0.3, max_tokens=4096)
+                    result = llm.chat([{"role": "user", "content": prompt}], api_key, base_url, model,
+                                      temperature=0.3, max_tokens=4096)
                 except Exception as e:
                     raise RuntimeError("字幕翻译失败: %s" % e)
                 # 回填

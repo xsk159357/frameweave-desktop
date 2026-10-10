@@ -18,6 +18,11 @@ release/
 backend/data/
 backend/cloud.db
 
+# ===== 上传/校验临时文件（P0.4 F1：流式截断/失败安装零残留，历史泄漏就地忽略） =====
+backend/tmp*.zip
+backend/tmp*.json
+backend/tmp*.log
+
 # ===== 缓存目录 =====
 .cache/
 .dl/
@@ -56,3 +61,10 @@ Thumbs.db
 .env
 *.env
 backend/.env
+
+# ===== 测试临时目录（成员并行验证产生的 fw_* 工作目录，不入库） =====
+backend/fw_*/
+
+# ===== 本机工具目录 / 团队中间产物 =====
+Python/
+.agent-teams-read/

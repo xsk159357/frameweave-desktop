@@ -157,15 +157,15 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       ref={cardRef}
       style={{
         position: 'relative', width: 240, height: nodeH, zIndex: expanded ? 60 : (selected ? 40 : 1),
-        background: 'var(--panel)',
+        background: 'var(--node-grad)',
         border: isFailed
           ? '1.5px solid rgba(248,113,113,.9)'
           : '1px solid ' + (selected ? '#8b93ff' : 'var(--border)'),
         borderRadius: 16,
         boxShadow: isFailed
-          ? '0 0 0 2px rgba(248,113,113,.3), 0 0 20px rgba(248,113,113,.28), var(--shadow-md)'
+          ? '0 0 0 2px rgba(248,113,113,.3), 0 0 20px rgba(248,113,113,.28), var(--elev-2)'
           : selected
-            ? '0 0 0 3px rgba(139,147,255,.2), 0 0 26px rgba(139,147,255,.28), var(--shadow-md)'
+            ? '0 0 0 3px rgba(139,147,255,.2), 0 0 26px rgba(139,147,255,.28), var(--elev-2)'
             : 'var(--card-shadow)',
         fontSize: 12, color: 'var(--text)',
         transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',

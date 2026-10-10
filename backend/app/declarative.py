@@ -12,10 +12,19 @@ op_spec 语法（白名单，不执行任意代码）：
   顶层 op: concat / json_get / math / str / list / upper / lower / len
 
 安全模型：仅支持纯数据变换（字符串/数字/JSON），不执行用户代码。
+安装安全（P0.4 U1-U4 + P1 t2，依据《万物插件化_改造_运行时安全隔离.md》§6.1）：
+  install_zip 五上限（总量 8GB/单文件 4GB/成员 20000/压缩比 100:1/
+  symlink·hardlink·加密·穿越成员拒绝），staging 临时目录 → manifest v2 强校验
+  （G1-G10，app/plugin/manifest_v2.py 替换旧基础门）→ 原子 rename → 失败清理无残留；
+  scan/install 对坏包显式报错误码（PluginInstallError/PluginManifestError），
+  不静默吞异常。上限参数唯一引用 worker/limits.py。
 """
 from __future__ import annotations
 import json
 import os
+import shutil
+import stat
+import uuid
 import zipfile
 import importlib.util
 import sys
@@ -23,12 +32,18 @@ from typing import Any, Dict, List, Optional, Type
 
 from .nodespec import NodeBase, NodeSpec, PortSpec
 from .ports import PortType
+from . import ports  # 端口类型注册制（P2）：resolve_port_type / register_port_type
+from .worker import limits
+from .plugin import manifest_v2
 
 # 用户节点目录（开发默认 backend/user_nodes；打包版由 server 启动时指向用户数据目录）
 _USER_NODES_DIR = os.environ.get("FRAMEWEAVE_USER_NODES") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_nodes"
 )
 USER_NODES_DIR = _USER_NODES_DIR
+
+# 安装/扫描保留目录：.staging（事务临时区）、.backup、_vendor、.git 等不参与加载
+_RESERVED_DIRS = (".staging", ".backup", "_vendor", ".git")
 
 
 def set_user_nodes_dir(path: str) -> None:
@@ -38,17 +53,14 @@ def set_user_nodes_dir(path: str) -> None:
 
 _decl: Dict[str, Type[NodeBase]] = {}
 _plugin_modules: Dict[str, Any] = {}
+_scan_errors: List[Dict[str, Any]] = []
 
 
 # ---------- manifest -> NodeSpec ----------
 def _port_type(s: Any) -> PortType:
-    """manifest 里的端口类型字符串 -> PortType 枚举（engine 需要 .value）。"""
-    if isinstance(s, PortType):
-        return s
-    try:
-        return PortType[str(s).upper()]
-    except (KeyError, AttributeError):
-        return PortType.STRING
+    """manifest 里的端口类型字符串 -> PortType（13 核心 + P2 扩展注册表；未知兜底 STRING）。"""
+    resolved = ports.resolve_port_type(s)
+    return resolved if resolved is not None else PortType.STRING
 
 
 def _spec_from_manifest(m: Dict[str, Any]) -> NodeSpec:
@@ -236,31 +248,59 @@ def _make_python_class(manifest: Dict[str, Any], package_dir: str) -> Type[NodeB
     return _P
 
 
-# ---------- 扫描 / 安装 ----------
+# ---------- 扫描 ----------
 def scan() -> int:
-    """扫描 USER_NODES_DIR 下所有 manifest.json，重建注册表。返回加载数。"""
+    """扫描 USER_NODES_DIR 下所有 manifest.json，重建注册表。返回加载数。
+
+    P1（t2）：每个包先过 manifest v2 强校验（G1-G10，app/plugin/manifest_v2.py），
+    用校验器注入默认值后的内存副本构建节点类（v1 兼容通道不写盘）。
+    失败包不静默吞异常：每条错误以 {pkg, code, message} 记录（scan_errors() 可取），
+    并打印日志；仅跳过 .staging/.backup/_vendor 等保留目录。
+    """
+    global _scan_errors
     _decl.clear()
+    _scan_errors = []
     if not os.path.isdir(USER_NODES_DIR):
         return 0
     count = 0
     for entry in sorted(os.listdir(USER_NODES_DIR)):
+        if entry.startswith(".") or entry in _RESERVED_DIRS:
+            continue
         mpath = os.path.join(USER_NODES_DIR, entry, "manifest.json")
         if not os.path.isfile(mpath):
             continue
         try:
             with open(mpath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            type_id = data.get("type_id", "")
+            result = manifest_v2.validate_manifest(data)
+            norm = result.manifest
+            type_id = norm.get("type_id", "")
             if not type_id:
+                _scan_errors.append({"pkg": entry, "code": limits.ERR_MANIFEST,
+                                     "message": "manifest 缺少 type_id"})
                 continue
-            if data.get("runtime") == "python":
-                _decl[type_id] = _make_python_class(data, os.path.join(USER_NODES_DIR, entry))
+            # kind 由校验器归一化（v1 兼容按 entrypoint/transform 探测）——
+            # 分支用 kind 而非 runtime：v1 python 包可能不写 runtime 字段
+            if norm.get("kind") == "python":
+                _decl[type_id] = _make_python_class(norm, os.path.join(USER_NODES_DIR, entry))
             else:
-                _decl[type_id] = _make_class(data)
+                _decl[type_id] = _make_class(norm)
+            for w in result.warnings:
+                print(f"[declarative] {entry}: {w}")
             count += 1
+        except manifest_v2.PluginManifestError as e:
+            _scan_errors.append({"pkg": entry, "code": e.code, "message": e.args[0]})
+            print(f"[declarative] 插件包 manifest 校验失败 {entry}: {e}")
         except Exception as e:  # noqa: BLE001
+            code = getattr(e, "code", limits.ERR_INSTALL)
+            _scan_errors.append({"pkg": entry, "code": code, "message": str(e)})
             print(f"[declarative] 插件包加载失败 {entry}: {e}")
     return count
+
+
+def scan_errors() -> List[Dict[str, Any]]:
+    """最近一次 scan() 的 per-package 错误（显式错误码，不静默吞异常）。"""
+    return list(_scan_errors)
 
 
 def get_class(type_id: str) -> Optional[Type[NodeBase]]:
@@ -276,6 +316,8 @@ def pkg_dir(type_id: str) -> Optional[str]:
     if not os.path.isdir(USER_NODES_DIR):
         return None
     for entry in sorted(os.listdir(USER_NODES_DIR)):
+        if entry.startswith(".") or entry in _RESERVED_DIRS:
+            continue
         mpath = os.path.join(USER_NODES_DIR, entry, "manifest.json")
         if not os.path.isfile(mpath):
             continue
@@ -288,34 +330,190 @@ def pkg_dir(type_id: str) -> Optional[str]:
     return None
 
 
+# ---------- 安装（五上限 + staging 原子安装） ----------
 def install_zip(zip_path: str) -> str:
-    """从 zip 安装插件包（解压到 user_nodes/<pkg>/ 并重扫）。返回安装目录或抛错。
-    安全：拦截路径穿越（zip-slip）——任何成员不得逃出 USER_NODES_DIR。"""
+    """从 zip 原子安装插件包：解压到 .staging/<uuid> → manifest v2 强校验（G1-G10）
+    → 原子 rename 到 user_nodes/<pkg> → 重扫。失败清理 staging 无残留，并抛带错误码的
+    PluginInstallError/PluginManifestError（不静默吞异常）。
+
+    五上限（§6.1，大插件支持 t2，参数唯一引用 worker/limits.py）：
+      总量 ≤ 8GB / 单文件 ≤ 4GB / 成员数 ≤ 20000 / 压缩比 ≤ 100:1 /
+      拒绝 symlink·hardlink·加密·特殊·穿越成员。解压按 ZIP_BLOCK 流式字节级累计，
+      单文件 4GB 级大包无需整包载入内存。
+    """
+    if not os.path.isfile(zip_path):
+        raise limits.PluginInstallError(limits.ERR_NOT_ZIP, "zip 文件不存在")
     if not zipfile.is_zipfile(zip_path):
-        raise ValueError("不是有效的 zip 插件包")
+        raise limits.PluginInstallError(limits.ERR_NOT_ZIP, "不是有效的 zip 插件包")
     os.makedirs(USER_NODES_DIR, exist_ok=True)
-    base_abs = os.path.abspath(USER_NODES_DIR)
+    staging_root = os.path.join(os.path.abspath(USER_NODES_DIR), ".staging")
+    os.makedirs(staging_root, exist_ok=True)
+    staging = os.path.join(staging_root, uuid.uuid4().hex)
+    os.makedirs(staging, exist_ok=True)
+    unpack = os.path.join(staging, "unpack")
+    os.makedirs(unpack, exist_ok=True)
+    zip_size = os.path.getsize(zip_path)
+    pkg_name = os.path.basename(zip_path)
+    try:
+        _extract_zip_safe(zip_path, unpack, zip_size)
+        pkg = _resolve_package_dir(unpack)
+        _validate_package(pkg)
+        dest = os.path.join(os.path.abspath(USER_NODES_DIR), os.path.basename(pkg))
+        _atomic_replace(staging, pkg, dest)
+        scan()
+        for err in _scan_errors:
+            if err.get("pkg") == os.path.basename(dest):
+                _rmtree_safe(dest)  # 校验不过 → 回滚安装，无残留
+                raise limits.PluginInstallError(err.get("code") or limits.ERR_INSTALL,
+                                                "安装校验失败: " + str(err.get("message")))
+        limits.audit("plugin_install", zip=pkg_name, pkg=os.path.basename(dest),
+                     ok=True, code="ok")
+        return dest
+    except limits.PluginInstallError as e:
+        limits.audit("plugin_install", zip=pkg_name, ok=False,
+                     code=e.code, error=str(e))
+        raise
+    except Exception as e:  # noqa: BLE001
+        limits.audit("plugin_install", zip=pkg_name, ok=False,
+                     code=limits.ERR_INSTALL, error=str(e))
+        raise limits.PluginInstallError(limits.ERR_INSTALL, f"安装失败: {e}") from e
+    finally:
+        _rmtree_safe(staging)  # 失败/成功都清理事务目录：无半解压残留
+
+
+def _extract_zip_safe(zip_path: str, dest_root: str, zip_size: int) -> None:
+    """解压到 dest_root，逐项实施五上限；任何越界立即抛 PluginInstallError。
+
+    先按中央目录声明值快速预检（成员数/单文件/总量/压缩比），再实际解压时按
+    字节级累计复核（防声明撒谎）。
+    """
     with zipfile.ZipFile(zip_path) as zf:
-        members = zf.namelist()
-        if not members:
-            raise ValueError("空插件包")
-        for member in members:
-            # 规范化目标路径，禁止 .. 越界 / 绝对路径 / 驱动器符
-            target = os.path.abspath(os.path.join(base_abs, member.replace("\\", "/")))
-            if target != base_abs and not target.startswith(base_abs + os.sep):
-                raise ValueError(f"插件包包含非法路径: {member}")
-            if member.startswith("/") or (len(member) > 1 and member[1] == ":"):
-                raise ValueError(f"插件包包含非法路径: {member}")
-        top = members[0].split("/")[0]
-        dest = os.path.join(USER_NODES_DIR, top)
-        for member in members:
-            target = os.path.join(base_abs, member.replace("\\", "/"))
-            if member.endswith("/"):
+        infos = zf.infolist()
+        if not infos:
+            raise limits.PluginInstallError(limits.ERR_EMPTY, "空插件包")
+        if len(infos) > limits.ZIP_MEMBER_COUNT:
+            raise limits.PluginInstallError(
+                limits.ERR_MEMBER_COUNT,
+                f"成员数超限: {len(infos)} > {limits.ZIP_MEMBER_COUNT}")
+        declared_total = 0
+        for info in infos:
+            name = info.filename
+            norm = name.replace("\\", "/")
+            if norm.startswith("/") or (len(norm) > 1 and norm[1] == ":"):
+                raise limits.PluginInstallError(limits.ERR_TRAVERSAL, f"非法路径: {name}")
+            target = os.path.abspath(os.path.join(dest_root, norm))
+            if target != dest_root and not target.startswith(dest_root + os.sep):
+                raise limits.PluginInstallError(limits.ERR_TRAVERSAL, f"非法路径: {name}")
+            kind = limits.special_member_kind(info)
+            if kind in ("symlink", "reparse"):
+                raise limits.PluginInstallError(limits.ERR_SYMLINK, f"拒绝 {kind} 成员: {name}")
+            if kind == "special":
+                raise limits.PluginInstallError(limits.ERR_SPECIAL, f"拒绝特殊成员: {name}")
+            if limits.member_is_encrypted(info):
+                raise limits.PluginInstallError(limits.ERR_ENCRYPTED, f"拒绝加密成员: {name}")
+            if not info.is_dir():
+                declared_total += info.file_size
+                if info.file_size > limits.ZIP_SINGLE_FILE:
+                    raise limits.PluginInstallError(
+                        limits.ERR_FILE_SIZE,
+                        f"单文件超限: {name} {info.file_size} > {limits.ZIP_SINGLE_FILE}")
+        if declared_total > limits.ZIP_TOTAL_UNCOMPRESSED:
+            raise limits.PluginInstallError(
+                limits.ERR_TOTAL_SIZE,
+                f"解压总量超限: {declared_total} > {limits.ZIP_TOTAL_UNCOMPRESSED}")
+        if zip_size > 0 and declared_total > zip_size * limits.ZIP_RATIO:
+            raise limits.PluginInstallError(
+                limits.ERR_ZIP_BOMB,
+                f"压缩比超限: {declared_total}/{zip_size} > {limits.ZIP_RATIO}:1")
+        # 实际解压（realpath 复查 + 字节级累计，防符号链接/声明撒谎）
+        dest_abs = os.path.abspath(dest_root)
+        actual_total = 0
+        for info in infos:
+            norm = info.filename.replace("\\", "/")
+            target = os.path.abspath(os.path.join(dest_root, norm))
+            rtarget = os.path.realpath(target)
+            rroot = os.path.realpath(dest_abs)
+            if rtarget != rroot and not rtarget.startswith(rroot + os.sep):
+                raise limits.PluginInstallError(limits.ERR_TRAVERSAL,
+                                                f"路径越界: {info.filename}")
+            if info.is_dir():
                 os.makedirs(target, exist_ok=True)
-            else:
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                with zf.open(member) as src, open(target, "wb") as dst:
-                    import shutil
-                    shutil.copyfileobj(src, dst)
-    scan()
-    return dest
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with zf.open(info) as src, open(target, "wb") as dst:
+                written = 0
+                while True:
+                    chunk = src.read(limits.ZIP_BLOCK)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    actual_total += len(chunk)
+                    if written > limits.ZIP_SINGLE_FILE:
+                        raise limits.PluginInstallError(
+                            limits.ERR_FILE_SIZE,
+                            f"单文件超限(实际): {info.filename}")
+                    if actual_total > limits.ZIP_TOTAL_UNCOMPRESSED:
+                        raise limits.PluginInstallError(
+                            limits.ERR_TOTAL_SIZE,
+                            f"解压总量超限(实际): {actual_total}")
+                    if zip_size > 0 and actual_total > zip_size * limits.ZIP_RATIO:
+                        raise limits.PluginInstallError(
+                            limits.ERR_ZIP_BOMB,
+                            f"压缩比超限(实际): {actual_total}/{zip_size}")
+                    dst.write(chunk)
+
+
+def _resolve_package_dir(unpack: str) -> str:
+    """staging 解压区必须恰好一个顶层目录（插件包 = <pkg>/manifest.json）。"""
+    entries = [e for e in os.listdir(unpack)]
+    dirs = [e for e in entries if os.path.isdir(os.path.join(unpack, e))]
+    files = [e for e in entries if not os.path.isdir(os.path.join(unpack, e))]
+    if files or len(dirs) != 1:
+        raise limits.PluginInstallError(
+            limits.ERR_LAYOUT,
+            "插件包必须包含单一顶层目录（<pkg>/manifest.json），不得混入根级文件")
+    name = dirs[0]
+    if name.startswith(".") or name in _RESERVED_DIRS:
+        raise limits.PluginInstallError(limits.ERR_LAYOUT, f"顶层目录名非法: {name}")
+    return os.path.join(unpack, name)
+
+
+def _validate_package(pkg: str) -> manifest_v2.ManifestResult:
+    """P1（t2）安装门：G1-G10 强校验（app/plugin/manifest_v2.py），替换 P0.4 基础门。
+
+    staging 事务内调用；返回含注入默认值的内存 manifest（v1 兼容通道不写盘）。
+    失败抛 PluginManifestError（显式错误码，如 manifest_type_id / manifest_ports / manifest_op）。
+    """
+    return manifest_v2.validate_manifest_file(pkg)
+
+
+def _atomic_replace(staging: str, pkg: str, dest: str) -> None:
+    """原子安装：已存在目标先改名让位，再 os.replace（同卷 rename）；失败回滚。"""
+    old_dir = None
+    if os.path.exists(dest):
+        old_dir = os.path.join(staging, "old_" + os.path.basename(dest))
+        os.rename(dest, old_dir)
+    try:
+        os.replace(pkg, dest)
+    except Exception:
+        if old_dir is not None and os.path.isdir(old_dir) and not os.path.exists(dest):
+            try:
+                os.rename(old_dir, dest)
+            except OSError:
+                pass
+        raise
+    if old_dir is not None:
+        _rmtree_safe(old_dir)
+
+
+def _rmtree_safe(path: str) -> None:
+    """尽力删除目录树（Windows 只读文件先清属性）；失败不抛出。"""
+    if not os.path.exists(path):
+        return
+    def _onerror(func, p, exc):
+        try:
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+            func(p)
+        except OSError:
+            pass
+    shutil.rmtree(path, onerror=_onerror)

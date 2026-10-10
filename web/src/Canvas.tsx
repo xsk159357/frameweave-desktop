@@ -5,7 +5,7 @@ import {
   addEdge, useNodesState, useEdgesState, useReactFlow,
   type Connection, type Edge,
 } from '@xyflow/react'
-import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon, Store, RefreshCw } from 'lucide-react'
+import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon, Store, RefreshCw, Library, Zap, MousePointer2 } from 'lucide-react'
 import { api, connectWS } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData, type NodeSpec } from './types'
@@ -57,6 +57,8 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
   const [addQuery, setAddQuery] = useState('')
   const [connMenu, setConnMenu] = useState<{ x: number; y: number; source: string; sourceHandle: string; srcType: string } | null>(null)
   const [showMiniMap, setShowMiniMap] = useState(false)
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [libQuery, setLibQuery] = useState('')
   const lastConnectRejected = useRef(false)
   const dragEnabled = useAppStore((s) => s.settings.dragEnabled)
   const savedRef = useRef(false)
@@ -646,6 +648,11 @@ const onAddNode = useCallback((typeId: string) => {
           )
         })()}
         <div style={{ flex: 1 }} />
+        <button
+          style={{ ...iconBtn, ...(showLibrary ? { background: 'var(--accent-soft)', color: 'var(--accent-strong)', borderColor: 'var(--accent)' } : {}) }}
+          title="节点库 (Library)" onClick={() => setShowLibrary(v => !v)}>
+          <Library size={14} />
+        </button>
         <div style={sep} />
         <button style={iconBtn} title="导入工作流 (JSON)" onClick={() => fileInput.current?.click()}><Upload size={14} /></button>
         <button style={iconBtn} title="导出工作流 (JSON)" onClick={exportWorkflow}><Download size={14} /></button>
@@ -663,10 +670,15 @@ const onAddNode = useCallback((typeId: string) => {
             <div className="fw-empty-canvas" aria-label="空工作流引导">
               <div className="fw-empty-canvas-mark"><span>＋</span></div>
               <div className="fw-empty-canvas-title">从一个节点开始编排</div>
-              <div className="fw-empty-canvas-text">右键画布添加节点，或从左侧工作流面板管理项目</div>
-              <button className="fw-btn fw-btn-primary" onClick={() => onAddNode(specs[0].type_id)}>
-                添加第一个节点
-              </button>
+              <div className="fw-empty-canvas-text">从右侧节点库拖入第一个节点，或右键画布空白快速添加</div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button className="fw-btn fw-btn-primary" onClick={() => onAddNode(specs[0].type_id)}>
+                  <><MousePointer2 size={13} /> 添加第一个节点</>
+                </button>
+                <button className="fw-btn" onClick={() => setShowLibrary(true)}>
+                  <><Library size={13} /> 打开节点库</>
+                </button>
+              </div>
               <div className="fw-empty-canvas-hint">支持拖拽、连线与一键出片</div>
             </div>
           )}
@@ -686,8 +698,8 @@ const onAddNode = useCallback((typeId: string) => {
             maxZoom={1.6}
             proOptions={{ hideAttribution: true }}
             onlyRenderVisibleElements={nodes.length > 40}
-            onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null) }}
-            onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false); setAddMenu(null); setConnMenu(null) }}
+            onNodeClick={(_, n) => { setSelectedNodeId(n.id); setMenu(null); setShowLibrary(false) }}
+            onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false); setAddMenu(null); setConnMenu(null); setShowLibrary(false) }}
             onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null); setAddMenu({ x: e.clientX, y: e.clientY }) }}
           >
             <Background gap={22} color="var(--canvas-dot)" />
@@ -844,12 +856,86 @@ const onAddNode = useCallback((typeId: string) => {
           )}
         </div>
 
-        {/* 浮层参数面板（A1：不挤画布） */}
+        {/* 节点库抽屉（右侧浮层；拖拽/点击添加到画布） */}
+        <div className={'fw-library-drawer' + (showLibrary ? ' open' : '')} aria-hidden={!showLibrary}>
+          <div className="fw-library-head">
+            <span className="fw-title"><Library size={13} color="var(--accent)" /> 节点库</span>
+            <span className="fw-badge" style={{ background: 'var(--bg-panel-2)', color: 'var(--text-faint)' }}>{specs.length}</span>
+            <button className="fw-library-close" title="收起" onClick={() => setShowLibrary(false)}><X size={13} /></button>
+          </div>
+          <div style={{ padding: '0 10px 8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '5px 9px' }}>
+              <Search size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+              <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="搜索节点…"
+                style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, width: '100%' }} />
+            </div>
+          </div>
+          <div className="fw-library-list">
+            {(() => {
+              const groups = new Map<string, typeof specs>()
+              for (const s of specs) {
+                if (libQuery && !s.title.includes(libQuery) && !s.type_id.includes(libQuery) && !s.description.includes(libQuery)) continue
+                const cat = s.category || '其他'
+                if (!groups.has(cat)) groups.set(cat, [])
+                groups.get(cat)!.push(s)
+              }
+              const order = ['输入', '语义', '分析', '控制', '输出', '用户节点']
+              const keys = [...groups.keys()].sort((a, b) => {
+                const ia = order.indexOf(a); const ib = order.indexOf(b)
+                return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+              })
+              if (keys.length === 0) {
+                return (
+                  <div className="fw-node-library-empty">
+                    {specs.length === 0
+                      ? <>节点库为空。<br />请到「商城」安装节点后自动出现。</>
+                      : '无匹配节点'}
+                  </div>
+                )
+              }
+              return keys.map((cat) => {
+                const items = groups.get(cat)!
+                return (
+                  <div key={cat} style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '10px 8px 5px' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .8, color: 'var(--text-faint)' }}>{cat}</span>
+                      <span className="fw-badge" style={{ background: 'var(--bg-panel-2)', color: 'var(--text-faint)' }}>{items.length}</span>
+                      <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                    </div>
+                    {items.map((s: any) => (
+                      <div key={s.type_id}
+                        draggable
+                        onDragStart={(e) => { e.dataTransfer.setData('application/fw-node', s.type_id); e.dataTransfer.effectAllowed = 'copy' }}
+                        onClick={() => { setShowLibrary(false); setLibQuery(''); ;(window as any).__fwAddNode?.(s.type_id) }}
+                        title={s.description || s.title}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 10,
+                          cursor: 'grab', transition: 'background var(--t-fast)', userSelect: 'none',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-soft)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                        <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: 'var(--accent-soft)', color: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 700 }}>{menuIconChar(s.type_id)}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-faint)', fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</div>
+                        </div>
+                        {s.gpu_required && <Zap size={10} color="var(--gold)" style={{ flexShrink: 0 }} />}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })
+            })()}
+          </div>
+          <div className="fw-library-footer">拖拽或点击添加到画布 · 也可右键画布空白</div>
+        </div>
+
+        {/* 浮层参数面板（A1：不挤画布，滑入动画） */}
         {selectedNodeId && (() => {
           const n = nodes.find((x) => x.id === selectedNodeId)
           const spec = specs.find((s) => s.type_id === n?.data?.type_id)
           return (
-            <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 328, zIndex: 40, boxShadow: '-8px 0 24px rgba(0,0,0,.28)' }}>
+            <div className="fw-param-drawer">
               <ParamPanel
                 nodeId={selectedNodeId}
                 spec={spec}

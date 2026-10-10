@@ -8,6 +8,7 @@
 存储：backend/data/market.json
 """
 from __future__ import annotations
+import hashlib
 import json
 import os
 import re
@@ -18,6 +19,8 @@ import uuid
 import zipfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+from .worker import limits
 
 PLATFORM_SHARE = 0.2
 AUTHOR_SHARE = 0.8
@@ -106,6 +109,19 @@ class MarketService:
     def get(self, item_id: str) -> Optional[dict]:
         return self._items.get(item_id)
 
+    def source_zip_path(self, item_id: str) -> Optional[str]:
+        """本地桩：返回条目内联 zip 的磁盘路径（GET /api/market/items/{id}/file 用）。
+
+        仅本地桩数据模型有的字段；云端条目没有 source_zip，永远返回 None。
+        """
+        it = self._items.get(item_id)
+        if it is None:
+            return None
+        zp = it.get("source_zip") or ""
+        if zp and os.path.isfile(zp):
+            return zp
+        return None
+
     def publish(self, kind: str, title: str, description: str, author: str,
                 price: int, download_url: str, tags: List[str], official: bool = False,
                 source_zip: str = "", version: str = "1.0.0", type_id: str = "",
@@ -127,54 +143,98 @@ class MarketService:
         return item
 
     def install(self, item_id: str, token: str, license_svc, user_nodes_dir: str) -> dict:
-        """下载并安装条目（仅 node 类可安装；付费扣积分，20/80 分成进作者）。"""
+        """下载并安装条目（node / workflow 均可安装；付费扣积分，20/80 分成进作者）。
+
+        - kind=node：解压插件包到 user_nodes/ 并重扫（declarative.install_zip）。
+        - kind=workflow：校验 zip 内含 workflow.json，解压注册到模板注册表
+          （templates.install_workflow_zip，templates_dir 由 server 启动时设置）。
+          插件缺失引导：返回 missing_type_ids（模板声明的 type_id 未安装），
+          前端跳商城缺节点引导（MarketPage 既有逻辑）。
+        """
         it = self._items.get(item_id)
         if it is None:
-            return {"ok": False, "message": "条目不存在"}
-        if it.get("kind") != "node":
-            return {"ok": False, "message": "仅节点类条目可安装到本机"}
-        # 账号鉴权 + 积分扣费
-        account = None
-        if token:
-            for s in license_svc._sessions.values():
-                if s.get("token") == token:
-                    account = s
-                    break
+            return {"ok": False, "code": "item_not_found", "message": "条目不存在"}
+        if it.get("status", "active") != "active":
+            return {"ok": False, "code": "item_disabled", "message": "条目已下架"}
+        if it.get("kind") not in ("node", "workflow"):
+            return {"ok": False, "code": "item_kind_invalid", "message": "kind 必须是 node 或 workflow"}
+        # 账号鉴权 + 积分扣费（node / workflow 共用；失败回滚）
+        # t5 契约加固：付费条目经 download-auth 已购（session.purchased 留痕）时，
+        # 服务端 /install 不再二次扣费（防 download-auth→install 双路径双扣）。
+        account = self._find_session(license_svc, token)
         price = int(it.get("price") or 0)
+        purchased = (account or {}).get("purchased") or {}
+        already_purchased = bool(purchased.get(item_id)) if price > 0 else False
+        charged = False
         if price > 0:
             if account is None:
-                return {"ok": False, "message": "请先登录后再下载付费节点"}
-            if int(account.get("credits") or 0) < price:
-                return {"ok": False, "message": f"积分不足：需要 {price}，当前 {account.get('credits', 0)}"}
-            account["credits"] = int(account.get("credits") or 0) - price
-            # 20/80 分成：作者积分入账（作者可能是本地桩账号）
-            author_email = it.get("author", "")
-            for s in license_svc._sessions.values():
-                if s.get("email", "").lower() == author_email.lower():
-                    s["credits"] = int(s.get("credits") or 0) + int(price * AUTHOR_SHARE)
-                    break
-            license_svc._save()
+                return {"ok": False, "code": "login_required", "message": "请先登录后再下载付费条目"}
+            if not already_purchased:
+                if int(account.get("credits") or 0) < price:
+                    return {"ok": False, "code": "insufficient_credits",
+                            "message": f"积分不足：需要 {price}，当前 {account.get('credits', 0)}"}
+                account["credits"] = int(account.get("credits") or 0) - price
+                # 20/80 分成：作者积分入账（作者可能是本地桩账号）
+                author_email = it.get("author", "")
+                for s in license_svc._sessions.values():
+                    if s.get("email", "").lower() == author_email.lower():
+                        s["credits"] = int(s.get("credits") or 0) + int(price * AUTHOR_SHARE)
+                        break
+                account.setdefault("purchased", {})[item_id] = time.time()
+                charged = True
+                license_svc._save()
         # 拉取 zip：优先 download_url，其次内联 source_zip
         zip_path = self._fetch_zip(it, user_nodes_dir)
         if zip_path is None:
-            if price > 0:
+            if charged:
                 account["credits"] = int(account.get("credits") or 0) + price  # 回滚
+                account.get("purchased", {}).pop(item_id, None)
                 license_svc._save()
-            return {"ok": False, "message": "下载失败：网盘直链不可用"}
-        # 解压安装
-        from . import declarative
-        try:
-            dest = declarative.install_zip(zip_path)
-        except Exception as e:  # noqa: BLE001
-            if price > 0:
+            return {"ok": False, "code": "download_failed", "message": "下载失败：网盘直链不可用"}
+
+        def _rollback_credit():
+            if charged:
                 account["credits"] = int(account.get("credits") or 0) + price
+                account.get("purchased", {}).pop(item_id, None)
                 license_svc._save()
+
+        try:
+            if it.get("kind") == "workflow":
+                from . import templates
+                try:
+                    meta = templates.install_workflow_zip(
+                        zip_path, tpl_id=(it.get("type_id") or "").strip(),
+                        tags=it.get("tags") or [], source="market")
+                except Exception as e:  # noqa: BLE001
+                    _rollback_credit()
+                    return {"ok": False, "message": "安装失败: " + str(e)}
+                it["downloads"] = int(it.get("downloads") or 0) + 1
+                it["installs"] = int(it.get("installs") or 0) + 1
+                self._save()
+                # 插件缺失引导：模板所需 type_id 未安装时给出清单
+                from .registry import list_specs as _list_specs
+                try:
+                    installed_types = sorted({s.type_id for s in _list_specs()})
+                except Exception:  # noqa: BLE001
+                    installed_types = []
+                missing = templates.missing_type_ids(meta["tpl_id"], installed_types)
+                return {"ok": True, "message": "模板安装成功，可从模板列表创建工作流",
+                        "kind": "workflow", "tpl_id": meta["tpl_id"],
+                        "installed_to": os.path.join(templates.TEMPLATES_DIR, meta["tpl_id"]),
+                        "missing_type_ids": missing,
+                        "has_missing": bool(missing)}
+            # kind=node：解压安装（原逻辑）
+            from . import declarative
             try:
-                if zip_path != it.get("source_zip"):
-                    os.remove(zip_path)
-            except OSError:
-                pass
-            return {"ok": False, "message": "安装失败: " + str(e)}
+                dest = declarative.install_zip(zip_path)
+            except Exception as e:  # noqa: BLE001
+                _rollback_credit()
+                return {"ok": False, "code": "install_failed", "message": "安装失败: " + str(e)}
+            it["downloads"] = int(it.get("downloads") or 0) + 1
+            it["installs"] = int(it.get("installs") or 0) + 1  # t5：服务端完成安装即计数（与 workflow 分支一致）
+            self._save()
+            return {"ok": True, "message": "安装成功，节点已可用", "installed_to": dest,
+                    "type_ids": [s.type_id for s in declarative.list_specs()]}
         finally:
             # 清理下载的临时 zip（内联 source_zip 不删）
             try:
@@ -182,10 +242,6 @@ class MarketService:
                     os.remove(zip_path)
             except OSError:
                 pass
-        it["downloads"] = int(it.get("downloads") or 0) + 1
-        self._save()
-        return {"ok": True, "message": "安装成功，节点已可用", "installed_to": dest,
-                "type_ids": [s.type_id for s in declarative.list_specs()]}
 
     def _find_session(self, license_svc, token: str) -> Optional[dict]:
         """按 token 找本地桩会话（与 install 内联逻辑一致，避免重复）。"""
@@ -227,6 +283,8 @@ class MarketService:
                 if s.get("email", "").lower() == author_email.lower():
                     s["credits"] = int(s.get("credits") or 0) + int(price * AUTHOR_SHARE)
                     break
+            # 已购留痕：后续服务端 /install 不再二次扣费（t5 契约防双扣）
+            account.setdefault("purchased", {})[item_id] = time.time()
             license_svc._save()
         it["downloads"] = int(it.get("downloads") or 0) + 1
         self._append_log("download", {
@@ -236,6 +294,12 @@ class MarketService:
         })
         self._save()
         filename = (it.get("type_id") or item_id).replace("/", "_") or "plugin"
+        dl_url = it.get("download_url", "") or ""
+        # 本地桩：download_url 为空但有内联 zip → 返回本服务 /file 端点相对路径，
+        # 客户端可像网盘直链一样 GET 下载（服务器只在本机桩兜底时不代理官方 Release）。
+        stub_path = ""
+        if not dl_url and it.get("source_zip") and os.path.isfile(it["source_zip"]):
+            stub_path = f"/api/market/items/{item_id}/file"
         return {
             "ok": True, "status": "authorized",
             "item_id": item_id, "title": it.get("title", ""),
@@ -245,7 +309,8 @@ class MarketService:
                 "filename": filename + ".zip",
                 "size": int(it.get("size") or 0),
                 "sha256": it.get("sha256", "") or "",
-                "url": it.get("download_url", ""),
+                "url": dl_url,
+                "stub_path": stub_path,
                 "direct": True,
             },
             "direct": True,
@@ -286,22 +351,49 @@ class MarketService:
             pass
 
     def _fetch_zip(self, it: dict, user_nodes_dir: str) -> Optional[str]:
+        """流式下载插件 zip（大插件支持 t2）。
+
+        块读落盘（ZIP_BLOCK 流式，2GB 级包不整包载入内存）+ 体积上限
+        （唯一引用 worker/limits.UPLOAD_MAX_BYTES）+ 发布表单登记 sha256 时校验摘要。
+        失败清理临时文件并返回 None（调用方回滚扣费）。
+        """
         if it.get("source_zip") and os.path.isfile(it["source_zip"]):
             return it["source_zip"]
         url = it.get("download_url", "")
         if not url:
             return None
+        tmp = ""
         try:
             os.makedirs(user_nodes_dir, exist_ok=True)
             tmp = os.path.join(user_nodes_dir, "_dl_" + it["id"] + ".zip")
+            sha_expected = (it.get("sha256") or "").strip().lower()
+            sha = hashlib.sha256()
+            received = 0
             req = urllib.request.Request(url, headers={"User-Agent": "frameweave/0.2.3"})
-            with urllib.request.urlopen(req, timeout=30) as resp, open(tmp, "wb") as f:
-                shutil.copyfileobj(resp, f)
+            with urllib.request.urlopen(req, timeout=120) as resp, open(tmp, "wb") as f:
+                while True:
+                    chunk = resp.read(limits.ZIP_BLOCK)
+                    if not chunk:
+                        break
+                    received += len(chunk)
+                    if received > limits.UPLOAD_MAX_BYTES:
+                        os.remove(tmp)
+                        return None
+                    sha.update(chunk)
+                    f.write(chunk)
             if not zipfile.is_zipfile(tmp):
+                os.remove(tmp)
+                return None
+            if sha_expected and sha.hexdigest() != sha_expected:
                 os.remove(tmp)
                 return None
             return tmp
         except Exception:  # noqa: BLE001
+            if tmp and os.path.isfile(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
             return None
 
     def authors(self) -> List[str]:

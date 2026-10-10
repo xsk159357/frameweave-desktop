@@ -1,0 +1,6 @@
+# P0.4 F1：上传/校验临时文件（DATA_DIR/tmp 已由根 .gitignore 的 backend/data/ 覆盖；
+# 此处兜底，防止任何历史泄漏文件/回退系统临时目录误入版本库）
+data/tmp/
+tmp*.zip
+tmp*.json
+tmp*.log

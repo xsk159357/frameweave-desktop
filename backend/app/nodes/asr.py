@@ -11,6 +11,7 @@ from ..assets import Asset
 from ..model_download import download_model
 from ..nodespec import NodeBase, NodeSpec, PortSpec, PortType
 from ..registry import register
+from ..providers import get_provider, register_provider
 
 
 @register
@@ -46,57 +47,75 @@ class ASRNode(NodeBase):
         return
 
     async def run(self, ctx, inputs, params) -> Dict[str, Any]:
-        video_asset = inputs.get("video")
-        audio_asset = inputs.get("audio")
-        src_path = audio_asset.path if audio_asset else (video_asset.path if video_asset else None)
-        if not src_path or not os.path.exists(src_path):
-            raise RuntimeError("缺少视频/音频输入")
+        """P2（t4）：执行委托 Provider SPI——get_provider("asr") 解析默认/第三方实现。"""
+        return await get_provider("asr").run(ctx, inputs, params)
 
-        model_key = params.get("model", "large-v3")
-        language = params.get("language", "zh")
-        device = params.get("device", "auto")
 
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError:
-            raise RuntimeError("faster-whisper 未安装")
+# ================= ASR Provider SPI（P2，t4） =================
+async def transcribe(ctx, inputs, params) -> Dict[str, Any]:
+    """语音转字幕管线（faster-whisper）——默认 ASR Provider 实现体。"""
+    video_asset = inputs.get("video")
+    audio_asset = inputs.get("audio")
+    src_path = audio_asset.path if audio_asset else (video_asset.path if video_asset else None)
+    if not src_path or not os.path.exists(src_path):
+        raise RuntimeError("缺少视频/音频输入")
 
-        # 下载模型（ModelScope 优先）
-        models_dir = os.path.join(ctx["store"].root, "models")
-        try:
-            info = download_model(f"faster-whisper-{model_key}", models_dir)
-            model_path = info["path"]
-            model_dir = os.path.dirname(model_path)
-            model = WhisperModel(model_dir, device=device, compute_type="int8")
-        except Exception as e:
-            raise RuntimeError(f"模型加载失败: {e}")
+    model_key = params.get("model", "large-v3")
+    language = params.get("language", "zh")
+    device = params.get("device", "auto")
 
-        segments, info = model.transcribe(
-            src_path, language=None if language == "auto" else language,
-            vad_filter=True)
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        raise RuntimeError("faster-whisper 未安装")
 
-        subs: List[Dict[str, Any]] = []
-        for seg in segments:
-            subs.append({
-                "start": round(float(seg.start), 3),
-                "end": round(float(seg.end), 3),
-                "text": seg.text.strip(),
-            })
+    # 下载模型（ModelScope 优先）
+    models_dir = os.path.join(ctx["store"].root, "models")
+    try:
+        info = download_model(f"faster-whisper-{model_key}", models_dir)
+        model_path = info["path"]
+        model_dir = os.path.dirname(model_path)
+        model = WhisperModel(model_dir, device=device, compute_type="int8")
+    except Exception as e:
+        raise RuntimeError(f"模型加载失败: {e}")
 
-        # SRT
-        srt_lines = []
-        for i, s in enumerate(subs, 1):
-            def ts(t):
-                h = int(t // 3600); m = int(t % 3600 // 60); sec = t % 60
-                return f"{h:02d}:{m:02d}:{sec:06.3f}".replace(".", ",")
-            srt_lines.append(f"{i}\n{ts(s['start'])} --> {ts(s['end'])}\n{s['text']}\n")
-        srt_text = "\n".join(srt_lines)
+    segments, info = model.transcribe(
+        src_path, language=None if language == "auto" else language,
+        vad_filter=True)
 
-        store = ctx["store"]
-        sub_asset = store.save_asset(
-            Asset(id="", kind=PortType.SUBTITLE.value, meta={"count": len(subs), "model": model_key}),
-            payload=subs)
-        srt_asset = store.save_asset(
-            Asset(id="", kind=PortType.STRING.value, meta={"format": "srt"}),
-            payload={"text": srt_text})
-        return {"subtitle": sub_asset, "srt": srt_asset}
+    subs: List[Dict[str, Any]] = []
+    for seg in segments:
+        subs.append({
+            "start": round(float(seg.start), 3),
+            "end": round(float(seg.end), 3),
+            "text": seg.text.strip(),
+        })
+
+    # SRT
+    srt_lines = []
+    for i, s in enumerate(subs, 1):
+        def ts(t):
+            h = int(t // 3600); m = int(t % 3600 // 60); sec = t % 60
+            return f"{h:02d}:{m:02d}:{sec:06.3f}".replace(".", ",")
+        srt_lines.append(f"{i}\n{ts(s['start'])} --> {ts(s['end'])}\n{s['text']}\n")
+    srt_text = "\n".join(srt_lines)
+
+    store = ctx["store"]
+    sub_asset = store.save_asset(
+        Asset(id="", kind=PortType.SUBTITLE.value, meta={"count": len(subs), "model": model_key}),
+        payload=subs)
+    srt_asset = store.save_asset(
+        Asset(id="", kind=PortType.STRING.value, meta={"format": "srt"}),
+        payload={"text": srt_text})
+    return {"subtitle": sub_asset, "srt": srt_asset}
+
+
+class WhisperASRProvider:
+    """默认 ASR Provider（P2 SPI）：faster-whisper 转写管线。"""
+
+    async def run(self, ctx, inputs, params) -> Dict[str, Any]:
+        return await transcribe(ctx, inputs, params)
+
+
+# 默认 ASR Provider 注册（第三方 register_provider("asr", name) 后经 get_provider 替换）
+register_provider("asr", "default", WhisperASRProvider())

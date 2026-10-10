@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "registry_version": "models-registry-v1",
+  "models": {
+    "faster-whisper-large-v3": {
+      "repo": "keepitsimple/faster-whisper-large-v3",
+      "file": "model.bin",
+      "size_mb": 1543,
+      "fallback_repo": "Systran/faster-whisper-large-v3"
+    }
+  }
+}

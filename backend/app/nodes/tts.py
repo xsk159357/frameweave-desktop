@@ -15,6 +15,7 @@ from typing import Any, Dict
 from ..assets import Asset
 from ..nodespec import NodeBase, NodeSpec, PortSpec, PortType
 from ..registry import register
+from ..providers import get_provider, register_provider
 
 # Edge-TTS 常用中文音色
 EDGE_VOICES = [
@@ -108,52 +109,8 @@ class TTSNode(NodeBase):
         )
 
     async def run(self, ctx, inputs, params) -> Dict[str, Any]:
-        engine = params.get("engine", "edge")
-        store = ctx["store"]
-        script_asset = inputs.get("script")
-        direct = str(params.get("direct_text", "") or "").strip()
-        text = direct if direct else _read_script_text(store, script_asset)
-        if not text.strip():
-            raise RuntimeError("文案为空，无法配音")
-
-        out_dir = os.path.join(store.files_dir, "tts")
-        os.makedirs(out_dir, exist_ok=True)
-
-        if engine == "manual":
-            audio_in = inputs.get("audio_in")
-            if audio_in is None or not audio_in.path:
-                raise RuntimeError("人工配音模式需要连接音频输入")
-            asset = Asset(id="", kind=PortType.AUDIO.value, path=audio_in.path,
-                          meta={"engine": "manual", "source": "user"})
-            store.save_asset(asset)
-            return {"audio": asset, "marks": store.save_asset(
-                Asset(id="", kind=PortType.JSON.value, meta={"engine": "manual"}),
-                payload={"segments": []})}
-
-        if engine == "edge":
-            # 唯一文件名：并发批量时同进程同秒也会生成不同文件（M1 修复，避免互相覆盖）
-            out_path = os.path.join(out_dir, f"tts_{os.getpid()}_{uuid.uuid4().hex[:8]}.{params.get('output_format', 'mp3')}")
-            rate = str(params.get("rate", "+0%"))
-            pitch = str(params.get("pitch", "+0Hz"))
-            voice = params.get("voice", "zh-CN-XiaoxiaoNeural")
-            import edge_tts
-            import asyncio
-            communicate = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
-            await communicate.save(out_path)
-            asset = Asset(id="", kind=PortType.AUDIO.value, path=out_path,
-                          meta={"engine": "edge", "voice": voice, "rate": rate})
-            store.save_asset(asset)
-            marks = store.save_asset(Asset(id="", kind=PortType.JSON.value, meta={"engine": "edge"}),
-                                     payload={"voice": voice, "rate": rate, "text_len": len(text)})
-            return {"audio": asset, "marks": marks}
-
-        if engine == "indextts":
-            return await self._run_indextts(ctx, inputs, params, text, out_dir)
-
-        if engine == "cloud":
-            return await self._run_cloud(ctx, inputs, params, text, out_dir)
-
-        raise RuntimeError(f"未知引擎: {engine}")
+        """P2（t4）：执行委托 Provider SPI——get_provider("tts") 解析默认/第三方实现。"""
+        return await get_provider("tts").run(ctx, inputs, params)
 
     # ---- IndexTTS2 本地声音克隆（HTTP 调常驻服务） ----
     _INDEX_TTS_SERVER_PROC = None
@@ -319,3 +276,75 @@ class TTSNode(NodeBase):
         marks = store.save_asset(Asset(id="", kind=PortType.JSON.value, meta={"engine": "cloud"}),
                                  payload={"voice": voice, "model": model, "text_len": len(text)})
         return {"audio": asset, "marks": marks}
+
+
+# ================= TTS Provider SPI（P2，t4） =================
+async def _run_indextts(ctx, inputs, params, text, out_dir):
+    """模块级壳：调用 TTSNode 既有克隆实现（避免复制逻辑导致行为漂移）。"""
+    return await TTSNode()._run_indextts(ctx, inputs, params, text, out_dir)
+
+
+async def _run_cloud(ctx, inputs, params, text, out_dir):
+    return await TTSNode()._run_cloud(ctx, inputs, params, text, out_dir)
+
+
+async def synthesize(ctx, inputs, params) -> Dict[str, Any]:
+    """TTS 引擎分发（edge/manual/indextts/cloud）——默认 TTS Provider 实现体。"""
+    engine = params.get("engine", "edge")
+    store = ctx["store"]
+    script_asset = inputs.get("script")
+    direct = str(params.get("direct_text", "") or "").strip()
+    text = direct if direct else _read_script_text(store, script_asset)
+    if not text.strip():
+        raise RuntimeError("文案为空，无法配音")
+
+    out_dir = os.path.join(store.files_dir, "tts")
+    os.makedirs(out_dir, exist_ok=True)
+
+    if engine == "manual":
+        audio_in = inputs.get("audio_in")
+        if audio_in is None or not audio_in.path:
+            raise RuntimeError("人工配音模式需要连接音频输入")
+        asset = Asset(id="", kind=PortType.AUDIO.value, path=audio_in.path,
+                      meta={"engine": "manual", "source": "user"})
+        store.save_asset(asset)
+        return {"audio": asset, "marks": store.save_asset(
+            Asset(id="", kind=PortType.JSON.value, meta={"engine": "manual"}),
+            payload={"segments": []})}
+
+    if engine == "edge":
+        # 唯一文件名：并发批量时同进程同秒也会生成不同文件（M1 修复，避免互相覆盖）
+        out_path = os.path.join(out_dir,
+                                f"tts_{os.getpid()}_{uuid.uuid4().hex[:8]}.{params.get('output_format', 'mp3')}")
+        rate = str(params.get("rate", "+0%"))
+        pitch = str(params.get("pitch", "+0Hz"))
+        voice = params.get("voice", "zh-CN-XiaoxiaoNeural")
+        import edge_tts
+        import asyncio
+        communicate = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
+        await communicate.save(out_path)
+        asset = Asset(id="", kind=PortType.AUDIO.value, path=out_path,
+                      meta={"engine": "edge", "voice": voice, "rate": rate})
+        store.save_asset(asset)
+        marks = store.save_asset(Asset(id="", kind=PortType.JSON.value, meta={"engine": "edge"}),
+                                 payload={"voice": voice, "rate": rate, "text_len": len(text)})
+        return {"audio": asset, "marks": marks}
+
+    if engine == "indextts":
+        return await _run_indextts(ctx, inputs, params, text, out_dir)
+
+    if engine == "cloud":
+        return await _run_cloud(ctx, inputs, params, text, out_dir)
+
+    raise RuntimeError(f"未知引擎: {engine}")
+
+
+class TTSEngineProvider:
+    """默认 TTS Provider（P2 SPI）：四引擎分发（edge/manual/indextts/cloud）。"""
+
+    async def run(self, ctx, inputs, params) -> Dict[str, Any]:
+        return await synthesize(ctx, inputs, params)
+
+
+# 默认 TTS Provider 注册（第三方 register_provider("tts", name) 后经 get_provider 替换）
+register_provider("tts", "default", TTSEngineProvider())

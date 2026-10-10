@@ -1,7 +1,12 @@
 // 全局类型定义
 
-export type PortType = 'VIDEO' | 'IMAGE' | 'AUDIO' | 'SCRIPT' | 'SUBTITLE'
-  | 'SEGMENTS' | 'TIMELINE' | 'JSON' | 'STRING' | 'INT' | 'FLOAT' | 'BOOL' | 'ANY'
+// 13 种端口类型：与后端 app/ports.py PortType 一一对应（单一真源，类型映射/端口渲染共用）
+export const PORT_TYPES = [
+  'VIDEO', 'IMAGE', 'AUDIO', 'SCRIPT', 'SUBTITLE', 'SEGMENTS', 'TIMELINE',
+  'JSON', 'STRING', 'INT', 'FLOAT', 'BOOL', 'ANY',
+] as const
+
+export type PortType = (typeof PORT_TYPES)[number]
 
 export interface PortSpec {
   name: string
@@ -46,11 +51,15 @@ export interface FlowNodeData {
   spec?: NodeSpec
 }
 
+// 资产协议：与后端 app/assets.py Asset 字段对齐（kind/path/meta/fingerprint）
 export interface AssetMeta {
   id: string
   kind: string
   path?: string
   meta: Record<string, unknown>
+  fingerprint?: string
+  node_id?: string
+  created_at?: number
   size?: number
 }
 

@@ -7,7 +7,7 @@ import subprocess
 from typing import Any, Dict, List
 
 from ..assets import Asset
-from ..llm import chat, vision_analyze
+from ..providers import get_provider
 from ..nodespec import NodeBase, NodeSpec, PortSpec, PortType
 from ..registry import register
 
@@ -114,6 +114,9 @@ class AINarrateNode(NodeBase):
         result_text = ""
         narration: Dict[str, Any] = {}
 
+        # P2（t4）：LLM 经 Provider SPI 解析（默认 OpenAI 兼容，第三方可注册替换）
+        llm = get_provider("llm")
+
         if mode == "上帝视角":
             if video_asset is None or not video_asset.path or not os.path.exists(video_asset.path):
                 raise RuntimeError("上帝视角模式需要连接视频输入")
@@ -129,15 +132,15 @@ class AINarrateNode(NodeBase):
                       segments_desc +
                       "\n输出格式：直接输出文案正文，不要额外说明。")
             if frames:
-                result_text = vision_analyze(frames, prompt, api_key, base_url, model)
+                result_text = llm.vision_analyze(frames, prompt, api_key, base_url, model)
             else:
-                result_text = chat([{"role": "user", "content": prompt}], api_key, base_url, model)
+                result_text = llm.chat([{"role": "user", "content": prompt}], api_key, base_url, model)
         elif mode == "扩写":
             if script_asset is None:
                 raise RuntimeError("扩写模式需要连接文案草稿输入")
             draft_text = _read_text(store, script_asset)
             prompt = prompt_tmpl + "\n\n我的文案草稿如下，请扩写润色为完整解说稿：\n" + draft_text
-            result_text = chat([{"role": "user", "content": prompt}], api_key, base_url, model)
+            result_text = llm.chat([{"role": "user", "content": prompt}], api_key, base_url, model)
         elif mode == "配画面":
             if script_asset is None or segments_asset is None:
                 raise RuntimeError("配画面模式需要连接文案草稿与片段列表")
@@ -149,7 +152,7 @@ class AINarrateNode(NodeBase):
             prompt = (prompt_tmpl + "\n\n文案：" + draft_text +
                       "\n片段列表：" + seg_desc +
                       "\n请为每句文案分配最合适的片段序号，输出 JSON 数组 [{\"sentence\":..., \"segment_index\":...}]")
-            result_text = chat([{"role": "user", "content": prompt}], api_key, base_url, model)
+            result_text = llm.chat([{"role": "user", "content": prompt}], api_key, base_url, model)
             try:
                 narration["mapping"] = json.loads(result_text)
             except json.JSONDecodeError:
@@ -159,7 +162,7 @@ class AINarrateNode(NodeBase):
                 raise RuntimeError("仿写模式需要连接示例文案输入")
             example = _read_text(store, script_asset)
             prompt = prompt_tmpl + "\n\n请模仿以下示例的风格撰写新解说词：\n" + example
-            result_text = chat([{"role": "user", "content": prompt}], api_key, base_url, model)
+            result_text = llm.chat([{"role": "user", "content": prompt}], api_key, base_url, model)
         else:
             raise RuntimeError("未知模式: " + str(mode))
 

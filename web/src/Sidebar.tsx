@@ -55,16 +55,19 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       title={s.description || s.title}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
-        padding: '8px 10px', marginBottom: 2, borderRadius: 11,
+        padding: '8px 10px', marginBottom: 2, borderRadius: 12,
+        border: '1px solid transparent',
         position: 'relative',
-        transition: 'background var(--t-fast) var(--t-ease), transform var(--t-fast) var(--t-ease)',
+        transition: 'background var(--t-fast) var(--t-ease), transform var(--t-fast) var(--t-ease), border-color var(--t-fast)',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = 'var(--accent-soft)'
+        e.currentTarget.style.borderColor = 'rgba(139,147,255,.16)'
         e.currentTarget.style.transform = 'translateX(2px)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent'
+        e.currentTarget.style.borderColor = 'transparent'
         e.currentTarget.style.transform = 'translateX(0)'
       }}
     >

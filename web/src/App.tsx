@@ -356,30 +356,35 @@ export default function App() {
           )}
         </div>
         <span style={{ flex: 1 }} />
-        {/* 右侧操作（分组：更新｜插件，预留原生控件区 150px） */}
-        <div className="fw-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 7, position: 'relative' }}>
+        {/* 右侧操作（分组：更新｜插件/商城｜设置/账户；预留原生控件区 150px） */}
+        <div className="fw-topbar-actions fw-topbar-groups" style={{ position: 'relative' }}>
           {showAccount && <div className="fw-account-popover" style={{ top: 38, right: 0, left: 'auto', bottom: 'auto' }}>
             <div className="fw-account-name">{session.email}</div>
             <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
             <button onClick={() => { setShowAccount(false); setProfileCard(''); setShowProfile(true) }}>个人中心</button>
             <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
           </div>}
-          <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
-            <><RefreshCw size={13} /> 更新</>
-          </button>
-          <span style={{ width: 1, height: 18, background: 'var(--border)' }} />
-          <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
-            <><Puzzle size={13} /> 插件</>
-          </button>
-          <button className="fw-btn fw-btn-ghost" title="打开商城" onClick={() => setShowMarket(true)}>
-            <><Store size={13} /> 商城</>
-          </button>
-          <button className={'fw-btn fw-btn-ghost' + (showAccount ? ' active' : '')} title="账户" onClick={() => setShowAccount(v => !v)}>
-            <><UserCircle size={13} /> 账户</>
-          </button>
-          <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
-            <><SettingsIcon size={13} /> 设置</>
-          </button>
+          <div className="fw-topbar-group">
+            <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
+              <><RefreshCw size={13} /> 更新</>
+            </button>
+          </div>
+          <div className="fw-topbar-group">
+            <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
+              <><Puzzle size={13} /> 插件</>
+            </button>
+            <button className="fw-btn fw-btn-ghost" title="打开商城" onClick={() => setShowMarket(true)}>
+              <><Store size={13} /> 商城</>
+            </button>
+          </div>
+          <div className="fw-topbar-group">
+            <button className={'fw-btn fw-btn-ghost' + (showAccount ? ' active' : '')} title="账户" onClick={() => setShowAccount(v => !v)}>
+              <><UserCircle size={13} /> 账户</>
+            </button>
+            <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
+              <><SettingsIcon size={13} /> 设置</>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -391,9 +396,9 @@ export default function App() {
       {showTpl && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(8,10,18,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTpl(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            width: 560, maxWidth: '90vw', borderRadius: 18, padding: 18,
-            background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-            border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--shadow-lg)',
+            width: 560, maxWidth: '90vw', borderRadius: 'var(--radius-xl)', padding: 18,
+            background: 'var(--card-grad)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+            border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--elev-3)',
           }}>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><LayoutTemplate size={15} color="var(--accent)" /> 从模板新建工作流</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -427,7 +432,7 @@ export default function App() {
       </div>
 
       {/* 底部时间线（双击有 segments 资产的节点 / 右键查看时间线） */}
-      {timelineNodeId && nodeAssets[timelineNodeId]?.segments && <Timeline nodeId={timelineNodeId} />}
+      {timelineNodeId && nodeAssets[timelineNodeId]?.segments && <div className="fw-timeline-bar"><Timeline nodeId={timelineNodeId} /></div>}
 
       {/* 底部状态栏（A4） */}
       <div className="fw-statusbar">
@@ -446,9 +451,11 @@ export default function App() {
       <div className="fw-toast-wrap">
         {toasts.map((t) => (
           <div key={t.id} className={'fw-toast ' + t.kind} onClick={() => removeToast(t.id)}>
-            {t.kind === 'ok' ? <CheckCircle2 size={14} color="var(--success)" style={{ flexShrink: 0, marginTop: 1 }} />
-              : t.kind === 'err' ? <AlertCircle size={14} color="var(--danger)" style={{ flexShrink: 0, marginTop: 1 }} />
-              : <Info size={14} color="var(--accent)" style={{ flexShrink: 0, marginTop: 1 }} />}
+            <span className="fw-toast-ic">
+              {t.kind === 'ok' ? <CheckCircle2 size={13} color="var(--success)" style={{ flexShrink: 0 }} />
+                : t.kind === 'err' ? <AlertCircle size={13} color="var(--danger)" style={{ flexShrink: 0 }} />
+                : <Info size={13} color="var(--accent)" style={{ flexShrink: 0 }} />}
+            </span>
             <span>{t.msg}</span>
           </div>
         ))}

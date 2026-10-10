@@ -1,5 +1,11 @@
-"""资产库：中间产物落盘 + 元数据 + 指纹（供增量缓存）。"""
+"""资产库：中间产物落盘 + 元数据 + 指纹（供增量缓存）。
+
+P2（t4）：StoreAdapter 抽象 + LocalAssetStore 默认实现 + register_store_adapter/create_store
+扩展注册制。第三方按 StoreAdapter 实现存储后端（对象存储/数据库/远程）后注册即可替换；
+消费方（engine/server/nodes）经 create_store 解析。AssetStore = LocalAssetStore 旧名别名保留。
+"""
 from __future__ import annotations
+import abc
 import hashlib
 import json
 import os
@@ -7,7 +13,7 @@ import shutil
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 
 @dataclass
@@ -26,7 +32,32 @@ class Asset:
         return d
 
 
-class AssetStore:
+class StoreAdapter(abc.ABC):
+    """资产存储 SPI（P2，t4）：第三方实现后可注册替换默认本地存储。"""
+
+    root: str
+    files_dir: str
+    meta_dir: str
+
+    @abc.abstractmethod
+    def save_asset(self, asset: Asset, payload: Any = None) -> Asset: ...
+
+    @abc.abstractmethod
+    def get(self, aid: str) -> Optional[Asset]: ...
+
+    @abc.abstractmethod
+    def read_json(self, aid: str) -> Any: ...
+
+    @abc.abstractmethod
+    def delete(self, aid: str) -> None: ...
+
+    @abc.abstractmethod
+    def prune_orphans(self, keep: Optional[Set[str]] = None) -> int: ...
+
+
+class LocalAssetStore(StoreAdapter):
+    """默认本地文件存储（原 AssetStore 实现迁入；文件名兼容）。"""
+
     def __init__(self, root_dir: str):
         self.root = root_dir
         self.files_dir = os.path.join(root_dir, "files")
@@ -39,7 +70,12 @@ class AssetStore:
         return os.path.join(self.meta_dir, aid + ".json")
 
     def save_asset(self, asset: Asset, payload: Any = None) -> Asset:
-        """落盘资产。payload 为结构化数据时写入 json；媒体文件由调用方写 path。"""
+        """落盘资产。payload 为结构化数据时写入 json；媒体文件由调用方写 path。
+
+        平台级兜底（T-P0.3）：size 自动取实际文件大小；fingerprint 未显式
+        提供时自动计算（媒体=文件内容指纹，结构化=落盘 json 文件指纹），
+        使 Asset 指纹契约不依赖任何插件节点即完整可用。
+        """
         if not asset.id:
             asset.id = uuid.uuid4().hex[:16]
         if not asset.created_at:
@@ -53,6 +89,8 @@ class AssetStore:
                 json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
             asset.path = p
             asset.size = os.path.getsize(p)
+        if not asset.fingerprint and asset.path and os.path.exists(asset.path):
+            asset.fingerprint = file_fingerprint(asset.path)
         with open(self._meta_path(asset.id), "w", encoding="utf-8") as f:
             json.dump(asset.to_dict(), f, ensure_ascii=False, default=str)
         self._cache[asset.id] = asset
@@ -115,6 +153,40 @@ class AssetStore:
             self._remove_files(aid, self._meta_path(aid))
             removed += 1
         return removed
+
+
+# 旧名别名：engine/server/nodes 既有 import（from .assets import AssetStore）继续可用
+AssetStore = LocalAssetStore
+
+
+# ---------------------------------------------------------------- 存储适配器注册制（P2）
+_STORE_ADAPTERS: Dict[str, Any] = {}
+
+
+def register_store_adapter(name: str, factory: Any) -> Any:
+    """注册存储适配器工厂（name → factory(root_dir, **kw) → StoreAdapter）。幂等覆盖。"""
+    if not callable(factory):
+        raise ValueError("factory 必须可调用（(root_dir, **kw) -> StoreAdapter）")
+    _STORE_ADAPTERS[name] = factory
+    return factory
+
+
+def create_store(name: str, root_dir: str, **kw: Any) -> StoreAdapter:
+    """按注册名创建存储；默认 "local" = LocalAssetStore。未注册 → KeyError。"""
+    if name in _STORE_ADAPTERS:
+        return _STORE_ADAPTERS[name](root_dir, **kw)
+    if name == "local":
+        return LocalAssetStore(root_dir, **kw)
+    raise KeyError(f"存储适配器未注册: {name!r}（local 或 register_store_adapter 注册）")
+
+
+def list_store_adapters() -> Dict[str, str]:
+    return {"local": "app.assets.LocalAssetStore",
+            **{k: getattr(v, "__module__", "") + "." + getattr(v, "__name__", "factory")
+               for k, v in _STORE_ADAPTERS.items()}}
+
+
+register_store_adapter("local", lambda root_dir, **kw: LocalAssetStore(root_dir, **kw))
 
 
 def file_fingerprint(path: str, chunk: int = 1 << 20) -> str:

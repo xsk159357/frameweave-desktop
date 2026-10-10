@@ -1,6 +1,6 @@
 // 右侧参数面板：参数表单 + 执行状态 + 输出资产预览
 import { useState } from 'react'
-import { Lock, Check, Zap, X, Eye } from 'lucide-react'
+import { Lock, Check, Zap, X, Eye, Settings2, CircleDot } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import type { NodeSpec } from './types'
@@ -36,9 +36,9 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
   const styles = {
     panel: {
       width: '100%', height: '100%', borderLeft: 'var(--glass-border)', boxSizing: 'border-box' as const,
-      background: 'var(--glass-strong)',       boxShadow: 'none', padding: 16, overflowY: 'auto', flexShrink: 0,
+      background: 'var(--card-grad)',       boxShadow: 'none', padding: 16, overflowY: 'auto', flexShrink: 0,
     },
-    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: 'var(--text-faint)', margin: '14px 0 7px', textTransform: 'uppercase' as const },
+    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: 'var(--text-faint)', margin: '16px 0 8px', textTransform: 'uppercase' as const, display: 'flex', alignItems: 'center', gap: 5 },
     input: {
       width: '100%', padding: '8px 11px', borderRadius: 10, fontSize: 13,
       border: 'var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text)',
@@ -115,7 +115,10 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
 
   return (
     <div style={styles.panel}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+        <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: 'var(--accent-soft)', color: 'var(--accent-strong)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+          {((spec?.type_id || '').split('/').pop() || 'N').replace(/[^a-zA-Z0-9]/g, '')[0]?.toUpperCase() || 'N'}
+        </span>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{spec?.title || '节点'}</span>
         <span className="fw-badge" style={{ background: 'var(--border)', color: 'var(--text-faint)', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
         <span style={{ flex: 1 }} />
@@ -123,15 +126,15 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
           <button onClick={onClose} title="关闭" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 4, borderRadius: 7, lineHeight: 0 }}><X size={15} /></button>
         )}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 4, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5, fontFamily: 'Consolas, monospace' }}>
         {spec?.type_id}
       </div>
       {spec?.description && (
-        <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12, lineHeight: 1.55 }}>{spec.description}</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 8, lineHeight: 1.55 }}>{spec.description}</div>
       )}
 
       {/* 执行状态 */}
-      <div style={styles.label}>执行状态</div>
+      <div style={styles.label}><CircleDot size={11} /> 执行状态</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
         <span style={{ width: 8, height: 8, borderRadius: '50%',
           background: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)'
@@ -148,7 +151,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
       {/* 参数表单 */}
       {spec && spec.params.length > 0 && (
         <>
-          <div style={{ ...styles.label, marginTop: 4 }}>参数</div>
+          <div style={{ ...styles.label, marginTop: 2 }}><Settings2 size={11} /> 参数</div>
           {spec.params.map((p) => (
             <div key={p.name}>
               <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 2 }}>
@@ -163,7 +166,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
       {/* 运行历史 */}
       {run_history && run_history.length > 0 && (
         <div>
-          <div style={{ ...styles.label, marginTop: 8 }}>运行历史（{run_history.length}）</div>
+          <div style={{ ...styles.label, marginTop: 4 }}>运行历史（{run_history.length}）</div>
           <div style={{ maxHeight: 180, overflow: 'auto', marginBottom: 10 }}>
             {[...run_history].reverse().map((h, i) => {
               const hColor = h.status === 'success' ? 'var(--success)' : h.status === 'cached' ? 'var(--cached)' : 'var(--danger)'
@@ -189,7 +192,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
         </div>
       )}
       {/* 输出资产 */}
-      <div style={{ ...styles.label, marginTop: 8 }}>输出资产</div>
+      <div style={{ ...styles.label, marginTop: 4 }}>输出资产</div>
       {Object.entries(assetIds).length === 0 && (
         <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>尚未产出（运行后显示）</div>
       )}

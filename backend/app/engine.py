@@ -4,6 +4,9 @@ import asyncio
 import hashlib
 import json
 import os
+import signal
+import subprocess
+import threading
 import time
 import traceback
 from dataclasses import dataclass, field
@@ -13,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from .registry import get_class, get_spec
 from .assets import Asset, AssetStore
 from .nodespec import NodeBase, NodeSpec
+from . import engines
 
 
 class NodeStatus(str, Enum):
@@ -109,242 +113,269 @@ def _append_history(node: "GraphNode", status: str) -> None:
     if len(node.run_history) > 20:
         node.run_history = node.run_history[-20:]
 
+@dataclass
+class SubprocessHandle:
+    """托管子进程句柄（registry 条目）。"""
+    proc: "subprocess.Popen"
+    job_id: Optional[str] = None
+    spawned_at: float = 0.0
+
 class Engine:
     """执行引擎：给定 Workflow，计算 DAG，按拓扑分批并行执行。"""
 
     _MAX_CACHE_ENTRIES = 2000  # 缓存索引上限（超出按 ts 淘汰最旧）
 
-    def __init__(self, store: AssetStore, on_event: Optional[Callable] = None):
+    # ---------- 平台兜底 / 子进程托管（P0.5 加固，依据运行时安全隔离设计 §2-3） ----------
+    # 节点级超时分级（L0 渲染类保留 1800s 上限；L1/L2 见设计矩阵，按声明覆盖）
+    TIMEOUT_BY_TRUST: Dict[str, float] = {
+        "L0": 600.0,      # 官方：渲染类经 _render_timeout() 提升至 1800s
+        "L1": 300.0,      # 审核
+        "L2": 120.0,      # 社区
+    }
+    # 节点级超时声明上限（manifest.timeout_seconds 可覆盖，但不能超过信任级上限）
+    TIMEOUT_MAX_BY_TRUST: Dict[str, float] = {
+        "L0": 7200.0,
+        "L1": 1800.0,
+        "L2": 900.0,
+    }
+    SETUP_TIMEOUT_DEFAULT = 120.0   # setup 上限 = min(120s, run 超时的 1/3)
+
+    def __init__(self, store: AssetStore, on_event: Optional[Callable] = None,
+                 trust_levels: Optional[Dict[str, str]] = None,
+                 scheduler: Optional[engines.Scheduler] = None,
+                 cache: Optional[engines.CacheProvider] = None,
+                 executor: Optional[engines.Executor] = None):
+        """P2（t4）SPI 组合：scheduler/cache/executor 可注入，缺省从引擎扩展注册表解析。
+
+        - scheduler: KahnScheduler（默认）——环检测 + 拓扑批次
+        - cache: IncrementalCacheProvider（默认）——增量缓存索引
+        - executor: InProcessExecutor（默认）——同进程执行循环
+        """
         self.store = store
         self.on_event = on_event or (lambda ev: None)  # 事件: {"type":..., ...}
+        # P2 引擎 SPI（协议见 engines.py；register_engine_ext 注册第三方实现）
+        self.scheduler: engines.Scheduler = scheduler or engines.get_engine_ext("scheduler", "default")
+        self.cache: engines.CacheProvider = cache or engines.get_engine_ext(
+            "cache", "default", store, os.path.join(store.root, "cache_index.json"))
+        self.executor: engines.Executor = executor or engines.get_engine_ext("executor", "default")
         self._cache_file = os.path.join(store.root, "cache_index.json")
         self._cache: Dict[str, Dict[str, Any]] = {}
+        # 节点类型 -> 信任级（未登记按官方 L0 兜底；插件登记由声明/市场模块填充）
+        self._trust_levels: Dict[str, str] = dict(trust_levels or {})
+        # 子进程托管 registry：job_id -> [SubprocessHandle...]（§3.2 同 job 可挂多个 proc）
+        self._subprocess_registry: Dict[str, List[SubprocessHandle]] = {}
+        self._registry_lock = threading.Lock()
         self._load_cache()
 
-    # ---------- 缓存索引（持久化） ----------
-    def _load_cache(self) -> None:
+    # ---- 信任级 / 超时 ----
+    def set_trust_level(self, type_id: str, level: str) -> None:
+        """登记节点信任级（L0/L1/L2）；未知类型默认 L0。"""
+        if level not in ("L0", "L1", "L2"):
+            raise ValueError(f"非法信任级: {level}")
+        self._trust_levels[type_id] = level
+
+    def trust_level(self, type_id: str) -> str:
+        return self._trust_levels.get(type_id, "L0")
+
+    def node_timeout(self, type_id: str, declared: Optional[float] = None) -> float:
+        """节点 run 超时（秒）。按信任级取默认；声明值在信任级上限内可覆盖。
+
+        declared 仅当节点未把 timeout_seconds 用作业务参数时才认可（防误伤）。
+        """
+        lvl = self.trust_level(type_id)
+        base = self.TIMEOUT_BY_TRUST.get(lvl, 600.0)
+        cap = self.TIMEOUT_MAX_BY_TRUST.get(lvl, 7200.0)
+        if self._is_render_node(type_id) and lvl == "L0":
+            base = 1800.0  # 渲染类 L0 上限保留
+        if declared is not None and declared > 0:
+            return min(max(declared, 1.0), cap)
+        return base
+
+    @staticmethod
+    def _param_is_business(type_id: str, name: str) -> bool:
+        """timeout_seconds 是否被节点声明为业务参数（若是，不作为超时声明使用）。"""
         try:
-            if os.path.exists(self._cache_file):
-                with open(self._cache_file, "r", encoding="utf-8") as f:
-                    self._cache = json.load(f) or {}
+            spec = get_spec(type_id)
         except Exception:
-            self._cache = {}
-        self._trim_cache()
+            return False
+        return any(param.name == name for param in spec.params)
+
+    @staticmethod
+    def _is_render_node(type_id: str) -> bool:
+        """渲染类判定：官方渲染/批量出片节点保留 1800s 语义（L0）。"""
+        tid = type_id.lower()
+        return tid in ("core/video_render", "core/batch_render") or "render" in tid
+
+    def setup_timeout(self, type_id: str, run_timeout: float) -> float:
+        """setup 超时 = min(默认 120s, run 超时的 1/3)。"""
+        return min(self.SETUP_TIMEOUT_DEFAULT, max(run_timeout / 3.0, 1.0))
+
+    # ---- tracked 子进程托管（取消/超时 kill 进程树，无孤儿） ----
+    def track_subprocess(self, job_id: str, proc: subprocess.Popen) -> None:
+        """把子进程登记进节点托管 registry（同一 job_id 可挂多个 proc）。"""
+        with self._registry_lock:
+            self._subprocess_registry.setdefault(job_id, []).append(
+                SubprocessHandle(proc, job_id, time.time()))
+
+    def untrack_subprocess(self, job_id: str, proc: subprocess.Popen) -> None:
+        with self._registry_lock:
+            lst = self._subprocess_registry.get(job_id)
+            if lst:
+                keep = [h for h in lst if h.proc is not proc]
+                if keep:
+                    self._subprocess_registry[job_id] = keep
+                else:
+                    self._subprocess_registry.pop(job_id, None)
+
+    def tracked_procs(self, job_id: str) -> List[subprocess.Popen]:
+        """当前 job 下仍存活的托管子进程（供取消/超时 kill 进程树）。"""
+        with self._registry_lock:
+            lst = self._subprocess_registry.get(job_id) or []
+            return [h.proc for h in lst if h.poll() is None]
+
+    def kill_tracked_tree(self, job_id: str) -> int:
+        """kill 托管子进程树（Windows: taskkill /T /F；POSIX: kill 进程组），返回杀掉的进程数。
+
+        取消/超时统一走这里：杀进程树（含孙进程），杜绝孤儿；随后强制清空 registry。
+        """
+        killed = 0
+        with self._registry_lock:
+            lst = self._subprocess_registry.pop(job_id, None) or []
+        for h in lst:
+            if h.proc is None or h.proc.poll() is not None:
+                continue
+            pid = h.proc.pid
+            try:
+                if os.name == "nt":
+                    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                                   capture_output=True, timeout=5)
+                else:
+                    try:
+                        os.killpg(pid, signal.SIGKILL)
+                    except (AttributeError, ProcessLookupError):
+                        h.proc.kill()
+                killed += 1
+            except Exception:
+                try:
+                    h.proc.kill()
+                    killed += 1
+                except Exception:
+                    pass
+        return killed
+
+    def spawn_tracked(self, job_id: str, cmd: List[str], **popen_kw) -> "subprocess.Popen":
+        """托管子进程入口（插件节点在 P0 窗口内调用）：登记 registry + POSIX 进程组。"""
+        if "creationflags" not in popen_kw and os.name == "nt":
+            popen_kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+        if "start_new_session" not in popen_kw and os.name != "nt":
+            popen_kw["start_new_session"] = True
+        proc = subprocess.Popen(cmd, **popen_kw)
+        self.track_subprocess(job_id, proc)
+        return proc
+
+    async def run_tracked(self, job_id: str, cmd: List[str], timeout: Optional[float] = None,
+                          **popen_kw) -> "subprocess.CompletedProcess":
+        """to_thread 托管子进程执行（同步阻塞移出事件循环，P0 快路径）。
+
+        超时/取消时 kill 整个进程树并回收 registry；返回 CompletedProcess（含 returncode）。
+        """
+        proc = self.spawn_tracked(job_id, cmd, **popen_kw)
+        try:
+            def _wait():
+                return proc.wait(timeout)
+            try:
+                rc = await asyncio.to_thread(_wait)
+            except subprocess.TimeoutExpired:
+                self.kill_tracked_tree(job_id)
+                raise asyncio.TimeoutError(f"子进程超时（{timeout}s）: {' '.join(cmd[:3])}")
+            if proc.stdout is not None:
+                out = await asyncio.to_thread(proc.stdout.read)
+            else:
+                out = None
+            if proc.stderr is not None:
+                err = await asyncio.to_thread(proc.stderr.read)
+            else:
+                err = None
+            return subprocess.CompletedProcess(cmd, rc, out, err)
+        except asyncio.CancelledError:
+            self.kill_tracked_tree(job_id)
+            raise
+        finally:
+            self.untrack_subprocess(job_id, proc)
+            try:
+                if proc.stdout is not None:
+                    proc.stdout.close()
+                if proc.stderr is not None:
+                    proc.stderr.close()
+            except Exception:
+                pass
+
+    def subprocess_job_id(self, nid: str) -> str:
+        return f"wf-{nid}"  # 每节点一个 job 命名空间（registry 键）
+
+
+    # ---- 缓存：委托 IncrementalCacheProvider（P2 SPI，可注入替换） ----
+    def _load_cache(self) -> None:
+        self.cache.load()
 
     def _save_cache(self) -> None:
-        self._trim_cache()
-        try:
-            with open(self._cache_file, "w", encoding="utf-8") as f:
-                json.dump(self._cache, f, ensure_ascii=False)
-        except Exception:
-            pass
+        self.cache.save()
 
     def _trim_cache(self) -> None:
-        """缓存索引维护（防膨胀）：
-        1) 剔除引用资产已不存在的孤儿条目；
-        2) 超出 _MAX_CACHE_ENTRIES 时按 ts 淘汰最旧（LRU，命中会刷新 ts）。"""
-        if not self._cache:
-            return
-        # 孤儿：条目声明的输出资产已被删除（磁盘上不再有 meta）
-        stale = [k for k, v in self._cache.items()
-                 if any(aid and self.store.get(aid) is None
-                        for aid in (v.get("assets") or {}).values())]
-        for k in stale:
-            self._cache.pop(k, None)
-        # 超限：按最后使用时间 ts 升序删最旧
-        if len(self._cache) > self._MAX_CACHE_ENTRIES:
-            ordered = sorted(self._cache.items(), key=lambda kv: kv[1].get("ts", 0))
-            for k, _ in ordered[: len(self._cache) - self._MAX_CACHE_ENTRIES]:
-                self._cache.pop(k, None)
+        """兼容壳：缓存索引维护（孤儿剔除 + LRU 淘汰）由 CacheProvider.trim 实施。"""
+        self.cache.trim()
 
     def invalidate_cache(self, cache_key: str) -> None:
         """清除单个缓存键（用于强制重算）。"""
-        if cache_key in self._cache:
-            self._cache.pop(cache_key, None)
-            self._save_cache()
+        self.cache.invalidate(cache_key)
 
     def _cache_hit(self, cache_key: str, wf: Workflow, node: GraphNode) -> bool:
         """缓存命中：索引存在且所有输出资产仍存在。"""
-        entry = self._cache.get(cache_key)
-        if not entry:
-            return False
-        assets = entry.get("assets") or {}
-        for aid in assets.values():
-            if not aid or self.store.get(aid) is None:
-                return False
-        return True
+        return self.cache.cache_hit(cache_key, wf, node)
 
-    # ---------- DAG 校验 ----------
-    def _adjacency(self, wf: Workflow) -> Dict[str, List[str]]:
-        adj: Dict[str, List[str]] = {nid: [] for nid in wf.nodes}
-        for e in wf.edges:
-            s, t = e.get("source"), e.get("target")
-            if s in adj and t in adj and t not in adj[s]:
-                adj[s].append(t)
-        return adj
-
+    # ---------- DAG 校验（P2：委托 KahnScheduler，可注入替换） ----------
     def validate(self, wf: Workflow) -> List[str]:
         """返回环检测结果（错误信息列表）。"""
-        errors: List[str] = []
-        adj = self._adjacency(wf)
-        WHITE, GRAY, BLACK = 0, 1, 2
-        color = {nid: WHITE for nid in wf.nodes}
-
-        def dfs(nid: str) -> bool:
-            color[nid] = GRAY
-            for nb in adj.get(nid, []):
-                if color[nb] == GRAY:
-                    errors.append(f"检测到环路: {nid} -> {nb}")
-                    return True
-                if color[nb] == WHITE and dfs(nb):
-                    return True
-            color[nid] = BLACK
-            return False
-
-        for nid in wf.nodes:
-            if color[nid] == WHITE:
-                dfs(nid)
-        return errors
+        return self.scheduler.validate(wf)
 
     def topological_batches(self, wf: Workflow) -> List[List[str]]:
         """Kahn 拓扑排序，返回并行批次。"""
-        adj = self._adjacency(wf)
-        indeg = {nid: 0 for nid in wf.nodes}
-        for s in adj:
-            for t in adj[s]:
-                indeg[t] += 1
-        # 只计算需要运行的节点（存在有 input 依赖的）
-        batches: List[List[str]] = []
-        queue = [nid for nid, d in indeg.items() if d == 0]
-        # 稳定排序保证确定性
-        queue.sort()
-        while queue:
-            level = []
-            for nid in queue:
-                level.append(nid)
-            batches.append(level)
-            next_q = []
-            for nid in queue:
-                for nb in adj[nid]:
-                    indeg[nb] -= 1
-                    if indeg[nb] == 0:
-                        next_q.append(nb)
-            next_q.sort()
-            queue = next_q
-        # 断言无环（validate 已检查）
-        return batches
+        return self.scheduler.topological_batches(wf)
 
-    # ---------- 缓存键 ----------
+    # ---------- 缓存键（委托 CacheProvider） ----------
     def _cache_key(self, wf: Workflow, node: GraphNode) -> str:
-        spec = get_spec(node.type_id)
-        parts = [spec.type_id, spec.version]
-        # 参数序列化
-        parts.append(json.dumps(node.params, sort_keys=True, ensure_ascii=False))
-        # 输入资产指纹（构造 part 数组整体序列化，避免分隔符歧义碰撞）
-        for port_name, up_id in node.inputs.items():
-            up = wf.nodes.get(up_id)
-            if up and up.asset_ids.get(port_name):
-                parts.append(up.asset_ids[port_name])
-            else:
-                parts.append("none")
-        # 哈希而非截断：避免长参数下缓存键碰撞（M3 修复）
-        raw = json.dumps(parts, ensure_ascii=False)
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+        return self.cache.cache_key(wf, node)
 
-    # ---------- 执行 ----------
+    # ---------- 执行（委托 Executor；默认 InProcessExecutor） ----------
     async def execute(self, wf: Workflow, run_node_ids: Optional[Set[str]] = None,
                       run_mode: str = "all") -> Workflow:
-        """执行工作流。
+        """执行工作流（P2：循环逻辑在 Executor SPI，可注入第三方实现替换）。
         run_mode: all | upstream (运行到选中节点) | selection | downstream
         """
-        errors = self.validate(wf)
-        if errors:
-            for e in errors:
-                self._emit({"type": "graph_error", "message": e})
-            return wf
-
-        batches = self.topological_batches(wf)
-
-        # 确定本次要运行的节点集合
-        targets: Set[str] = set()
-        if run_mode == "all":
-            targets = set(wf.nodes.keys())
-        elif run_mode == "selection" and run_node_ids:
-            targets = set(run_node_ids)
-        elif run_mode == "upstream" and run_node_ids:
-            # 运行到选中节点：选中节点及其全部上游
-            visited: Set[str] = set()
-            def up(nid: str):
-                if nid in visited: return
-                visited.add(nid)
-                for up_id in wf.nodes[nid].inputs.values():
-                    up(up_id)
-            for nid in run_node_ids: up(nid)
-            targets = visited
-        elif run_mode == "downstream" and run_node_ids:
-            targets = set(run_node_ids)
-            changed = True
-            while changed:
-                changed = False
-                for s, t in [(e["source"], e["target"]) for e in wf.edges]:
-                    if s in targets and t not in targets:
-                        targets.add(t); changed = True
-
-        # 初始化状态：SUCCESS 节点若 cache_key 变了（参数/输入变化）则重置重算
-        for nid, node in wf.nodes.items():
-            if nid in targets:
-                new_key = self._cache_key(wf, node)
-                if node.status in (NodeStatus.SUCCESS, NodeStatus.CACHED) and node.cache_key != new_key:
-                    node.status = NodeStatus.PENDING
-                    node.error = ""
-                    node.progress = 0.0
-                elif node.status not in (NodeStatus.SUCCESS, NodeStatus.CACHED):
-                    node.status = NodeStatus.PENDING
-                    node.error = ""
-                    node.progress = 0.0
-                node.cache_key = new_key
-            self._emit({"type": "node_update", "node_id": nid, "status": node.status.value,
-                        "error": node.error, "progress": node.progress})
-
-        for level in batches:
-            to_run = [nid for nid in level if nid in targets and wf.nodes[nid].status == NodeStatus.PENDING]
-            if not to_run:
-                continue
-            # 检查缓存（增量：命中直接复用资产，无需执行）
-            # 注意：cache_key 必须在此时重算——上游批次刚执行完，其 asset_ids 已更新
-            run_now: List[str] = []
-            for nid in to_run:
-                node = wf.nodes[nid]
-                node.cache_key = self._cache_key(wf, node)
-                if self._cache_hit(node.cache_key, wf, node):
-                    entry = self._cache[node.cache_key]
-                    entry["ts"] = time.time()  # LRU：命中刷新最后使用时间
-                    node.asset_ids = dict(entry.get("assets") or {})
-                    node.status = NodeStatus.CACHED
-                    node.last_params = dict(node.params)
-                    _append_history(node, "cached")
-                    node.progress = 1.0
-                    node.finished_at = time.time()
-                    self._emit({"type": "node_update", "node_id": nid, "status": "cached",
-                                "progress": 1.0, "asset_ids": node.asset_ids})
-                else:
-                    node.status = NodeStatus.QUEUED
-                    self._emit({"type": "node_update", "node_id": nid, "status": "queued"})
-                    run_now.append(nid)
-
-            results = await asyncio.gather(*[self._run_one(wf, nid) for nid in run_now])
-            for nid, ok in zip(to_run, results):
-                pass  # _run_one 已更新节点状态与资产
-
-        self._emit({"type": "execution_done", "workflow_id": wf.id})
-        return wf
+        return await self.executor.execute(self, wf, run_node_ids=run_node_ids, run_mode=run_mode)
 
     async def _run_one(self, wf: Workflow, nid: str) -> bool:
+        """单节点执行（平台兜底）：
+
+        - 捕 BaseException：插件 SystemExit/KeyboardInterrupt/GeneratorExit 等转 FAILED，
+          绝不向外传播（不杀 uvicorn/冻结事件循环）；MemoryError 等同样收口。
+        - run/setup 包 asyncio.timeout 分级超时（L0 渲染类 1800s 上限保留）。
+        - 取消语义完整：CancelledError 回滚资产 + 清空子进程 registry（kill 进程树）。
+        - 回归不变式：缓存键、拓扑批次、事件语义与加固前一致（只新增兜底层）。
+        """
         node = wf.nodes[nid]
+        job_id = self.subprocess_job_id(nid)
         saved_ids: List[str] = []  # 本次运行已落盘资产（失败/取消时回滚，防孤儿残留）
         try:
             cls = get_class(node.type_id)
             spec = get_spec(node.type_id)
+            # timeout_seconds 作为超时声明（manifest.timeout_seconds 的 P0 参数透传），
+            # 但节点若把它声明为业务参数则忽略（防插件数据参数被误当超时）。
+            declared = node.params.get("timeout_seconds")
+            if self._param_is_business(node.type_id, "timeout_seconds"):
+                declared = None
+            run_timeout = self.node_timeout(node.type_id, declared)
+            setup_timeout = self.setup_timeout(node.type_id, run_timeout)
             node.status = NodeStatus.RUNNING
             node.started_at = time.time()
             self._emit({"type": "node_update", "node_id": nid, "status": "running", "progress": 0.0})
@@ -371,22 +402,21 @@ class Engine:
                 else:
                     inputs[port_name] = None
 
-            ctx = {
-                "workdir": self.store.root,
-                "store": self.store,
-                "logger": self._emit,
-                "progress": lambda p: self._emit({"type": "node_update", "node_id": nid,
-                                                   "status": "running", "progress": p}),
-            }
+            # P2：节点上下文统一由 NodeContext.make 构造（engines.py SPI，可扩展字段）
+            ctx = engines.NodeContext.make(self, nid).to_dict()
 
             node_obj: NodeBase = cls()
-            # setup（一次性）
+            # setup（一次性）：超时上限 = min(120s, run 超时/3)；NotImplementedError 视为无初始化
             try:
-                await node_obj.setup(ctx)
+                async with asyncio.timeout(setup_timeout):
+                    await node_obj.setup(ctx)
             except NotImplementedError:
                 pass
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"节点 setup 超时（{setup_timeout:g}s）: {nid}")
 
-            outputs = await node_obj.run(ctx, inputs, node.params)
+            async with asyncio.timeout(run_timeout):
+                outputs = await node_obj.run(ctx, inputs, node.params)
             if not isinstance(outputs, dict):
                 raise RuntimeError("节点输出必须是 dict {端口名: 资产或值}")
 
@@ -411,26 +441,54 @@ class Engine:
             node.finished_at = time.time()
             node.last_params = dict(node.params)  # 记录参数快照（差异高亮）
             _append_history(node, "success")
-            # 写入缓存索引（增量复用）
+            # 写入缓存索引（增量复用，经 CacheProvider SPI）
             if node.cache_key:
-                self._cache[node.cache_key] = {
-                    "assets": dict(node.asset_ids),
-                    "ts": time.time(),
-                    "type": node.type_id,
-                }
-                self._save_cache()
+                self.cache.store_result(node.cache_key, node)
             self._emit({"type": "node_update", "node_id": nid, "status": "success",
                         "progress": 1.0, "asset_ids": node.asset_ids})
             return True
         except asyncio.CancelledError:
+            # 取消语义完整：回滚已落盘资产 + kill 托管子进程树（无孤儿）+ 节点 CANCELLED
+            self.kill_tracked_tree(job_id)
             for aid in saved_ids:
                 try: self.store.delete(aid)
                 except Exception: pass
             node.asset_ids = {}
             node.status = NodeStatus.CANCELLED
+            node.finished_at = time.time()
+            _append_history(node, "cancelled")
             self._emit({"type": "node_update", "node_id": nid, "status": "cancelled"})
             return False
+        except (SystemExit, KeyboardInterrupt, GeneratorExit) as e:
+            # 插件尝试退出进程/中断：隔离为节点 FAILED，绝不向外传播（不杀 uvicorn）
+            self.kill_tracked_tree(job_id)
+            for aid in saved_ids:
+                try: self.store.delete(aid)
+                except Exception: pass
+            node.asset_ids = {}
+            node.status = NodeStatus.FAILED
+            node.error = f"PLUGIN_RUNTIME_ERROR: 插件尝试退出进程或中断，已隔离 ({type(e).__name__})"
+            node.finished_at = time.time()
+            _append_history(node, "failed")
+            self._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            return False
+        except asyncio.TimeoutError:
+            # 分级超时（§2.1）：run 超时在 _run_one 入口按信任级解析；L0 渲染类 1800s 上限保留。
+            # 超时处置 = FAILED(PLUGIN_TIMEOUT) + 杀残留子进程树（design §2.1）。
+            self.kill_tracked_tree(job_id)
+            for aid in saved_ids:
+                try: self.store.delete(aid)
+                except Exception: pass
+            node.asset_ids = {}
+            node.status = NodeStatus.FAILED
+            node.error = f"PLUGIN_TIMEOUT: 节点超时（{run_timeout:g}s）: {nid}"
+            node.finished_at = time.time()
+            _append_history(node, "failed")
+            self._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            return False
         except Exception as e:
+            # 通用运行错误（保留既有语义：error = "{Type}: {msg}"）
+            self.kill_tracked_tree(job_id)
             for aid in saved_ids:
                 try: self.store.delete(aid)
                 except Exception: pass
@@ -441,6 +499,22 @@ class Engine:
             _append_history(node, "failed")
             self._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
             return False
+        except BaseException as e:
+            # 其余 BaseException（MemoryError 等）收口为 FAILED + 隔离标记（不杀 uvicorn）
+            self.kill_tracked_tree(job_id)
+            for aid in saved_ids:
+                try: self.store.delete(aid)
+                except Exception: pass
+            node.asset_ids = {}
+            node.status = NodeStatus.FAILED
+            node.error = f"{type(e).__name__}: {e}"
+            node.finished_at = time.time()
+            _append_history(node, "failed")
+            self._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            return False
+        finally:
+            # 兜底：无论成功/失败/取消/超时，清空节点子进程 registry（防泄漏/孤儿）
+            self.kill_tracked_tree(job_id)
 
     def _emit(self, ev: Dict[str, Any]) -> None:
         try:
