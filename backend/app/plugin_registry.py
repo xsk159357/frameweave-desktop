@@ -315,6 +315,8 @@ class PluginRegistry:
             declarative._extract_zip_safe(zip_path, unpack, os.path.getsize(zip_path))
             pkg_dir = declarative._resolve_package_dir(unpack)
             result = manifest_v2.validate_manifest_file(pkg_dir)
+            # P3 签名链：core L0 强制验签；其余无签名 L2 警告（不阻断）
+            declarative._verify_install_signature(zip_path, result, None, False)
             norm = result.manifest
             type_id = str(norm.get("type_id") or "")
             version = str(norm.get("version") or "1.0.0")

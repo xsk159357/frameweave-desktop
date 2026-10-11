@@ -50,6 +50,7 @@ ERR_LAYOUT = "pkg_layout"                    # 顶层目录非法/缺失单一�
 ERR_MANIFEST = "bad_manifest"                # manifest 缺失或结构非法
 ERR_STAGING = "staging_failed"               # staging 事务失败
 ERR_INSTALL = "install_failed"               # 其他安装失败
+ERR_SIGNATURE_VERIFY = "manifest_signature_verify"  # P3: 验签失败/撤销/core 强制验签不过
 
 
 class PluginInstallError(Exception):

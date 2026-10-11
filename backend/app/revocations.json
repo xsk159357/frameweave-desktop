@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "note": "插件签名密钥撤销清单（P3 第一阶段本地最小实现）。key_id = 发布者公钥 sha256 前 16 hex（见 app/signatures.py）。命中 key_id 的包在 manifest 校验（G10）与安装管线（check_install_signature）双重拒绝。生产环境可将本文件托管云端下发，客户端缓存同名文件。",
+  "all": false,
+  "keys": {}
+}

@@ -126,8 +126,14 @@ class MarketService:
                 price: int, download_url: str, tags: List[str], official: bool = False,
                 source_zip: str = "", version: str = "1.0.0", type_id: str = "",
                 sha256: str = "", size: int = 0, min_client_version: str = "",
-                status: str = "active") -> dict:
-        """发布条目（作者上传：节点/工作流 + GitHub Release/网盘 直链登记）。"""
+                status: str = "active", publisher_pubkey: str = "",
+                archive_signature: str = "") -> dict:
+        """发布条目（作者上传：节点/工作流 + GitHub Release/网盘 直链登记）。
+
+        P3 签名链：publisher_pubkey = 发布者 Ed25519 公钥 base64（L1 市场信任锚，
+        客户端安装时按此验签）；archive_signature = 对插件 zip 的 archive 签名（可选，
+        与条目 pubkey 配套，加强分发链完整性）。
+        """
         item = {
             "id": uuid.uuid4().hex[:12],
             "kind": kind, "title": title, "description": description,
@@ -137,6 +143,8 @@ class MarketService:
             "min_client_version": min_client_version, "status": status or "active",
             "downloads": 0, "installs": 0, "tags": tags or [], "created_at": time.time(),
             "source_zip": source_zip,
+            "publisher_pubkey": publisher_pubkey or "",
+            "archive_signature": archive_signature or "",
         }
         self._items[item["id"]] = item
         self._save()
@@ -223,10 +231,21 @@ class MarketService:
                         "installed_to": os.path.join(templates.TEMPLATES_DIR, meta["tpl_id"]),
                         "missing_type_ids": missing,
                         "has_missing": bool(missing)}
-            # kind=node：解压安装（原逻辑）
+            # kind=node：解压安装（原逻辑）。P3 签名链：条目绑定 publisher_pubkey 时
+            # 先验 zip archive 签名（若有），再传给 declarative 按该公钥验 manifest 签名。
             from . import declarative
+            from . import signatures as sg
+            pubkey = (it.get("publisher_pubkey") or "").strip() or None
+            archive_sig = (it.get("archive_signature") or "").strip() or None
             try:
-                dest = declarative.install_zip(zip_path)
+                # 归档级验签（zip 整体）：有条目 archive_signature 且可验 → 失败拒绝
+                if pubkey and archive_sig:
+                    if not sg.verify_archive_signature_b64(zip_path, archive_sig, pubkey):
+                        _rollback_credit()
+                        return {"ok": False, "code": limits.ERR_SIGNATURE_VERIFY,
+                                "message": "安装失败：插件包归档签名校验失败（zip 被篡改或签名不匹配）"}
+                dest = declarative.install_zip(zip_path, trust_pubkey=pubkey,
+                                               required_sig=False)
             except Exception as e:  # noqa: BLE001
                 _rollback_credit()
                 return {"ok": False, "code": "install_failed", "message": "安装失败: " + str(e)}
@@ -305,6 +324,8 @@ class MarketService:
             "item_id": item_id, "title": it.get("title", ""),
             "version": it.get("version", "1.0.0"), "kind": it.get("kind", ""),
             "type_id": it.get("type_id", ""), "price": price,
+            "publisher_pubkey": it.get("publisher_pubkey", "") or "",
+            "archive_signature": it.get("archive_signature", "") or "",
             "download": {
                 "filename": filename + ".zip",
                 "size": int(it.get("size") or 0),

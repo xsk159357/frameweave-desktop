@@ -338,10 +338,18 @@ def pkg_dir(type_id: str) -> Optional[str]:
 
 
 # ---------- 安装（五上限 + staging 原子安装） ----------
-def install_zip(zip_path: str) -> str:
+def install_zip(zip_path: str, trust_pubkey: Optional[str] = None,
+                required_sig: bool = False) -> str:
     """从 zip 原子安装插件包：解压到 .staging/<uuid> → manifest v2 强校验（G1-G10）
-    → 原子 rename 到 user_nodes/<pkg> → 重扫。失败清理 staging 无残留，并抛带错误码的
+    → P3 验签（core L0 强制 / trust_pubkey 绑定验签 / 无签名 L2 警告）→ 原子 rename
+    到 user_nodes/<pkg> → 重扫。失败清理 staging 无残留，并抛带错误码的
     PluginInstallError/PluginManifestError（不静默吞异常）。
+
+    P3 签名链（backend/app/signatures.py）：
+      - core/* 官方包：required=True，用 L0 官方锚公钥强制验签，缺失/不匹配/撤销 → 拒绝
+        （ERR_SIGNATURE_VERIFY），绝不降级。
+      - trust_pubkey（市场 L1）：条目绑定 publisher_pubkey 时按该公钥验签，失败 → 拒绝。
+      - 其余（L2 社区）：无签名仅 G10 警告放行；有签名但无锚 → 降级 L2 警告。
 
     五上限（§6.1，大插件支持 t2，参数唯一引用 worker/limits.py）：
       总量 ≤ 8GB / 单文件 ≤ 4GB / 成员数 ≤ 20000 / 压缩比 ≤ 100:1 /
@@ -364,7 +372,8 @@ def install_zip(zip_path: str) -> str:
     try:
         _extract_zip_safe(zip_path, unpack, zip_size)
         pkg = _resolve_package_dir(unpack)
-        _validate_package(pkg)
+        result = _validate_package(pkg)
+        _verify_install_signature(zip_path, result, trust_pubkey, required_sig)
         dest = os.path.join(os.path.abspath(USER_NODES_DIR), os.path.basename(pkg))
         _atomic_replace(staging, pkg, dest)
         scan()
@@ -386,6 +395,32 @@ def install_zip(zip_path: str) -> str:
         raise limits.PluginInstallError(limits.ERR_INSTALL, f"安装失败: {e}") from e
     finally:
         _rmtree_safe(staging)  # 失败/成功都清理事务目录：无半解压残留
+
+
+def _verify_install_signature(zip_path: str, result: "manifest_v2.ManifestResult",
+                              trust_pubkey: Optional[str],
+                              required_sig: bool) -> None:
+    """P3 验签门：解压后、扫描前执行（install_zip / plugin_registry 共用）。
+
+    - core/* 官方（L0）：required=True，锚 = L0 官方公钥（fw_official_pubkey.json）。
+    - trust_pubkey（市场 L1）：按发布者公钥验签。
+    - 其余（L2）：无签名/无锚仅警告放行。
+    验签失败抛 PluginInstallError(ERR_SIGNATURE_VERIFY)（staging 由调用方清理）。
+    """
+    from . import signatures as sg
+    norm = result.manifest
+    type_id = str(norm.get("type_id") or "")
+    official = sg.is_official_type_id(type_id)
+    anchor = sg.official_pubkey_b64() if official else None
+    pub = trust_pubkey or anchor
+    required = bool(required_sig or official)
+    ver = sg.check_install_signature(norm, pub, required=required, zip_path=zip_path)
+    if not ver.get("ok"):
+        raise limits.PluginInstallError(limits.ERR_SIGNATURE_VERIFY, ver.get("detail", "验签失败"))
+    if ver.get("level") == "L2":
+        msg = ver.get("detail", "未签名")
+        result.warnings.append("G10: " + msg)
+        print(f"[declarative] {type_id}: {msg}")
 
 
 def _extract_zip_safe(zip_path: str, dest_root: str, zip_size: int) -> None:

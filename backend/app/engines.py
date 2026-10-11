@@ -311,6 +311,13 @@ class IncrementalCacheProvider:
 class InProcessExecutor:
     """同进程执行循环（逻辑迁自 Engine.execute：目标集合/状态重置/缓存命中/批次 gather）。"""
 
+    async def run_node(self, host: Any, wf: Any, nid: str) -> bool:
+        """单节点执行钩子（默认同进程：委托 Engine._run_one 平台兜底）。
+
+        子类（WorkerExecutor）重写本方法以替换执行路径（如 worker 进程隔离）。
+        """
+        return await host._run_one(wf, nid)
+
     async def execute(self, host: Any, wf: Any, run_node_ids: Optional[Set[str]] = None,
                       run_mode: str = "all") -> Any:
         errors = host.scheduler.validate(wf)
@@ -389,7 +396,7 @@ class InProcessExecutor:
                     host._emit({"type": "node_update", "node_id": nid, "status": "queued"})
                     run_now.append(nid)
 
-            results = await asyncio.gather(*[host._run_one(wf, nid) for nid in run_now])
+            results = await asyncio.gather(*[self.run_node(host, wf, nid) for nid in run_now])
             for nid, ok in zip(to_run, results):
                 pass
 
@@ -397,7 +404,108 @@ class InProcessExecutor:
         return wf
 
 
+# ---------------------------------------------------------------- 官方默认：WorkerExecutor（P3 进程隔离）
+class WorkerExecutor(InProcessExecutor):
+    """worker 进程隔离执行器（P3，t7）：节点经独立 worker 子进程 + 受限 RPC 执行。
+
+    - 复刻 InProcessExecutor 的循环（缓存/拓扑/状态语义不变），仅替换单节点执行路径：
+      run_node → WorkerSupervisor（spawn/握手/run 交换/超时 JobObject 杀树/输出导入）。
+    - 失败/超时/崩溃/越权统一按 §1.4 错误码收口为节点 FAILED；worker 崩溃绝不波及主进程。
+    - 信任级矩阵：超时沿用 Engine.node_timeout；L2 强制覆盖声明（engine._param_is_business 判据）。
+    - 启用：环境开关 FW_PLUGIN_EXEC=worker（Engine.__init__ 解析），默认不开启（L0 迁移窗口）。
+    """
+
+    async def run_node(self, host: Any, wf: Any, nid: str) -> bool:
+        from .engine import NodeStatus, _append_history  # noqa: F401
+        from .worker.supervisor import (WorkerJobError, WorkerPermission,
+                                        WorkerSupervisor, WorkerTimeout)
+        import time as _time
+
+        node = wf.nodes[nid]
+        try:
+            # 收集输入资产（语义与 Engine._run_one 一致）
+            inputs: Dict[str, Any] = {}
+            for port_name, up_id in node.inputs.items():
+                if isinstance(up_id, str) and up_id.startswith("@"):
+                    asset = host.store.get(up_id[1:])
+                    if asset is None:
+                        raise RuntimeError(f"素材库资产缺失: {up_id[1:]}")
+                    inputs[port_name] = asset
+                    continue
+                up = wf.nodes.get(up_id)
+                if up is None:
+                    raise RuntimeError(f"输入节点不存在: {up_id}")
+                aid = up.asset_ids.get(port_name)
+                inputs[port_name] = host.store.get(aid) if aid else None
+
+            node.status = NodeStatus.RUNNING
+            node.started_at = _time.time()
+            host._emit({"type": "node_update", "node_id": nid, "status": "running", "progress": 0.0})
+
+            sup = WorkerSupervisor(host, node)
+            outputs = await sup.run_job(inputs)
+
+            # 输出落盘（与 _run_one 语义一致：Asset 直接登记；值/描述符已由 supervisor 导入）
+            node.asset_ids = {}
+            for port_name, val in outputs.items():
+                if val is None:
+                    continue
+                node.asset_ids[port_name] = val.id
+            node.status = NodeStatus.SUCCESS
+            node.progress = 1.0
+            node.finished_at = _time.time()
+            node.last_params = dict(node.params)
+            _append_history(node, "success")
+            if node.cache_key:
+                host.cache.store_result(node.cache_key, node)
+            host._emit({"type": "node_update", "node_id": nid, "status": "success",
+                        "progress": 1.0, "asset_ids": node.asset_ids})
+            return True
+        except asyncio.CancelledError:
+            if "sup" in locals():
+                try:
+                    sup.cancel()
+                except Exception:  # noqa: BLE001
+                    pass
+            node.asset_ids = {}
+            node.status = NodeStatus.CANCELLED
+            node.finished_at = _time.time()
+            _append_history(node, "cancelled")
+            host._emit({"type": "node_update", "node_id": nid, "status": "cancelled"})
+            return False
+        except WorkerTimeout as e:
+            node.asset_ids = {}
+            node.status = NodeStatus.FAILED
+            node.error = str(e)
+            node.finished_at = _time.time()
+            _append_history(node, "failed")
+            host._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            return False
+        except (WorkerPermission, WorkerJobError) as e:
+            node.asset_ids = {}
+            node.status = NodeStatus.FAILED
+            node.error = str(e)
+            node.finished_at = _time.time()
+            _append_history(node, "failed")
+            host._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            return False
+        except BaseException as e:  # noqa: BLE001 —— worker 崩溃/平台异常收口，不外传
+            if "sup" in locals():
+                try:
+                    sup.cancel()
+                except Exception:  # noqa: BLE001
+                    pass
+            node.asset_ids = {}
+            node.status = NodeStatus.FAILED
+            node.error = f"{type(e).__name__}: {e}"
+            node.finished_at = _time.time()
+            _append_history(node, "failed")
+            host._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            return False
+
+
 # 官方默认扩展注册（cache 为工厂：Engine 实例化时传入 store/cache_file）
 register_engine_ext("scheduler", "default", KahnScheduler())
 register_engine_ext("cache", "default", IncrementalCacheProvider)
 register_engine_ext("executor", "default", InProcessExecutor())
+register_engine_ext("executor", "worker", WorkerExecutor())

@@ -157,7 +157,8 @@ class Engine:
         self.scheduler: engines.Scheduler = scheduler or engines.get_engine_ext("scheduler", "default")
         self.cache: engines.CacheProvider = cache or engines.get_engine_ext(
             "cache", "default", store, os.path.join(store.root, "cache_index.json"))
-        self.executor: engines.Executor = executor or engines.get_engine_ext("executor", "default")
+        self.executor: engines.Executor = executor or engines.get_engine_ext(
+            "executor", os.environ.get("FW_PLUGIN_EXEC", "default"))
         self._cache_file = os.path.join(store.root, "cache_index.json")
         self._cache: Dict[str, Dict[str, Any]] = {}
         # 节点类型 -> 信任级（未登记按官方 L0 兜底；插件登记由声明/市场模块填充）

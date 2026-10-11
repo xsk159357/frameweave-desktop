@@ -476,7 +476,8 @@ def _check_ui(m: Dict[str, Any], issues: List[str]) -> None:
 
 
 def _check_signature(m: Dict[str, Any], issues: List[str], warnings: List[str]) -> bool:
-    """G10：signature 占位（结构校验；真实验签为 P3）。"""
+    """G10：signature 结构校验 + 撤销清单检查（真实验签在安装管线 signatures.check_install_signature）。"""
+    from .. import signatures as _sg
     sig = m.get("signature")
     if sig is None:
         warnings.append("G10: 未签名——社区级安装（L2），官方商城上架需签名")
@@ -494,6 +495,13 @@ def _check_signature(m: Dict[str, Any], issues: List[str], warnings: List[str]) 
         v = sig.get(k)
         if not isinstance(v, str) or not v.strip():
             issues.append(f"G10: signature.{k} 必填且非空")
+    over = sig.get("over")
+    if isinstance(over, str) and over not in _sg.SIG_OVER_VALUES:
+        issues.append(f"G10: signature.over 必须为 manifest|archive，收到 {over!r}")
+    # P3：撤销密钥 → 拒绝（G10 门内尽早拒绝，安装管线 check_install_signature 亦复查）
+    if isinstance(sig.get("key_id"), str) and sig["key_id"].strip():
+        if _sg.is_revoked(sig["key_id"].strip()):
+            issues.append(f"G10: 签名密钥已撤销（key_id={sig['key_id'].strip()}），拒绝安装")
     return True
 
 

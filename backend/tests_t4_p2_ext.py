@@ -52,7 +52,7 @@ print("\n==== R1 引擎 SPI ====")
 ext = engines.list_engine_ext()
 check("R1 默认扩展已注册（scheduler/cache/executor）",
       ext.get("scheduler") == ["default"] and ext.get("cache") == ["default"]
-      and ext.get("executor") == ["default"], f"ext={ext}")
+      and ext.get("executor") == ["default", "worker"], f"ext={ext}")
 
 st = tmp_store()
 eng = Engine(st, trust_levels={})
