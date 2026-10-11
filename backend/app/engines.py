@@ -82,6 +82,7 @@ class NodeContext:
     untrack_subprocess: Callable[[Any], None]
     subprocess_registry: Any
     node_id: str = ""
+    local_token: Callable[[], str] = lambda: ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -94,11 +95,22 @@ class NodeContext:
             "track_subprocess": self.track_subprocess,
             "untrack_subprocess": self.untrack_subprocess,
             "subprocess_registry": self.subprocess_registry,
+            "node_id": self.node_id,
+            "local_token": self.local_token,
+            # P3 双模式 API（与 WorkerContext 同名对齐）
+            "resolve_secret": self.resolve_secret,
+            "http": self.http,
+            "fs_read": self.fs_read,
+            "fs_write": self.fs_write,
         }
 
     @classmethod
     def make(cls, host: Any, nid: str) -> "NodeContext":
-        """从 Engine 实例构造节点上下文（与 engine.py 原 _run_one 注入语义一致）。"""
+        """从 Engine 实例构造节点上下文（与 engine.py 原 _run_one 注入语义一致）。
+
+        P3 迁移窗口双模式 API：resolve_secret/http/fs_read/fs_write 与 worker 侧
+        WorkerContext 同名对齐——官方节点改造后主进程/worker 均可运行。
+        """
         job_id = host.subprocess_job_id(nid)
         return cls(
             workdir=host.store.root,
@@ -113,7 +125,39 @@ class NodeContext:
             untrack_subprocess=lambda proc: host.untrack_subprocess(job_id, proc),
             subprocess_registry=host,
             node_id=nid,
+            local_token=lambda: getattr(host, "_local_token", "") or "",
         )
+
+    # ---- P3 双模式 API（worker 侧同名；主进程侧按官方 L0 宽松实现） ----
+    def resolve_secret(self, ref: str) -> str:
+        """主进程侧 secret 解析（worker 内经 RPC；此处直读保险箱）。"""
+        from . import secrets
+        return secrets.read_secret(ref) or ""
+
+    def http(self, method: str, url: str, headers: Optional[dict] = None,
+             body: Any = None, max_resp_bytes: int = 10 * 1024 * 1024) -> Dict[str, Any]:
+        """主进程侧网络代理（worker 内经 RPC + gate）。urllib 实现，超时 30s。"""
+        import base64
+        import urllib.request
+        req = urllib.request.Request(url, data=body, method=str(method).upper(),
+                                     headers=dict(headers or {}))
+        with urllib.request.urlopen(req, timeout=30) as r:
+            raw = r.read(max_resp_bytes + 1)
+            return {"status": r.status,
+                    "body_b64": base64.b64encode(raw[:max_resp_bytes]).decode("ascii"),
+                    "headers": {k: v for k, v in r.headers.items()}}
+
+    def fs_read(self, rel: str) -> bytes:
+        with open(os.path.abspath(rel), "rb") as f:
+            return f.read()
+
+    def fs_write(self, rel: str, data_b64: str) -> str:
+        import base64
+        fp = os.path.abspath(rel)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "wb") as f:
+            f.write(base64.b64decode(data_b64))
+        return fp
 
 
 # ---------------------------------------------------------------- 扩展注册表
@@ -409,11 +453,13 @@ class WorkerExecutor(InProcessExecutor):
     """worker 进程隔离执行器（P3，t7）：节点经独立 worker 子进程 + 受限 RPC 执行。
 
     - 复刻 InProcessExecutor 的循环（缓存/拓扑/状态语义不变），仅替换单节点执行路径：
-      run_node → WorkerSupervisor（spawn/握手/run 交换/超时 JobObject 杀树/输出导入）。
+      run_node → WorkerPool（驻留复用 W4 + 崩溃重试 S2）→ WorkerSupervisor。
     - 失败/超时/崩溃/越权统一按 §1.4 错误码收口为节点 FAILED；worker 崩溃绝不波及主进程。
-    - 信任级矩阵：超时沿用 Engine.node_timeout；L2 强制覆盖声明（engine._param_is_business 判据）。
     - 启用：环境开关 FW_PLUGIN_EXEC=worker（Engine.__init__ 解析），默认不开启（L0 迁移窗口）。
     """
+
+    def __init__(self, pool: Any = None, **kw: Any):
+        self._pool = pool
 
     async def run_node(self, host: Any, wf: Any, nid: str) -> bool:
         from .engine import NodeStatus, _append_history  # noqa: F401
@@ -442,10 +488,10 @@ class WorkerExecutor(InProcessExecutor):
             node.started_at = _time.time()
             host._emit({"type": "node_update", "node_id": nid, "status": "running", "progress": 0.0})
 
-            sup = WorkerSupervisor(host, node)
-            outputs = await sup.run_job(inputs)
-
-            # 输出落盘（与 _run_one 语义一致：Asset 直接登记；值/描述符已由 supervisor 导入）
+            from .worker.pool import WorkerPool
+            pool = self._pool or WorkerPool(host)
+            self._pool = pool
+            outputs = await pool.run(host, node, inputs)
             node.asset_ids = {}
             for port_name, val in outputs.items():
                 if val is None:

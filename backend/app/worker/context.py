@@ -102,6 +102,11 @@ class WorkerContext:
         self.store = WorkerStoreProxy(gate, roots["in"], roots["out"], {})
         self.workdir = roots["scratch"]
         self.node_id = str(job.get("node_id", ""))
+        self._local_token = str(job.get("local_token", "") or "")
+
+    def local_token(self) -> str:
+        """本地子服务令牌（voice_clone V1；host 单值注入，非环境全文）。"""
+        return self._local_token
 
     # ---------- 事件 ----------
     def logger(self, ev: Dict[str, Any]) -> None:
@@ -178,6 +183,18 @@ class WorkerContext:
         return self._gate.deny_info(e)
 
     # ---------- 类型化访问 ----------
+    def __getitem__(self, key: str) -> Any:
+        """兼容官方节点 dict 风格访问（ctx["store"] / ctx["run_tracked"] ...）。"""
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "workdir": self.workdir,

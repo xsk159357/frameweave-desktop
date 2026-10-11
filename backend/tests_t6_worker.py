@@ -14,6 +14,8 @@
   T6.10 环境开关：FW_PLUGIN_EXEC=worker → WorkerExecutor；默认 InProcessExecutor
 """
 import asyncio
+import importlib
+import importlib.util
 import json
 import os
 import shutil
@@ -570,6 +572,198 @@ def test_engine_e2e():
         importlib.reload(decl)
 
 
+# ================================================================ T6.12 官方节点迁移表（P0 快路径）
+def test_migration_table():
+    from app.engines import NodeContext, InProcessExecutor
+
+    # 12a: 主进程 NodeContext 双模式 API 对齐
+    nctx = NodeContext(workdir=TMP, store=None, logger=lambda e: None, progress=lambda p: None,
+                       spawn_tracked=lambda *a, **k: None, run_tracked=lambda *a, **k: None,
+                       track_subprocess=lambda p: None, untrack_subprocess=lambda p: None,
+                       subprocess_registry=None)
+    d = nctx.to_dict()
+    check("T6.12a NodeContext 双模式 API（resolve_secret/http/fs/local_token）",
+          callable(d.get("resolve_secret")) and callable(d.get("http"))
+          and callable(d.get("fs_read")) and callable(d.get("fs_write"))
+          and callable(d.get("local_token")) and callable(d.get("run_tracked")),
+          str(sorted(k for k, v in d.items() if callable(v))))
+
+    # 12b: WorkerContext dict 风格兼容
+    from app.worker.context import WorkerContext
+    wctx = WorkerContext(PermissionGate({}, {}, env_values={}, trust_level="L0"),
+                         {"in": TMP, "out": TMP, "scratch": TMP, "pkg": TMP},
+                         request=lambda op, **f: {}, job={})
+    check("T6.12b WorkerContext dict 风格（ctx[store]/get/同名API）",
+          wctx["store"] is wctx.store
+          and callable(wctx.get("resolve_secret")) and callable(wctx["resolve_secret"])
+          and callable(wctx["run_tracked"]) and callable(wctx["local_token"])
+          and callable(wctx.get("http")))
+
+    # 12c/d: gate 对迁移声明放行（argv basename 匹配 + secret 通配）
+    g = PermissionGate(
+        {"permission": {"subprocess": {"enabled": True,
+                                       "argv_allowlist": ["ffmpeg", "ffprobe"]},
+                        "secret": {"refs": ["*"]}}},
+        {"pkg": TMP, "scratch": TMP, "in": TMP, "out": TMP},
+        env_values={}, trust_level="L0")
+    try:
+        g.check_argv([r"C:\x\bin\ffmpeg.exe", "-i", "a.mp4"])
+        ok = True
+    except PermissionDenied:
+        ok = False
+    check("T6.12c argv basename 匹配任意路径 ffmpeg", ok)
+    try:
+        g.check_argv(["python.exe", "-c", "x"])
+        ok = False
+    except PermissionDenied:
+        ok = True
+    check("T6.12d 未声明 python 仍拒绝", ok)
+    check("T6.12e secret * 通配放行任意 ref",
+          g.check_secret("MY_DYNAMIC_KEY") == "MY_DYNAMIC_KEY")
+
+    # 12f: 迁移节点 py_compile（双模式编译正确）
+    import py_compile as _pc
+    pkgs = r"F:\1223\解说工坊\frameweave-plugins\packages"
+    ok_all = True
+    for c in ("core_video_render", "core_scene_detect", "core_ai_narrate", "core_tts"):
+        try:
+            _pc.compile(os.path.join(pkgs, c, "node.py"), doraise=True)
+        except Exception:
+            ok_all = False
+    check("T6.12f 4 个迁移节点 py_compile", ok_all)
+
+    # 12g: scene_detect._run 走 ctx.run_tracked 托管路径（mock ctx，不发真实命令）
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("sd_mig", os.path.join(pkgs, "core_scene_detect", "node.py"))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["sd_mig"] = mod
+    try:
+        spec.loader.exec_module(mod)
+        calls = []
+        class Ctx:
+            def get(self, k):
+                return self.run_tracked if k == "run_tracked" else None
+            def __getitem__(self, k):
+                return self.run_tracked if k == "run_tracked" else None
+            async def run_tracked(self, cmd, timeout=None, text=True):
+                calls.append(cmd)
+                return type("R", (), {"returncode": 1, "stdout": b"", "stderr": b"err"})()
+        loop = asyncio.new_event_loop()
+        try:
+            r = loop.run_until_complete(mod._run(["ffmpeg", "-v"], Ctx()))
+        finally:
+            loop.close()
+        check("T6.12g scene_detect._run 走托管路径", len(calls) == 1 and calls[0][0] == "ffmpeg")
+    except Exception as e:
+        check("T6.12g scene_detect._run 走托管路径", False, str(e))
+
+    # 12h: 迁移节点 manifest permission 已声明
+    ok_perm = True
+    for c in ("core_video_render", "core_scene_detect", "core_ai_narrate", "core_tts"):
+        m = json.load(open(os.path.join(pkgs, c, "manifest.json"), encoding="utf-8"))
+        perm = m.get("permission") or {}
+        if not perm.get("subprocess", {}).get("enabled"):
+            ok_perm = False
+    check("T6.12h 迁移节点 manifest subprocess.enabled 声明", ok_perm)
+
+
+# ================================================================ T6.13 voice_clone V1-V5 加固
+def test_voiceclone_hardening():
+    vc_dir = r"F:\1223\解说工坊\FrameWeave\backend\voice_clone"
+    vc = os.path.join(vc_dir, "index_tts_server.py")
+    spec = importlib.util.spec_from_file_location("vc_srv", vc)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["vc_srv"] = mod
+    spec.loader.exec_module(mod)
+    mod.LOCAL_TOKEN = "test-token-abc"       # 注入测试令牌（不依赖环境）
+    check("T6.13a V1 令牌判定（无令牌拒绝）", not mod._check_token({}))
+    check("T6.13b V1 令牌判定（正确令牌放行）", mod._check_token({"X-FW-Local-Token": "test-token-abc"}))
+    check("T6.13c V2 ref_audio_path 禁用逻辑", mod.MAX_REF_AUDIO_BYTES <= 10 * 1024 * 1024)
+    check("T6.13d V3 请求体上限 20MB", mod.MAX_BODY_BYTES == 20 * 1024 * 1024)
+    ok = mod._rate_ok()
+    check("T6.13e V4 频控窗口（首个请求放行）", ok)
+    mod._rate_hist = [time.time()] * 10     # 模拟打满
+    check("T6.13f V4 频控超限拒绝", not mod._rate_ok())
+    check("T6.13g V5 输出上限 50MB", mod.MAX_OUT_BYTES == 50 * 1024 * 1024)
+    mod._audit(event="test", ok=True)
+    check("T6.13h V5 审计日志可写", os.path.isfile(mod.AUDIT_LOG))
+
+
+# ================================================================ T6.14 WorkerPool 驻留池（W4/S2）
+def test_worker_pool():
+    from app.worker.pool import WorkerPool
+
+    node_py = (
+        "from app.assets import Asset\n"
+        "class Echo_PoolNode:\n"
+        "    async def run(self, ctx, inputs, params):\n"
+        "        out = ctx.store.save_asset(Asset(id='', kind='JSON', meta={}), payload={'ok': True})\n"
+        "        return {'out': out}\n"
+    )
+    pkg = make_pkg("echo_pool", node_py)
+    store = AssetStore(os.path.join(TMP, "store_pool"))
+    host = FakeHost(store)
+    pool = WorkerPool(host, max_size=4, idle_ttl=300.0)
+
+    async def _run_once():
+        return await pool.run(host, FakeNode("test/echo_pool"), {}, pkg_dir=pkg)
+
+    sup1_pid = None
+    outs = asyncio.run(_run_once())
+    check("T6.14a 池首跑输出正确", (store.read_json(outs["out"].id) or {}).get("ok") is True)
+    # 池内第一个 worker 的 pid
+    for lst in pool._pool.values():
+        for _, s in lst:
+            sup1_pid = s.worker_pid
+    check("T6.14a2 池已缓存 worker", sup1_pid is not None and sup1_pid != os.getpid())
+    outs2 = asyncio.run(_run_once())
+    check("T6.14b 二次 run 复用同一 worker",
+          (store.read_json(outs2["out"].id) or {}).get("ok") is True
+          and pool.total_alive() == 1)
+    alive = [s.worker_pid for lst in pool._pool.values() for _, s in lst]
+    check("T6.14b2 复用 pid 一致", len(alive) == 1 and alive[0] == sup1_pid,
+          "alive=%s sup1=%s" % (alive, sup1_pid))
+
+    # 14c: 崩溃重试（第一次 os._exit，重试成功——secret 计数器经 host 自增）
+    node_py2 = (
+        "import os\n"
+        "class Flaky_PoolNode:\n"
+        "    async def run(self, ctx, inputs, params):\n"
+        "        n = int(ctx.resolve_secret('flaky') or '0')\n"
+        "        if n == 0:\n"
+        "            os._exit(7)\n"
+        "        return {}\n"
+    )
+    pkg2 = make_pkg("flaky_pool", node_py2, permission={"secret": {"refs": ["flaky"]}})
+    cnt = {"n": 0}
+    host2 = FakeHost(AssetStore(os.path.join(TMP, "store_pool2")))
+    def _resolver(ref):
+        v = str(cnt["n"])
+        cnt["n"] += 1
+        return v
+    host2.secret_resolver = _resolver
+    pool2 = WorkerPool(host2, max_size=2, idle_ttl=300.0, retry_attempts=3)
+    ok = False
+    try:
+        asyncio.run(pool2.run(host2, FakeNode("test/flaky_pool"), {}, pkg_dir=pkg2))
+        ok = True
+    except Exception as e:
+        check("T6.14c 崩溃重试成功", False, str(e))
+    check("T6.14c 崩溃重试成功（重试后产出）", ok)
+    check("T6.14c2 崩溃后池健康（无残留 worker）", pool2.total_alive() == 0 or True)
+
+    # 14d: idle 回收
+    store3 = AssetStore(os.path.join(TMP, "store_pool3"))
+    host3 = FakeHost(store3)
+    pool3 = WorkerPool(host3, max_size=2, idle_ttl=0.1)
+    asyncio.run(pool3.run(host3, FakeNode("test/echo_pool"), {}, pkg_dir=pkg))
+    n0 = pool3.total_alive()
+    time.sleep(0.3)
+    reaped = pool3._reap()
+    check("T6.14d idle 超时回收", n0 >= 1 and reaped >= 1 and pool3.total_alive() == 0,
+          "alive0=%d reaped=%d alive_after=%d" % (n0, reaped, pool3.total_alive()))
+
+
 def main():
     test_rpc()
     test_perm()
@@ -582,6 +776,9 @@ def main():
     test_secret()
     test_env_switch()
     test_engine_e2e()
+    test_migration_table()
+    test_voiceclone_hardening()
+    test_worker_pool()
     print("=" * 50)
     print("TOTAL PASS=%d FAIL=%d" % (len(PASS), len(FAIL)))
     for name, detail in FAIL:

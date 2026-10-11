@@ -161,6 +161,8 @@ class Engine:
             "executor", os.environ.get("FW_PLUGIN_EXEC", "default"))
         self._cache_file = os.path.join(store.root, "cache_index.json")
         self._cache: Dict[str, Dict[str, Any]] = {}
+        # 本地子服务令牌（voice_clone 等 V1 鉴权；仅单值，绝不把环境全文交给 worker）
+        self._local_token: str = os.environ.get("FRAMEWEAVE_LOCAL_TOKEN", "") or ""
         # 节点类型 -> 信任级（未登记按官方 L0 兜底；插件登记由声明/市场模块填充）
         self._trust_levels: Dict[str, str] = dict(trust_levels or {})
         # 子进程托管 registry：job_id -> [SubprocessHandle...]（§3.2 同 job 可挂多个 proc）

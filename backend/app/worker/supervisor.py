@@ -110,19 +110,32 @@ class WorkerSupervisor:
         raise WorkerJobError(rpc.ERR_CONFIG, "无法定位插件包目录: %s" % self.type_id)
 
     # ------------------------------------------------------------ 任务编排
-    async def run_job(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """全流程：scratch → 输入物化 → spawn → 握手 → run 交换 → 输出导入。"""
-        self._prepare_scratch()
-        self._materialize_inputs(inputs)
-        self._write_job_file()
-        proc, reader, writer, jobobj = self._spawn()
-        self._proc, self._reader, self._writer, self._jobobj = proc, reader, writer, jobobj
-        try:
+    async def run_job(self, inputs: Dict[str, Any], keep_alive: bool = False) -> Dict[str, Any]:
+        """全流程：scratch → 输入物化 → spawn → 握手 → run 交换 → 输出导入。
+
+        keep_alive=True（池化）：run 后不关闭 worker，等待池复用（worker loop 已支持连跑）。
+        """
+        if self._proc is None:
+            self._prepare_scratch()
+            self._write_job_file()
+            proc, reader, writer, jobobj = self._spawn()
+            self._proc, self._reader, self._writer, self._jobobj = proc, reader, writer, jobobj
             await self._handshake(proc, reader, writer)
-            rels = await self._run_exchange(proc, reader, writer)
-            return self._import_outputs(rels)
-        finally:
+        outputs = await self._do_run(inputs)
+        if not keep_alive:
             self._close()
+        return outputs
+
+    async def _do_run(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """复用已有 worker 的一次 run（物化输入 → run 交换 → 输出导入）。"""
+        self._materialize_inputs(inputs)
+        proc, reader, writer = self._proc, self._reader, self._writer
+        rels = await self._run_exchange(proc, reader, writer)
+        return self._import_outputs(rels)
+
+    def alive(self) -> bool:
+        """worker 进程仍存活且可复用。"""
+        return self._proc is not None and self._proc.poll() is None
 
     def cancel(self) -> None:
         """协作式取消（发送 cancel；超时/强杀由 _close 的 JobObject 保证）。"""
@@ -184,6 +197,7 @@ class WorkerSupervisor:
             "timeout_s": self.timeout_s,
             "roots": self.roots,
             "env": env_declared,
+            "local_token": getattr(self.host, "_local_token", "") or "",
             "manifest": {k: v for k, v in self.manifest.items() if k != "signature"},
         }
         with open(self._job_file, "w", encoding="utf-8") as f:

@@ -154,23 +154,29 @@ class PermissionGate:
         if not self.subprocess_enabled:
             raise PermissionDenied("subprocess", str(argv), "未声明 subprocess.enabled（默认 deny）")
         cmd = str(argv[0]).replace("\\", "/")
+        base = os.path.basename(cmd)
+        base_noext = os.path.splitext(base)[0]
         for pat in self.argv_allowlist:
             p = str(pat).replace("\\", "/")
-            if p == cmd:
+            if p == cmd or p == base:                     # 精确（全路径 或 basename）
                 return list(argv)
             if p.endswith("**"):
                 stem = p[:-2].rstrip("/")
                 if cmd == stem or cmd.startswith(stem + "/"):
                     return list(argv)
-            if p.endswith("*") and cmd.startswith(p[:-1]):
+            if p.endswith("*") and (cmd.startswith(p[:-1]) or base.startswith(p[:-1])):
+                return list(argv)
+            if os.path.splitext(p)[0] == base_noext and "/" not in p:  # 无扩展名匹配
                 return list(argv)
         raise PermissionDenied("subprocess", cmd, f"不在 argv_allowlist: {self.argv_allowlist}")
 
     # ---------- secret ----------
     def check_secret(self, ref: str) -> str:
-        """secret：ref 必须在 permission.secret.refs 白名单。"""
+        """secret：ref 必须在 permission.secret.refs 白名单（"*"=任意官方节点声明）。"""
         if not isinstance(ref, str) or not ref.strip():
             raise PermissionDenied("secret", str(ref), "ref 必须为非空字符串")
+        if "*" in self.secret_refs:
+            return ref
         if ref not in self.secret_refs:
             raise PermissionDenied("secret", ref, f"不在 secret.refs: {self.secret_refs}")
         return ref
