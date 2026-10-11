@@ -11,6 +11,10 @@ desktop/dist/
 backend/packaging/build/
 backend/packaging/dist/
 
+# ===== PyArmor 混淆中间产物（构建期即时生成，不进版本库） =====
+backend/.obf/
+backend/.obf_main/
+
 # ===== 发布包（安装包/blockmap/更新源） =====
 release/
 
