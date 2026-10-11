@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 
 CARD_SECRET=os.environ.get('FRAMEWEAVE_CARD_SECRET',''); ADMIN_KEY=os.environ.get('FRAMEWEAVE_ADMIN_KEY','')
+VERIFY_SECRET=os.environ.get('FRAMEWEAVE_VERIFY_SECRET','fw-verify-secret-2026')  # P3/t3 ④：auth 响应 HMAC 签名密钥
 ADMIN_ALLOW_IPS=[x.strip() for x in os.environ.get('FRAMEWEAVE_ADMIN_ALLOW_IPS','').split(',') if x.strip()]
 TRIAL_DAYS=1; DB_PATH=os.environ.get('CLOUD_DB',os.path.join(os.path.dirname(os.path.abspath(__file__)),'cloud.db'))
 AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.2.12'; AUTHOR_SHARE=0.8
@@ -132,6 +133,28 @@ def card(card):
   return json.loads(base64.urlsafe_b64decode(b+'='*(-len(b)%4)).decode())
  except Exception:return None
 
+# ---------- P3/t3 ④：auth 响应 HMAC 签名（防 fiddler 伪造 member 状态） ----------
+# 规范化：排除 signature/sig/nonce 字段，键升序拼接 k=v；HMAC-SHA256 截 48 hex。
+# 客户端 cloud_gateway.check_response_signature 用同一规则复算比对。
+_SKIP_SIGN_FIELDS={'signature','sig'}
+def _sign_norm(v):
+ if isinstance(v,bool):return 'true' if v else 'false'
+ if v is None:return 'null'
+ if isinstance(v,(int,float)):return str(v)
+ if isinstance(v,str):return v
+ return json.dumps(v,separators=(',',':'),ensure_ascii=False,sort_keys=True)
+def sign_auth_resp(o):
+ """对 /api/auth/* 响应加 signature 字段（就地或拷贝返回）。"""
+ if not isinstance(o,dict):return o
+ items=[]
+ for k,v in o.items():
+  if k in _SKIP_SIGN_FIELDS or v is None:continue
+  items.append((str(k),_sign_norm(v)))
+ items.sort(key=lambda kv:kv[0])
+ canon=''.join(f'{k}={v}' for k,v in items).encode('utf-8')
+ o['signature']=hmac.new(VERIFY_SECRET.encode('utf-8'),canon,hashlib.sha256).hexdigest()[:48]
+ return o
+
 def login(b):
  e=norm(b.get('email'));p=b.get('password','');d=b.get('device_id','');ip=b.get('ip','')
  if not valid_email(e):return {'ok':False,'message':'目前仅支持 QQ 邮箱（@qq.com）'}
@@ -171,12 +194,13 @@ def reset(b):
 
 def verify(b):
  c=db();r=c.execute('SELECT * FROM sessions WHERE token=?',(b.get('token',''),)).fetchone();c.close()
- if not r:return {'ok':False,'reason':'token 无效'}
+ out={'req_nonce':b.get('nonce','')}  # P3/t3 ④：回显客户端 nonce 并纳入签名
+ if not r:return {'ok':False,'reason':'token 无效',**out}
  s=dict(r)
- if int(s.get('status',1))==0:return {'ok':False,'reason':'账号已被禁用'}
- if time.time()>float(s.get('expires_at') or 0):return {'ok':False,'reason':'订阅已过期，请续费'}
- if b.get('device_id') and s.get('device_id')!=b['device_id']:return {'ok':False,'reason':'账号已在其他设备登录','device_kick':True}
- return {'ok':True,**public(s)}
+ if int(s.get('status',1))==0:return {'ok':False,'reason':'账号已被禁用',**out}
+ if time.time()>float(s.get('expires_at') or 0):return {'ok':False,'reason':'订阅已过期，请续费',**out}
+ if b.get('device_id') and s.get('device_id')!=b['device_id']:return {'ok':False,'reason':'账号已在其他设备登录','device_kick':True,**out}
+ return {'ok':True,**public(s),**out}
 def activate(b):
  s=find(b.get('email'));p=card(b.get('card',''))
  if not p:return {'ok':False,'message':'卡密无效或签名校验失败'}
@@ -437,7 +461,14 @@ class H(BaseHTTPRequestHandler):
  def do_POST(self):
   f=ROUTES.get(urlparse(self.path).path)
   if not f:return self.out({'ok':False,'message':'Not Found'},404)
-  try:n=int(self.headers.get('Content-Length','0'));b=json.loads(self.rfile.read(n) or b'{}');b['ip']=self.client_address[0];r=f(b);self.out({'ok':r[0],'message':r[1]} if isinstance(r,tuple) else r)
+  try:
+   n=int(self.headers.get('Content-Length','0'))
+   b=json.loads(self.rfile.read(n) or b'{}')
+   b['ip']=self.client_address[0]
+   r=f(b)
+   if isinstance(r,tuple):r={'ok':r[0],'message':r[1]}
+   if urlparse(self.path).path.startswith('/api/auth') and isinstance(r,dict):sign_auth_resp(r)
+   self.out(r)
   except Exception as e:print('[cloud-error]',type(e).__name__);self.out({'ok':False,'message':'服务器内部错误'},500)
  def log_message(self,*a):pass
 if __name__=='__main__':

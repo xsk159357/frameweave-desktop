@@ -1,10 +1,61 @@
 // Electron 主进程：启动本地 Python 后端 + 加载前端
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const http = require('http')
+const crypto = require('crypto')
+
+// ---------- P2 加固：asar 完整性自检（仅打包版生效） ----------
+// 启动最早阶段（在单实例锁、autoUpdater、任何网络访问之前）校验 app.asar 内
+// 关键文件哈希与构建期清单 integrity.json 一致；不一致说明 asar 被解包篡改
+// （替换 main.cjs/preload.cjs/web/dist 绕过授权校验），直接拒绝启动。
+function verifyAsarIntegrity() {
+  if (!app.isPackaged) { fwLog('[integrity] dev 模式跳过 asar 自检'); return true }
+  try {
+    const appPath = app.getAppPath()             // 指向 resources/app.asar
+    const manifestRaw = fs.readFileSync(path.join(appPath, 'integrity.json'), 'utf8')
+    const manifest = JSON.parse(manifestRaw)
+    if (!manifest || manifest.v !== 1 || !manifest.files) return false
+    for (const rel of Object.keys(manifest.files)) {
+      const expected = String(manifest.files[rel]).toLowerCase()
+      if (!/^[0-9a-f]{64}$/.test(expected)) return false
+      const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(appPath, rel))).digest('hex')
+      if (actual !== expected) {
+        fwLog('[integrity] FAIL:', rel, '哈希不匹配')
+        return false
+      }
+    }
+    fwLog('[integrity] OK:', Object.keys(manifest.files).length, '个关键文件校验通过')
+    return true
+  } catch (e) {
+    fwLog('[integrity] 自检异常，拒绝启动:', e && e.message)
+    return false
+  }
+}
+
+// ---------- P2 加固：调试参数 / DevTools 拒绝（仅打包版） ----------
+// 生产仅打包版禁用 DevTools（webPreferences.devTools=false + 移除默认菜单 +
+// before-input-event 拦截 F12/Ctrl+Shift+I）；并拒绝携带调试类命令行参数启动
+// （--remote-debugging-port / --inspect / --devtools 等），防止远程调试接管。
+const DEBUG_ARG_RE = /^(--(devtools|dev-tools|auto-open-devtools-for-tabs|remote-debugging-port|inspect|inspect-brk|js-flags))/
+
+function detectDebugArgs(argv) {
+  return argv.some((a) => DEBUG_ARG_RE.test(String(a)))
+}
+
+function scrubDebugArgs(argv) {
+  return argv.filter((a) => !DEBUG_ARG_RE.test(String(a)))
+}
+
+// 打包版：检测到调试参数直接退出（Chromium 在脚本运行前已解析部分开关，
+// 唯一可靠拦截是拒绝启动）；开发版忽略，便于本地联调。
+if (app.isPackaged && detectDebugArgs(process.argv)) {
+  try { fwLog('[integrity] 检测到调试参数，拒绝启动:', process.argv.filter((a) => DEBUG_ARG_RE.test(String(a)))) } catch { /* 日志失败忽略 */ }
+  app.exit(1)
+}
+process.argv = scrubDebugArgs(process.argv)
 
 // 单实例锁：双击/多开时聚焦已有窗口并退出新实例
 const gotLock = app.requestSingleInstanceLock()
@@ -42,6 +93,9 @@ ipcMain.on('fw-log', (_e, payload) => {
 let mainWindow = null
 let backendProc = null
 const BACKEND_PORT = 8788
+// P2：打包版随机本地 API 令牌（模块级保存，startBackend 生成后注入后端环境
+// 与渲染进程；dev 留空，后端/前端回落 dev-local-token）
+let localToken = ''
 
 // 找到本机后端 Python
 function killStaleBackendTree() {
@@ -127,7 +181,7 @@ async function startBackend() {
     killStaleBackendTree()
     const { cmd, backendMain } = findBackendCommand()
     // H3 修复：打包模式生成随机本地 API 令牌（dev 模式不注入，后端回落 dev-local-token）
-    const localToken = app.isPackaged ? require('crypto').randomBytes(16).toString('hex') : ''
+    localToken = app.isPackaged ? crypto.randomBytes(16).toString('hex') : ''
     const extraEnv = localToken ? { FRAMEWEAVE_LOCAL_TOKEN: localToken } : {}
     backendProc = backendMain
       ? spawn(cmd, ['-u', backendMain], { env: { ...process.env, ...extraEnv, PYTHONIOENCODING: 'utf-8' }, stdio: 'ignore' })
@@ -164,7 +218,42 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // P2：打包版禁用 DevTools（dev 模式保留联调）
+      devTools: !app.isPackaged,
+      webSecurity: true,
+      sandbox: true,
+      // H3/P2 修复：本地 API 令牌经 additionalArguments 传给 sandbox 化 preload
+      // （此前 main 只注入后端 spawn 环境，渲染层拿不到随机令牌，打包版受保护
+      // 接口会 401；dev 回落 dev-local-token 与后端/前端常量一致）
+      additionalArguments: [app.isPackaged && localToken ? '--fw-local-token=' + localToken : '--fw-local-token=dev-local-token'],
     },
+  })
+
+  // P2：移除默认应用菜单（隐藏"查看→开发者工具"入口），并拦截快捷键
+  if (app.isPackaged) {
+    try { Menu.setApplicationMenu(null) } catch { /* 低版本忽略 */ }
+    mainWindow.webContents.on('before-input-event', (_e, input) => {
+      if (input.type !== 'keyDown') return
+      const k = (input.key || '').toLowerCase()
+      const acc = input.control || input.meta
+      if (k === 'f12' || (acc && input.shift && (k === 'i' || k === 'j' || k === 'c'))) {
+        _e.preventDefault()
+      }
+    })
+  }
+
+  // P2：外部窗口/新开导航一律拦截（防 window.open / 目标 _blank 逃逸到外部浏览器）
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (!app.isPackaged) return
+    try {
+      const u = new URL(String(url))
+      if (u.protocol !== 'file:') { e.preventDefault(); return }
+      // Windows 的 file: URL pathname 形如 /F:/...，去掉前导斜杠后与 app.asar 路径比对
+      const got = path.normalize(decodeURIComponent(u.pathname).replace(/^\/+/, '')).toLowerCase()
+      const expected = path.normalize(app.getAppPath()).toLowerCase()
+      if (!got.startsWith(expected)) e.preventDefault()
+    } catch { e.preventDefault() }
   })
 
   const devUrl = 'http://localhost:5180'
@@ -216,6 +305,14 @@ ipcMain.on('window:set-titlebar-overlay', (_e, theme) => {
 
 app.whenReady().then(async () => {
   fwLog('[boot] app ready, version=', app.getVersion())
+  // P2：打包版启动自检——asar 内关键文件哈希与 integrity.json 不符即拒绝启动
+  // （放在后端启动、建窗、自动更新之前，确保校验失败不会留下任何运行痕迹）
+  if (!verifyAsarIntegrity()) {
+    fwLog('[boot] asar 完整性校验失败，拒绝启动')
+    try { dialog.showErrorBox('拾帧 FrameWeave', '程序完整性校验失败，文件可能已被篡改，请重新安装。') } catch { /* 无 UI 时静默 */ }
+    app.exit(1)
+    return
+  }
   const backendOk = await startBackend()
   if (!backendOk) { fwLog('[boot] backend 未就绪，退出'); app.quit(); return }
   createWindow()
@@ -346,8 +443,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+// P2：退出前销毁本地令牌（内存中的随机令牌随进程退出自然消失；
+// 仅日志中不落明文，避免磁盘残留）
 app.on('quit', () => {
   fwLog('[boot] app quit, killing backend pid=', backendProc && backendProc.pid)
+  localToken = ''
   if (backendProc && !backendProc.killed) {
     try { backendProc.kill() } catch { /* ignore */ }
   }

@@ -15,6 +15,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
+from . import obf
+
 # 随包默认清单（models_registry.json）；安装/更新优先级：
 #   FRAMEWEAVE_MODELS_REGISTRY 显式路径 > 本地缓存 > 随包默认
 _DEFAULT_REGISTRY_PATH = os.path.join(
@@ -28,8 +30,9 @@ def _default_cache_path() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "data", "models_registry.cache.json")
 
+# P3/t3 ⑤：云端 URL 经 obf 通道，不以明文出现（与 cloud_gateway 同源）
 REMOTE_URL = os.environ.get("FRAMEWEAVE_MODELS_REGISTRY_URL",
-                            "https://shouquan.frameweave.top/models_registry.json")
+                            obf.cloud_url_default() + "/models_registry.json")
 
 # 模型清单（键 → info）；pydict 保持旧名 MODELS_REGISTRY 兼容（无外部引用方写操作）
 MODELS_REGISTRY: Dict[str, Dict[str, Any]] = {}

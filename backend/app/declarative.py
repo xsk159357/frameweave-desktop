@@ -37,9 +37,16 @@ from .worker import limits
 from .plugin import manifest_v2
 
 # 用户节点目录（开发默认 backend/user_nodes；打包版由 server 启动时指向用户数据目录）
-_USER_NODES_DIR = os.environ.get("FRAMEWEAVE_USER_NODES") or os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_nodes"
-)
+def _default_user_nodes_dir() -> str:
+    """打包版（sys.frozen）把插件安装目录直接指向 %APPDATA%/FrameWeave/user_nodes
+    （可写、升级保留）；源码模式保持 backend/user_nodes 开发便利。
+    server 启动时仍可经 set_user_nodes_dir / FRAMEWEAVE_USER_NODES 覆盖。"""
+    if getattr(sys, "frozen", False):
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "FrameWeave", "user_nodes")
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_nodes")
+
+_USER_NODES_DIR = os.environ.get("FRAMEWEAVE_USER_NODES") or _default_user_nodes_dir()
 USER_NODES_DIR = _USER_NODES_DIR
 
 # 安装/扫描保留目录：.staging（事务临时区）、.backup、_vendor、.git 等不参与加载

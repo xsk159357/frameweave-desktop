@@ -2,6 +2,8 @@
 from __future__ import annotations
 import hashlib, os, random, re, threading, time
 
+from . import obf
+
 _CODES: dict[tuple[str, str], dict] = {}
 _SEND_LOG: dict[str, list[float]] = {}
 _LOCK = threading.Lock()
@@ -12,7 +14,9 @@ def _cfg(name: str, default: str = "") -> str:
 
 def normalize_email(email: str) -> str: return (email or "").strip().lower()
 def valid_qq_email(email: str) -> bool: return bool(_EMAIL_RE.fullmatch(normalize_email(email)))
-def _hash(code: str) -> str: return hashlib.sha256((_cfg("FRAMEWEAVE_VERIFY_SECRET", "frameweave-dev-verify") + code).encode()).hexdigest()
+def _hash(code: str) -> str:
+    # P3/t3 ⑤：验证码盐（FRAMEWEAVE_VERIFY_SECRET）经 obf 通道，不以明文出现
+    return hashlib.sha256((_cfg(obf.verify_secret_env(), obf.email_verify_default()) + code).encode()).hexdigest()
 
 def issue_code(email: str, scene: str) -> tuple[bool, str]:
     email = normalize_email(email); now = time.time()

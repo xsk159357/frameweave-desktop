@@ -25,6 +25,7 @@ from .license import LicenseService
 from .registry import autodiscover, list_specs
 from . import declarative
 from . import templates
+from . import obf
 from .draft_validator import validate_jianying_draft
 from .secrets import store_secret, read_secret, list_secret_names, delete_secret
 from .wfstore import WorkflowStore
@@ -32,6 +33,15 @@ from .market import MarketService
 from . import email_service, cloud_gateway
 from .worker import limits
 from .plugin_registry import PluginRegistry, PluginLifecycleError
+
+# P3/t3 ② 打包版启动自检：关键产物完整性清单（integrity.manifest，HMAC 签名）校验，
+# 不匹配（exe/_internal 被替换、清单被改）→ 拒绝启动。置于任何服务初始化之前。
+if getattr(sys, "frozen", False):
+    from .integrity import startup_selfcheck as _integrity_check
+    _integrity_ok, _integrity_msg = _integrity_check()
+    if not _integrity_ok:
+        print("[integrity] FATAL 启动自检失败:", _integrity_msg)
+        raise SystemExit(1)
 
 # 读取 backend/.env（不覆盖宿主机已有环境变量）
 def _load_local_env():
@@ -77,17 +87,21 @@ BACKEND_PROTOCOL = 3
 APP_VERSION = "0.2.12"
 app = FastAPI(title="FrameWeave Local Service", version=APP_VERSION)
 
-# ---- 本地 API 鉴权（H3 修复）----
+# ---- 本地 API 鉴权（H3 修复 + P3/t3 ③ 防 dev 绕过） ----
 # 打包版：main.cjs 生成随机令牌经 FRAMEWEAVE_LOCAL_TOKEN 注入后端与渲染进程。
 # 源码/dev：回落到固定 dev-local-token（vite 前端同值）。
-LOCAL_TOKEN = os.environ.get("FRAMEWEAVE_LOCAL_TOKEN", "") or "dev-local-token"
+LOCAL_TOKEN = os.environ.get(obf.local_token_env(), "") or obf.dev_token()
+
+# P3/t3 ③：开发端点开关 —— 生产打包（frozen）强制关闭，dev 桩（add-credits/issue-card）
+# 仅源码态可用。源码模式仍需显式设 FRAMEWEAVE_DEV_ENDPOINTS=1 才开启（联调/测试默认关）。
+DEV_ENDPOINTS = (not getattr(sys, "frozen", False)) and os.environ.get(obf.dev_endpoints_env(), "") == "1"
 
 
 def _local_token_ok(tok: str) -> bool:
     if tok == LOCAL_TOKEN:
         return True
-    # dev 联调（FRAMEWEAVE_DEV_ENDPOINTS=1）额外放行 dev 令牌
-    if os.environ.get("FRAMEWEAVE_DEV_ENDPOINTS") == "1" and tok == "dev-local-token":
+    # dev 联调（源码模式 + FRAMEWEAVE_DEV_ENDPOINTS=1）额外放行 dev 令牌
+    if DEV_ENDPOINTS and tok == obf.dev_token():
         return True
     return False
 
@@ -118,7 +132,7 @@ async def local_token_guard(request: Request, call_next):
             ("/api/workflows", "/api/market", "/api/user_nodes", "/api/util", "/api/draft")):
         need = True
     if need:
-        tok = request.headers.get("X-FW-Local-Token", "")
+        tok = request.headers.get(obf.x_fw_token_header(), "")
         if not _local_token_ok(tok):
             return JSONResponse({"ok": False, "message": "本地授权令牌无效"}, status_code=401)
     return await call_next(request)
@@ -212,8 +226,8 @@ try:
 except Exception as _pe:  # noqa: BLE001
     print("[plugin_registry] 启动同步失败（扫描在 scan() 已先行）：", _pe)
 
-# 开发端点开关：正式打包默认关闭（本地桩联调时设 FRAMEWEAVE_DEV_ENDPOINTS=1）
-DEV_ENDPOINTS = os.environ.get("FRAMEWEAVE_DEV_ENDPOINTS", "") == "1"
+# 开发端点开关：已在上方（模块导入区）按 P3/t3 ③ 定义——生产打包（frozen）强制关闭，
+# 源码模式仍需显式设 FRAMEWEAVE_DEV_ENDPOINTS=1 才开启（add-credits 等 dev 桩仅源码态可用）。
 
 # WebSocket 连接管理
 class WSManager:
@@ -912,12 +926,22 @@ async def get_asset_file(aid: str):
     return FileResponse(asset.path, filename=os.path.basename(asset.path))
 
 
-# ---- 授权 API（本地桩） ----
+# ---- 授权 API（本地桩 + P3 云端强制/HMAC 验签） ----
+def _cloud_auth_fail(resp: dict) -> dict:
+    """云端响应验签失败/重放检测 → 统一拒绝（sig_fail 显式透出，前端按"重新登录/认为未授权"）。"""
+    return {"ok": False, "message": resp.get("message") or resp.get("reason") or "云端授权校验失败",
+            "sig_fail": True}
+
+
 @app.post("/api/auth/email/send-code")
 async def send_email_code(body: EmailCodeRequest):
     if cloud_gateway.cloud_enabled():
         resp = cloud_gateway.cloud_email_code(body.email, body.scene)
-        return resp or {"ok": False, "message": "云端授权服务不可用"}
+        if resp is None:
+            return {"ok": False, "message": "云端授权服务不可用"}
+        if resp.get("sig_fail"):
+            return _cloud_auth_fail(resp)
+        return resp
     if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
     if body.scene not in ("register", "reset_password"): return {"ok": False, "code": "INVALID_SCENE", "message": "验证码场景不正确"}
     ok, message = await asyncio.to_thread(email_service.issue_code, body.email, body.scene)
@@ -927,7 +951,11 @@ async def send_email_code(body: EmailCodeRequest):
 async def register(body: RegisterRequest):
     if cloud_gateway.cloud_enabled():
         resp = cloud_gateway.cloud_register(body.email, body.code, body.password, body.device_id)
-        return resp or {"ok": False, "message": "云端授权服务不可用"}
+        if resp is None:
+            return {"ok": False, "message": "云端授权服务不可用"}
+        if resp.get("sig_fail"):
+            return _cloud_auth_fail(resp)
+        return resp
     if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
     if len(body.password) < 8: return {"ok": False, "code": "WEAK_PASSWORD", "message": "密码至少 8 位"}
     verified, message = await asyncio.to_thread(email_service.verify_code, body.email, "register", body.code)
@@ -938,7 +966,11 @@ async def register(body: RegisterRequest):
 async def reset_password(body: ResetPasswordRequest):
     if cloud_gateway.cloud_enabled():
         resp = cloud_gateway.cloud_reset_password(body.email, body.code, body.new_password)
-        return resp or {"ok": False, "message": "云端授权服务不可用"}
+        if resp is None:
+            return {"ok": False, "message": "云端授权服务不可用"}
+        if resp.get("sig_fail"):
+            return _cloud_auth_fail(resp)
+        return resp
     if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
     if len(body.new_password) < 8: return {"ok": False, "message": "密码至少 8 位"}
     verified, message = await asyncio.to_thread(email_service.verify_code, body.email, "reset_password", body.code)
@@ -954,14 +986,22 @@ async def login(body: LoginRequest):
         return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
     if cloud_gateway.cloud_enabled():
         resp = cloud_gateway.cloud_login(body.email, body.password, body.device_id)
-        return resp or {"ok": False, "message": "云端授权服务不可用"}
+        if resp is None:
+            return {"ok": False, "message": "云端授权服务不可用"}
+        if resp.get("sig_fail"):
+            return _cloud_auth_fail(resp)
+        return resp
     return license_svc.login(body.email, body.password, body.device_id)
 
 @app.post("/api/auth/activate")
 async def activate(body: ActivateRequest):
     if cloud_gateway.cloud_enabled():
         resp = cloud_gateway.cloud_activate(body.email, body.card)
-        return resp or {"ok": False, "message": "云端授权服务不可用"}
+        if resp is None:
+            return {"ok": False, "message": "云端授权服务不可用"}
+        if resp.get("sig_fail"):
+            return _cloud_auth_fail(resp)
+        return resp
     return license_svc.activate_card(body.email, body.card)
 
 if DEV_ENDPOINTS:
@@ -1138,11 +1178,20 @@ if DEV_ENDPOINTS:
 
 @app.api_route("/api/auth/verify", methods=["GET", "POST"])
 async def verify(token: str = "", device_id: str = "", body: dict = None):
-    """订阅校验：兼容 GET(query) 与 POST(body)，契约与云端一致。"""
+    """订阅校验：兼容 GET(query) 与 POST(body)，契约与云端一致。
+
+    P3/t3 ④：cloud_enabled 时强制云端，响应 HMAC 验签 + nonce 防重放；
+    验签失败/无签名/重放 → 拒绝（sig_fail 透出，前端按未授权处理）。
+    本地桩（显式 FRAMEWEAVE_CLOUD_URL=""）返回带 degraded 降级标记的结果。
+    """
     body = body or {}
     if cloud_gateway.cloud_enabled():
         resp = cloud_gateway.cloud_verify(token or body.get("token", ""), device_id or body.get("device_id", ""))
-        return resp or {"ok": False, "reason": "云端授权服务不可用"}
+        if resp is None:
+            return {"ok": False, "reason": "云端授权服务不可用"}
+        if resp.get("sig_fail"):
+            return {"ok": False, "reason": resp.get("reason") or "云端响应校验失败", "sig_fail": True}
+        return resp
     token = token or str(body.get("token") or "")
     device_id = device_id or str(body.get("device_id") or "")
     return license_svc.verify(token, device_id)

@@ -1,30 +1,53 @@
-"""订阅授权服务（M17 本地桩升级版，与服务端云端授权同构）。
+# -*- coding: utf-8 -*-
+"""订阅授权服务（M17 本地桩升级版，P3/t3 授权链硬化版）。
 
-与正式云端一致的模型：
+与服务端云端授权同构：
 - 卡密 = 服务端签名（HMAC-SHA256）的短令牌：FW-<b64(payload)>-<sig12>
   payload: {"plan": "month|quarter|year", "days": N, "serial": 随机}
-  本地桩用内置 dev 密钥签发/验签；云端换成真实密钥（M19）。
+  本地桩用内置 dev 密钥签发/验签；云端换成真实密钥。
 - 账号状态：plan(trial/member) + expires_at + device_id（1 账号 1 台设备）
-- 设备绑定：新设备登录 → 旧设备立即出提示并下线（本地桩返回 device_kick 标记）
-- 无离线宽限：每次启动在线校验（本地桩即本地校验，云端化后改远程）
-- 积分字段预留（credits，M18/M19 商城分成/充值使用）
-存储：backend/data/license.json
+- 设备绑定：新设备登录 → 旧设备立即出提示并下线
+- 无离线宽限：每次启动在线校验
+- 积分字段预留（credits）
+
+P3 授权链硬化：
+  1) 云端强制（①）：cloud_gateway.cloud_enabled() 时，login/verify/activate 全部强制走
+     云端校验；本地桩仅在显式关闭云端（FRAMEWEAVE_CLOUD_URL=""）时作为离线回退存在。
+     本地桩任何成功响应都带 degraded=True（明确降级标记），杜绝"静默永远通过"。
+  2) 桩替换检测（①）：导入时对授权核心函数（verify/login/activate_card/_parse_card）做
+     code-object 快照；运行期复查，函数被内存替换（stub 换"永远通过"）即判定 tampered，
+     本地桩全部返回失败。打包版由 integrity（exe 哈希清单）兜底，源码版由快照兜底。
+  3) 敏感串经 obf 通道（⑤）：dev 卡密密钥等不以明文出现。
+存储：backend/data/license.json（源码）/ %APPDATA%/FrameWeave/license.json（打包）。
 """
 from __future__ import annotations
+
 import base64
 import hashlib
 import hmac
 import json
+import marshal
 import os
+import sys
 import time
 import uuid
-from dataclasses import dataclass, field
 from typing import Optional
-from . import cloud_gateway
 
-# 本地桩卡密签名密钥（正式版由云端服务端持有，客户端绝不内置）
-_CARD_SECRET = os.environ.get("FRAMEWEAVE_CARD_SECRET", "frameweave-dev-card-secret-2026")
+from . import cloud_gateway, obf
+
+# 本地桩卡密签名密钥（正式版由云端服务端持有；dev 默认值经 obf 混淆）
+_CARD_SECRET = os.environ.get(obf.card_secret_env(), "") or obf.dev_card_secret()
 TRIAL_DAYS = 1  # 注册试用 1 天
+
+# 本地桩不再是主授权路径：任何本地求解都标记为降级
+_DEGRADED_REASON = "本地离线授权模式（未连接云端），功能可能受限"
+
+
+def _degraded(d: dict) -> dict:
+    """给本地桩响应打上明确降级标记（防"静默永远通过"）。"""
+    d["degraded"] = True
+    d["degraded_reason"] = _DEGRADED_REASON
+    return d
 
 
 def _sign(payload_b64: str) -> str:
@@ -78,7 +101,7 @@ def _new_session(email: str, device_id: str, password: str = "") -> dict:
         "plan": "trial",                 # trial|member
         "expires_at": now + TRIAL_DAYS * 86400,
         "device_id": device_id,
-        "credits": 0,                    # 积分（预留，M18/M19）
+        "credits": 0,                    # 积分（预留）
         "cards_used": [],                # 已使用卡密 serial（防重复）
         "last_verified": now,
         "salt": salt,
@@ -87,7 +110,7 @@ def _new_session(email: str, device_id: str, password: str = "") -> dict:
 
 
 class LicenseService:
-    """本地授权服务（M17：签名卡密 + 设备绑定 + 状态机）。"""
+    """本地授权服务（离线回退桩；云端启用时本类是死代码）。"""
 
     def __init__(self, data_dir: str):
         self.data_dir = data_dir
@@ -115,18 +138,28 @@ class LicenseService:
                 return s
         return None
 
+    # ---------- 桩替换检测 ----------
+    def _tamper_check(self) -> bool:
+        """授权核心函数是否被（内存 monkey-patch）替换为"永远通过"桩。
+
+        返回 True = 检测到篡改。frozen 打包版由 exe 完整性清单兜底（此处恒 False）。
+        """
+        return stub_tampered()
+
     # ---------- 账号生命周期 ----------
     def register_verified(self, email: str, password: str, device_id: str = "") -> dict:
-        """注册（本地桩）：新会员账号 + N 天试用。密码兼容字段。"""
+        """注册（离线桩）：新会员账号 + N 天试用。"""
         email = (email or "").strip().lower()
         if not email or "@" not in email or not email.endswith("@qq.com"):
             return {"ok": False, "message": "邮箱格式不正确"}
         if self._find_by_email(email) is not None:
             return {"ok": False, "message": "该邮箱已注册，请直接登录"}
+        if self._tamper_check():
+            return {"ok": False, "message": "本地授权组件完整性校验失败", "tampered": True}
         session = _new_session(email, device_id, password)
         self._sessions[session["user_id"]] = session
         self._save()
-        return {"ok": True, "session": self._public(session), "plan": session["plan"]}
+        return _degraded({"ok": True, "session": self._public(session), "plan": session["plan"]})
 
     def reset_password(self, email: str, password: str) -> dict:
         email = (email or "").strip().lower()
@@ -139,21 +172,26 @@ class LicenseService:
         return {"ok": True, "message": "密码重置成功"}
 
     def login(self, email: str, password: str, device_id: str = "") -> dict:
-        """登录：已注册账号校验；未注册自动注册（保持旧行为）。
-        M17 设备绑定：1 账号 1 设备。新设备登录 → 旧设备下线（返回 device_kick）。
-        M19 云化：配置 FRAMEWEAVE_CLOUD_URL 后改走云端授权。"""
-        # 云端优先（服务端主键：手机号绑定 + JWT + 设备踢下线）
-        # 云端不可达：正式语义下拒绝服务（无离线宽限），绝不回落本地桩
+        """登录：云端启用时强制云端；否则本地离线桩（带降级标记）。
+
+        云端不可达：正式语义下拒绝服务（无离线宽限），绝不静默回落本地桩——
+        只有显式配置 FRAMEWEAVE_CLOUD_URL=""（离线/联调桩）才走本地。
+        """
         if cloud_gateway.cloud_enabled():
             resp = cloud_gateway.cloud_login(email, password, device_id)
             if resp is None:
                 return {"ok": False, "message": "无法连接云端授权服务器，请联网后重试"}
+            if resp.get("sig_fail"):
+                return {"ok": False, "message": resp.get("message") or resp.get("reason") or "云端响应校验失败",
+                        "sig_fail": True}
             return resp
         email = (email or "").strip().lower()
         s = self._find_by_email(email)
         if s is None:
             return {"ok": False, "message": "该邮箱尚未注册，请先注册"}
-        # 密码校验（本地桩，H1 修复）：新账号已存哈希，必须匹配
+        if self._tamper_check():
+            return {"ok": False, "message": "本地授权组件完整性校验失败", "tampered": True}
+        # 密码校验（本地桩）：新账号已存哈希，必须匹配
         if s.get("password_hash"):
             if not password or _hash_pw(password, s.get("salt", "")) != s["password_hash"]:
                 return {"ok": False, "message": "密码不正确"}
@@ -174,18 +212,19 @@ class LicenseService:
             s["device_id"] = device_id
         s["last_verified"] = now
         self._save()
-        resp = {"ok": True, "session": self._public(s), "plan": s["plan"]}
+        resp = _degraded({"ok": True, "session": self._public(s), "plan": s["plan"]})
         if kick:
             resp["device_kick"] = kick
         return resp
 
     def activate_card(self, email: str, card: str) -> dict:
-        """卡密激活：验签 → 兑换时长/套餐 → 计入账号（卡密单次有效）。
-        M19 云化：云端签发/校验签名卡密。"""
+        """卡密激活：云端启用时强制云端；否则本地离线桩（带降级标记）。"""
         if cloud_gateway.cloud_enabled():
             resp = cloud_gateway.cloud_activate(email, card)
             if resp is None:
                 return {"ok": False, "message": "无法连接云端授权服务器，请联网后重试"}
+            if resp.get("sig_fail"):
+                return {"ok": False, "message": resp.get("message") or "云端响应校验失败", "sig_fail": True}
             return resp
         email = (email or "").strip().lower()
         payload = _parse_card(card)
@@ -195,6 +234,8 @@ class LicenseService:
         if s is None:
             s = _new_session(email, "")
             self._sessions[s["user_id"]] = s
+        if self._tamper_check():
+            return {"ok": False, "message": "本地授权组件完整性校验失败", "tampered": True}
         serial = payload.get("serial", "")
         if serial in s.get("cards_used", []):
             return {"ok": False, "message": "该卡密已被使用"}
@@ -206,33 +247,40 @@ class LicenseService:
         s["cards_used"] = s.get("cards_used", []) + [serial]
         s["last_verified"] = now
         self._save()
-        return {"ok": True, "message": f"激活成功：{payload.get('plan')} +{days} 天",
-                "plan": "member", "expires_at": s["expires_at"]}
+        return _degraded({"ok": True, "message": f"激活成功：{payload.get('plan')} +{days} 天",
+                          "plan": "member", "expires_at": s["expires_at"]})
 
     def verify(self, token: str, device_id: str = "") -> dict:
-        """token 校验：返回订阅状态 + 账号信息。无离线宽限（每次启动校验）。
-        M19 云化：云端在线校验（不可达即视为离线不允许使用）。"""
+        """token 校验：云端启用时强制云端（云端响应 HMAC 验签）；否则本地离线桩。
+
+        本地桩校验结果一律带 degraded 降级标记，且授权核心被替换（桩替换）时
+        直接返回失败。
+        """
         if cloud_gateway.cloud_enabled():
             resp = cloud_gateway.cloud_verify(token, device_id)
             if resp is None:
                 return {"ok": False, "reason": "无法连接云端授权服务器，请联网后重试"}
+            if resp.get("sig_fail"):
+                return {"ok": False, "reason": resp.get("reason") or "云端响应校验失败", "sig_fail": True}
             return resp
+        if self._tamper_check():
+            return {"ok": False, "reason": "本地授权组件完整性校验失败", "tampered": True}
         for s in self._sessions.values():
             if s.get("token") == token:
                 now = time.time()
                 if now > float(s.get("expires_at") or 0):
-                    return {"ok": False, "reason": "订阅已过期，请续费"}
+                    return _degraded({"ok": False, "reason": "订阅已过期，请续费"})
                 if device_id and s.get("device_id") and s["device_id"] != device_id:
-                    return {"ok": False, "reason": "账号已在其他设备登录", "device_kick": True}
+                    return _degraded({"ok": False, "reason": "账号已在其他设备登录", "device_kick": True})
                 s["last_verified"] = now
                 self._save()
-                return {"ok": True, **self._public(s)}
-        return {"ok": False, "reason": "token 无效"}
+                return _degraded({"ok": True, **self._public(s)})
+        return _degraded({"ok": False, "reason": "token 无效"})
 
     # ---------- 工具 ----------
     @staticmethod
     def issue_card(plan: str = "month", days: int = 30) -> str:
-        """"管理后台"发行卡密（本地桩/云端预演）。"""
+        """"管理后台"发行卡密（离线桩/云端预演）。"""
         return _issue_card(plan, days)
 
     def register(self, email: str, password: str, device_id: str = "") -> dict:
@@ -244,4 +292,42 @@ class LicenseService:
             "user_id": s["user_id"], "email": s["email"], "token": s["token"],
             "plan": s.get("plan", "trial"), "expires_at": s.get("expires_at"),
             "credits": s.get("credits", 0), "device_id": s.get("device_id", ""),
+            "degraded": True,  # 本地桩状态显式透出
         }
+
+
+# ---------- 桩替换检测（模块级快照） ----------
+def _code_hash(fn) -> str:
+    try:
+        return hashlib.sha256(marshal.dumps(fn.__code__)).hexdigest()
+    except Exception:  # pyarmor 包装/不可序列化时无法比较
+        return ""
+
+
+def _snapshot_auth_hashes() -> dict:
+    return {
+        "verify": _code_hash(LicenseService.verify),
+        "login": _code_hash(LicenseService.login),
+        "activate_card": _code_hash(LicenseService.activate_card),
+        "parse_card": _code_hash(_parse_card),
+    }
+
+
+# 导入完成时快照授权核心函数 code-object —— 仅在源码模式执行：
+# frozen 打包版 pyarmor 会把函数代码替换为运行时包装对象，marhsal 序列化会触发
+# 原生访问冲突（0xC0000005），且打包版的完整性由 exe 哈希清单兜底（integrity.py），
+# 快照无意义。
+_AUTH_HASH_BASELINE: dict = {}
+if not getattr(sys, "frozen", False):
+    _AUTH_HASH_BASELINE = _snapshot_auth_hashes()
+
+
+def stub_tampered() -> bool:
+    """检测授权核心逻辑是否被替换（内存 monkey-patch）为"永远通过"桩。
+
+    - 源码模式：code-object 快照不一致 → True。
+    - frozen 打包模式：快照为空恒 False，由启动完整性清单（exe 哈希）兜底。
+    """
+    if getattr(sys, "frozen", False) or not _AUTH_HASH_BASELINE:
+        return False
+    return _snapshot_auth_hashes() != _AUTH_HASH_BASELINE

@@ -4,7 +4,9 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --win nsis"
+    "build:web": "npm --prefix ../web run build",
+    "integrity": "node scripts/embed-integrity.cjs",
+    "pack": "npm run build:web && npm run integrity && electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -13,12 +15,19 @@
   "build": {
     "appId": "com.frameweave.app",
     "productName": "FrameWeave",
+    "asar": true,
+    "asarUnpack": [],
+    "removePackageScripts": true,
     "files": [
       "main.cjs",
       "preload.cjs",
+      "integrity.json",
       {
         "from": "../web/dist",
-        "to": "web/dist"
+        "to": "web/dist",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
