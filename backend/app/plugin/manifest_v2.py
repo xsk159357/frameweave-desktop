@@ -191,6 +191,10 @@ def _compat_normalize(m: Dict[str, Any], warnings: List[str]) -> Tuple[Dict[str,
             out["category"] = "用户节点"
         if "description" not in out or out.get("description") is None:
             out["description"] = ""
+        # version 缺省注入（v1 兼容包通常无 version；注入 1.0.0 保持缓存键稳定，不写盘）
+        if not out.get("version"):
+            out["version"] = "1.0.0"
+            warnings.append("v1 兼容通道：已注入 version=1.0.0（不写盘；新插件请显式声明）")
         # python 包端口缺失 → 补 []；transform 缺失端口在 G5 拒绝
         if out.get("kind") == "python":
             for f in ("inputs", "outputs", "params"):
@@ -523,6 +527,9 @@ def validate_manifest(data: Any) -> ManifestResult:
     _check_meta(norm, issues)
     if "version" in norm and not SEMVER_RE.match(str(norm.get("version", ""))):
         issues.append(f"G3: version 不是合法 semver: {norm.get('version')!r}")
+    elif "version" not in norm and not compat:
+        # D2 收紧：v2 严格模式（schema_version=2）version 必填；v1 兼容已由 _compat_normalize 注入 1.0.0
+        issues.append("G3: v2 manifest 必须显式声明 version（semver），缺失即拒")
     _check_kind(norm, issues)
     _check_ports(norm, issues, warnings, compat)
     _check_transform(norm, issues)

@@ -157,7 +157,8 @@
       "properties": {
         "entry": {
           "type": "string",
-          "pattern": "^(ui/)?[A-Za-z0-9_./-]+\\.(js|mjs|css)$"
+          "pattern": "^ui/[A-Za-z0-9_./-]+\\.(js|mjs|css)$",
+          "description": "G8/UI_ENTRY_RE: 必须 ui/ 前缀且为 js|mjs|css（与代码 UI_ENTRY_RE 一致，防逃逸）"
         },
         "sandbox": { "type": "object" },
         "capabilities": {
@@ -203,7 +204,12 @@
           "type": "array",
           "items": { "type": ["string", "number"] }
         },
-        "description": { "type": "string" }
+        "description": { "type": "string" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number" },
+        "placeholder": { "type": "string" },
+        "hint": { "type": "string" }
       }
     }
   }
