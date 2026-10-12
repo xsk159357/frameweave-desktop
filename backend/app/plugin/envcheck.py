@@ -253,6 +253,12 @@ def _fmt_row(c: Dict[str, Any]) -> str:
 
 
 def main(argv: List[str] | None = None) -> int:
+    # frozen 版控制台默认 GBK（Windows），⚠/✅ 等非 GBK 字符会 UnicodeEncodeError；
+    # 与 fw_cli.py 一致强制 UTF-8（源码态 PowerShell 亦可正常显示）。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
     report = run_envcheck()
     print("=" * 88)
     print(f"FrameWeave 环境检查（{report['tool']}）  @ "

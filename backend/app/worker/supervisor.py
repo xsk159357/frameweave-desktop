@@ -214,8 +214,15 @@ class WorkerSupervisor:
         log_path = os.path.join(self.scratch, "worker.log")
         logf = open(log_path, "w", encoding="utf-8", errors="replace")
         try:
+            if getattr(sys, "frozen", False):
+                # t34：PyInstaller frozen 的 bootloader 不接受 `-m 模块` 执行
+                # （会被 main 当作 server 启动参数吞掉），经 main.py 的
+                # `--fw-worker` 分支转发到 app.worker.host_bootstrap.main()。
+                argv = [sys.executable, "--fw-worker", "--job", self._job_file]
+            else:
+                argv = [sys.executable, "-m", "app.worker.host_bootstrap", "--job", self._job_file]
             proc = __import__("subprocess").Popen(
-                [sys.executable, "-m", "app.worker.host_bootstrap", "--job", self._job_file],
+                argv,
                 stdin=__import__("subprocess").PIPE,
                 stdout=__import__("subprocess").PIPE,
                 stderr=logf, cwd=backend, env=env,

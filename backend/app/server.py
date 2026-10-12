@@ -85,7 +85,7 @@ def _tmp_upload_dir() -> str:
 AUTH_REVISION = "email-code-v2"
 BACKEND_PROTOCOL = 3
 # 版本唯一真源：desktop/package.json（bump 时同步此常量 + cloud_server.py VERSION + preload/cloud_gateway）
-APP_VERSION = "0.2.12"
+APP_VERSION = "0.3.0"
 app = FastAPI(title="FrameWeave Local Service", version=APP_VERSION)
 
 # ---- 本地 API 鉴权（H3 修复 + P3/t3 ③ 防 dev 绕过） ----
