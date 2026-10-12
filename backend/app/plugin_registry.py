@@ -814,10 +814,31 @@ class PluginRegistry:
             rec["last_op"] = "healthcheck"; rec["last_op_at"] = time.time()
             rec["last_op_ok"] = True
             self._save()
+            # t29：worker 模式依赖检查报告（执行模式 + 网络门生效情况）。
+            # 供依赖检查向导展示：进程内 vs worker、网络门是否生效、本地服务声明与判定。
+            try:
+                from .engine import Engine
+                mode = Engine.current_execution_mode()
+                net = {}
+                if manifest_ok and rec.get("type_id"):
+                    from .worker.perm import PermissionGate
+                    net = PermissionGate(self._manifest_of(live) or {},
+                                         {}, env_values={}).network_gate_report()
+                    net["type_id"] = rec["type_id"]
+                    net["mode"] = mode
+                    if mode != "worker":
+                        net["gated"] = False
+                        net["verdict"] = "inprocess: 网络不经权限门"
+                exec_report = {"mode": mode, "worker": mode == "worker",
+                               "network_gate": net}
+            except Exception as e:  # noqa: BLE001 —— 报告增强失败不阻断健康检查
+                exec_report = {"mode": "unknown", "worker": False,
+                               "network_gate": {}, "error": str(e)}
             return {"ok": True, "pkg": name, "type_id": rec.get("type_id"),
                     "state": st, "version": rec.get("version"),
                     "healthy": healthy, "manifest_ok": manifest_ok, "loaded": loaded,
-                    "issues": issues, "last_checked": time.time()}
+                    "issues": issues, "last_checked": time.time(),
+                    "execution": exec_report}
 
     # ---------------- 指标 ----------------
     def _snapshot_lockless(self) -> Dict[str, Any]:

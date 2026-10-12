@@ -7,6 +7,39 @@
       "file": "model.bin",
       "size_mb": 1543,
       "fallback_repo": "Systran/faster-whisper-large-v3"
+    },
+    "faster-whisper-small": {
+      "repo": "Systran/faster-whisper-small",
+      "file": "model.bin",
+      "size_mb": 486,
+      "fallback_repo": "Systran/faster-whisper-small"
+    },
+    "transnetv2": {
+      "repo": "soCzech/TransNetV2",
+      "file": "transnetv2-pytorch-weights.pth",
+      "size_mb": 31,
+      "note": "PyTorch 变体：transnetv2_pytorch.py + *.pth 放同一目录，scene_detect.transnet_model_path 指向"
+    },
+    "chinese-clip": {
+      "repo": "OFA-Sys/chinese-clip-vit-base-patch16",
+      "file": "pytorch_model.bin",
+      "size_mb": 753,
+      "fallback_repo": "OFA-Sys/chinese-clip-vit-base-patch16",
+      "note": "本地目录：DATA_DIR/models/chinese-clip-vit-base-patch16 或 FRAMEWEAVE_CLIP_DIR"
+    },
+    "index-tts": {
+      "repo": "IndexTeam/IndexTTS-2.5",
+      "file": "gpt.pth",
+      "size_mb": 4096,
+      "fallback_repo": "IndexTeam/IndexTTS-2.5",
+      "note": "完整目录：DATA_DIR/models/index-tts-code（checkpoints/.venv/voice_clone/index_tts_server.py）；服务端口 3900 OmniVoice"
+    },
+    "demucs": {
+      "repo": "adefossez/htdemucs",
+      "file": "955717e8-8726d21a.th",
+      "size_mb": 84,
+      "fallback_repo": "adefossez/htdemucs",
+      "note": "demucs 首次使用自动下载到模型缓存；节点经 python_exe 指定解释器"
     }
   }
 }

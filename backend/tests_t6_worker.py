@@ -764,6 +764,246 @@ def test_worker_pool():
           "alive0=%d reaped=%d alive_after=%d" % (n0, reaped, pool3.total_alive()))
 
 
+# ================================================================ T6.15 网络门修复（t29 P0）
+def test_network_gate_fix():
+    """t29：network.allow 通配生效 + 显式本地服务放行 + 未声明环回/私网拒绝（SSRF 保留）。"""
+    roots = {"pkg": os.path.join(TMP, "pkg"), "scratch": os.path.join(TMP, "scratch"),
+             "in": os.path.join(TMP, "in"), "out": os.path.join(TMP, "out")}
+    for d in roots.values():
+        os.makedirs(d, exist_ok=True)
+
+    def gate(allow, deny=None):
+        return PermissionGate(
+            {"permission": {"network": {"allow": allow, "deny": deny or []}}},
+            roots, env_values={})
+
+    def ok_url(g, url, expect_allow):
+        try:
+            g.check_network(url)
+            return expect_allow
+        except PermissionDenied:
+            return not expect_allow
+
+    # ① 通配 "*" 真实生效：公网放行
+    g = gate(["*"])
+    check("T6.15a 通配 * 放行公网 https://speech.platform.bing.com/r/tts",
+          ok_url(g, "https://speech.platform.bing.com/r/tts", True))
+    check("T6.15a2 通配 * 放行公网 https://ameaaos.com/v1/chat",
+          ok_url(g, "https://ameaaos.com/v1/chat", True))
+    # ② 通配下未声明本地服务仍拒（SSRF 保留）
+    check("T6.15b 通配 * 未声明环回 127.0.0.1:3900 拒", ok_url(g, "http://127.0.0.1:3900/e", False))
+    check("T6.15b2 通配 * 未声明环回 localhost:8791 拒", ok_url(g, "http://localhost:8791/x", False))
+    # ③ 显式本地服务放行（host:port 精确）
+    g2 = gate(["*", "127.0.0.1:3900", "localhost:8791"])
+    check("T6.15c 显式 127.0.0.1:3900 放行", ok_url(g2, "http://127.0.0.1:3900/engines", True))
+    check("T6.15c2 显式 localhost:8791 放行", ok_url(g2, "http://localhost:8791/health", True))
+    check("T6.15c3 显式只列端口 3900，8791 仍拒（端口隔离）",
+          ok_url(g2, "http://127.0.0.1:8791/x", False))
+    # 显式裸 host（无端口）放行该 host 任意环回端口（image 包用法）
+    g3 = gate(["api.openai.com", "127.0.0.1", "localhost"])
+    check("T6.15c4 裸 host 127.0.0.1 放行任意环回端口",
+          ok_url(g3, "http://127.0.0.1:9999/mock", True))
+    check("T6.15c5 裸 host localhost 放行任意环回端口",
+          ok_url(g3, "http://localhost:8080/mock", True))
+    # ④ 未声明环回（非通配白名单）拒绝
+    g4 = gate(["https://api.example.com/v1"])
+    check("T6.15d 未声明 127.0.0.1:8791 拒（非通配）", ok_url(g4, "http://127.0.0.1:8791/x", False))
+    # ⑤ 越权公网拒绝
+    check("T6.15e 公网不在 allow 拒", ok_url(g4, "https://evil.com/x", False))
+    check("T6.15e2 前缀越界拒（/v1 之外）", ok_url(g4, "https://api.example.com/v2/x", False))
+    # 元数据面/私网恒拒（含通配；10/8、链路本地、CGNAT）
+    g5 = gate(["*"])
+    for meta in ("http://169.254.169.254/latest/meta-data/",
+                 "http://192.168.1.5/x", "http://10.0.0.5/x",
+                 "http://172.16.0.1/x", "http://100.100.100.200/meta"):
+        check("T6.15f 元数据/私网恒拒 %s" % meta, ok_url(g5, meta, False), meta)
+    # 显式声明私网：显式条目放行（信任该地址）
+    g6 = gate(["10.0.0.5"])
+    check("T6.15g 显式声明私网 10.0.0.5 放行", ok_url(g6, "http://10.0.0.5/x", True))
+    check("T6.15g2 相邻私网未声明仍拒", ok_url(g6, "http://10.0.0.6/x", False))
+    # deny 优先级：deny 覆盖 allow/通配
+    g7 = gate(["*"], deny=["https://api.example.com/v1/blocked"])
+    check("T6.15h deny 覆盖通配", ok_url(g7, "https://api.example.com/v1/blocked/x", False))
+    check("T6.15h2 deny 外通配继续放行", ok_url(g7, "https://api.example.com/v1/ok", True))
+    # 子域通配 *.example.com
+    g8 = gate(["*.example.com"])
+    check("T6.15i *.example.com 子域放行", ok_url(g8, "https://sub.example.com/x", True))
+    check("T6.15i2 *.example.com 反例拒绝", ok_url(g8, "https://example.com/x", False))
+    # IPv6 环回显式
+    g9 = gate(["*", "[::1]:8791"])
+    check("T6.15j IPv6 [::1]:8791 显式放行", ok_url(g9, "http://[::1]:8791/x", True))
+    check("T6.15j2 IPv6 未声明端口 3900 拒", ok_url(g9, "http://[::1]:3900/x", False))
+
+
+# ================================================================ T6.16 worker 模式依赖检查报告（t29）
+def test_mode_report():
+    """t29 ③：执行模式（进程内 vs worker）+ 网络门生效情况报告。"""
+    from app.engine import Engine
+    from app.assets import AssetStore
+
+    old_env = os.environ.get("FW_PLUGIN_EXEC")
+    old_dir = os.environ.get("FRAMEWEAVE_USER_NODES")
+    os.environ["FRAMEWEAVE_USER_NODES"] = r"F:\1223\解说工坊\frameweave-plugins\packages"
+    import importlib
+    import app.declarative as decl
+    importlib.reload(decl)
+    try:
+        os.environ.pop("FW_PLUGIN_EXEC", None)
+        store = AssetStore(os.path.join(TMP, "store_mode_inproc"))
+        eng = Engine(store)
+        check("T6.16a 默认进程内模式（Engine 装配）", eng.execution_mode() == "inprocess"
+              and Engine.current_execution_mode() == "inprocess",
+              "mode=%s cur=%s" % (eng.execution_mode(), Engine.current_execution_mode()))
+        r = eng.network_gate_report("core/tts", "http://127.0.0.1:3900/engines")
+        check("T6.16b 进程内：网络不经权限门（gated=False）",
+              r.get("gated") is False and r.get("mode") == "inprocess", str(r))
+
+        os.environ["FW_PLUGIN_EXEC"] = "worker"
+        from app.engines import WorkerExecutor
+        store2 = AssetStore(os.path.join(TMP, "store_mode_worker"))
+        eng2 = Engine(store2)
+        check("T6.16c worker 模式（Engine 装配）", eng2.execution_mode() == "worker"
+              and Engine.current_execution_mode() == "worker"
+              and isinstance(eng2.executor, WorkerExecutor),
+              "mode=%s" % eng2.execution_mode())
+        r = eng2.network_gate_report("core/tts", "http://127.0.0.1:3900/engines")
+        check("T6.16d worker 模式 network_gate_report gated=True",
+              r.get("gated") is True and r.get("mode") == "worker"
+              and r.get("wildcard") is True, str(r))
+        check("T6.16e core/tts 显式本地服务 127.0.0.1:3900 判定 allow",
+              r.get("verdict") == "allow" and "127.0.0.1:3900" in (r.get("local_services") or []),
+              str(r))
+        r2 = eng2.network_gate_report("core/tts", "http://127.0.0.1:9999/x")
+        check("T6.16f 未声明环回端口 worker 判定 deny（SSRF 保留）",
+              str(r2.get("verdict", "")).startswith("deny"), str(r2))
+        r3 = eng2.network_gate_report("core/tts", "http://169.254.169.254/meta")
+        check("T6.16g 私网/元数据 worker 判定 deny",
+              str(r3.get("verdict", "")).startswith("deny"), str(r3))
+        # gate 报告自身
+        from app.worker.perm import PermissionGate
+        mpath = os.path.join(r"F:\1223\解说工坊\frameweave-plugins\packages", "core_tts", "manifest.json")
+        gm = PermissionGate(json.load(open(mpath, encoding="utf-8")), {}, env_values={})
+        rep = gm.network_gate_report("http://127.0.0.1:3900/engines")
+        check("T6.16h gate.network_gate_report 判定与本地声明",
+              rep.get("verdict") == "allow" and rep.get("wildcard") is True
+              and "127.0.0.1:3900" in (rep.get("local_services") or []), str(rep))
+    finally:
+        if old_env is None:
+            os.environ.pop("FW_PLUGIN_EXEC", None)
+        else:
+            os.environ["FW_PLUGIN_EXEC"] = old_env
+        if old_dir is None:
+            os.environ.pop("FRAMEWEAVE_USER_NODES", None)
+        else:
+            os.environ["FRAMEWEAVE_USER_NODES"] = old_dir
+        importlib.reload(decl)
+
+
+# ================================================================ T6.17 worker 网络门端到端（t29）
+def test_network_gate_e2e():
+    """worker 模式下 ctx.http 真实走 PermissionGate：显式本地服务放行 / 越权公网拒绝。"""
+    import http.server
+    import threading
+
+    class _H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    port = srv.server_address[1]
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    try:
+        # 显式声明本地服务 → ctx.http 放行（200 ok）
+        node_py = (
+            "from app.assets import Asset\n"
+            "class HttpLocalNode:\n"
+            "    async def run(self, ctx, inputs, params):\n"
+            "        r = ctx.http('GET', params.get('url'))\n"
+            "        out = ctx.store.save_asset(Asset(id='', kind='JSON', meta={}), "
+            "payload={'status': r.get('status'), 'ok': True})\n"
+            "        return {'out': out}\n"
+        )
+        pkg_local = make_pkg("http_local_e2e", node_py,
+                             manifest={"schema_version": 2, "engine_api": "1.0",
+                                       "type_id": "test/http_local_e2e", "title": "http_local_e2e",
+                                       "category": "用户节点", "description": "e2e", "version": "1.0.0",
+                                       "kind": "python", "runtime": "python",
+                                       "entrypoint": "node.py", "class_name": "HttpLocalNode",
+                                       "inputs": [],
+                                       "outputs": [{"name": "out", "type": "JSON", "label": "out",
+                                                    "required": False}],
+                                       "params": [{"name": "url", "type": "STRING"}],
+                                       "permission": {"network": {"allow": ["127.0.0.1:%d" % port]}}})
+        host = FakeHost(AssetStore(os.path.join(TMP, "store_net_local")))
+        sup, outputs = asyncio.run(run_supervisor(
+            host, FakeNode("test/http_local_e2e",
+                           params={"url": "http://127.0.0.1:%d/x" % port}), pkg_local))
+        payload = host.store.read_json(outputs["out"].id)
+        check("T6.17a worker 显式本地服务 ctx.http 放行 (status=200)",
+              (payload or {}).get("status") == 200 and (payload or {}).get("ok") is True,
+              str(payload))
+        # 未声明环回端口 → PLUGIN_PERMISSION_DENIED（不越权探 127.0.0.1:port）
+        node_py2 = (
+            "class HttpBadLocalNode:\n"
+            "    async def run(self, ctx, inputs, params):\n"
+            "        ctx.http('GET', params.get('url'))\n"
+            "        return {}\n"
+        )
+        pkg_bad = make_pkg("http_bad_local_e2e", node_py2,
+                            manifest={"schema_version": 2, "engine_api": "1.0",
+                                      "type_id": "test/http_bad_local_e2e", "title": "http_bad_local_e2e",
+                                      "category": "用户节点", "description": "e2e", "version": "1.0.0",
+                                      "kind": "python", "runtime": "python",
+                                      "entrypoint": "node.py", "class_name": "HttpBadLocalNode",
+                                      "inputs": [], "outputs": [],
+                                      "params": [{"name": "url", "type": "STRING"}],
+                                      "permission": {"network": {"allow": ["*"]}}})  # 通配但未显式声明该环回端口
+        host2 = FakeHost(AssetStore(os.path.join(TMP, "store_net_bad_local")))
+        denied = False
+        try:
+            asyncio.run(run_supervisor(
+                host2, FakeNode("test/http_bad_local_e2e",
+                                params={"url": "http://127.0.0.1:%d/x" % port}), pkg_bad))
+        except WorkerPermission:
+            denied = True
+        except WorkerJobError:
+            denied = True
+        check("T6.17b worker 通配下未声明环回端口 → PLUGIN_PERMISSION_DENIED", denied)
+        # 越权公网（未声明域名）→ PLUGIN_PERMISSION_DENIED
+        pkg_pub = make_pkg("http_unauth_pub_e2e", node_py2,
+                           manifest={"schema_version": 2, "engine_api": "1.0",
+                                     "type_id": "test/http_unauth_pub_e2e", "title": "http_unauth_pub_e2e",
+                                     "category": "用户节点", "description": "e2e", "version": "1.0.0",
+                                     "kind": "python", "runtime": "python",
+                                     "entrypoint": "node.py", "class_name": "HttpUnauthPubNode",
+                                     "inputs": [], "outputs": [],
+                                     "params": [{"name": "url", "type": "STRING"}],
+                                     "permission": {"network": {"allow": ["127.0.0.1:%d" % port]}}})
+        host3 = FakeHost(AssetStore(os.path.join(TMP, "store_net_pub")))
+        denied2 = False
+        try:
+            asyncio.run(run_supervisor(
+                host3, FakeNode("test/http_unauth_pub_e2e",
+                                params={"url": "https://example.com/x"}), pkg_pub))
+        except WorkerPermission:
+            denied2 = True
+        except WorkerJobError:
+            denied2 = True
+        check("T6.17c worker 越权公网 → PLUGIN_PERMISSION_DENIED", denied2)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
 def main():
     test_rpc()
     test_perm()
@@ -779,6 +1019,9 @@ def main():
     test_migration_table()
     test_voiceclone_hardening()
     test_worker_pool()
+    test_network_gate_fix()      # t29：通配/显式本地服务/未声明环回与私网拒绝
+    test_mode_report()           # t29：执行模式 + 网络门生效报告
+    test_network_gate_e2e()      # t29：worker ctx.http 端到端网络门
     print("=" * 50)
     print("TOTAL PASS=%d FAIL=%d" % (len(PASS), len(FAIL)))
     for name, detail in FAIL:

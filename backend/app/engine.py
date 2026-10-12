@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from .registry import get_class, get_spec
 from .assets import Asset, AssetStore
 from .nodespec import NodeBase, NodeSpec
-from . import engines
+from . import declarative, engines
 
 
 class NodeStatus(str, Enum):
@@ -161,6 +161,8 @@ class Engine:
             "executor", os.environ.get("FW_PLUGIN_EXEC", "default"))
         self._cache_file = os.path.join(store.root, "cache_index.json")
         self._cache: Dict[str, Dict[str, Any]] = {}
+        # 执行模式（t29：worker 模式依赖检查报告）——Engine 实际装配的 executor 决定
+        self._exec_mode = "worker" if isinstance(self.executor, engines.WorkerExecutor) else "inprocess"
         # 本地子服务令牌（voice_clone 等 V1 鉴权；仅单值，绝不把环境全文交给 worker）
         self._local_token: str = os.environ.get("FRAMEWEAVE_LOCAL_TOKEN", "") or ""
         # 节点类型 -> 信任级（未登记按官方 L0 兜底；插件登记由声明/市场模块填充）
@@ -169,6 +171,45 @@ class Engine:
         self._subprocess_registry: Dict[str, List[SubprocessHandle]] = {}
         self._registry_lock = threading.Lock()
         self._load_cache()
+
+    # ---- 执行模式（t29：worker 模式依赖检查报告） ----
+    @staticmethod
+    def current_execution_mode() -> str:
+        """平台当前执行模式：'worker' | 'inprocess'（按 FW_PLUGIN_EXEC 环境开关判定）。
+
+        默认（未设置）为 inprocess；worker 模式下插件经 PermissionGate 强制门控。
+        """
+        return "worker" if os.environ.get("FW_PLUGIN_EXEC", "") == "worker" else "inprocess"
+
+    def execution_mode(self) -> str:
+        """本 Engine 实例实际装配的执行模式（executor 解析结果，权威）。"""
+        return self._exec_mode
+
+    def network_gate_report(self, type_id: str, url: str = "") -> Dict[str, Any]:
+        """worker 模式依赖检查：给定节点的网络门生效情况。
+
+        进程内模式：网络不经 PermissionGate（urllib 直连，无门控）→ 报告 mode=inprocess、
+        gated=False；worker 模式：按该节点 manifest.permission.network 构建 gate 并报告
+        allow/deny/通配/本地服务声明与对 url 的判定（不抛异常）。
+        """
+        if self._exec_mode != "worker":
+            return {"mode": "inprocess", "gated": False,
+                    "allow": [], "deny": [], "wildcard": False,
+                    "local_services": [], "url": url, "verdict": "inprocess: 网络不经权限门"}
+        try:
+            from .worker.perm import PermissionGate
+            pkg_dir = declarative.pkg_dir(type_id)
+            if not pkg_dir:
+                return {"mode": "worker", "gated": True, "error": "插件包目录未找到: %s" % type_id}
+            with open(os.path.join(pkg_dir, "manifest.json"), "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            gate = PermissionGate(manifest, {}, env_values={})
+            report = gate.network_gate_report(url)
+            report["mode"] = "worker"
+            report["gated"] = True
+            return report
+        except Exception as e:  # noqa: BLE001
+            return {"mode": "worker", "gated": True, "error": str(e)}
 
     # ---- 信任级 / 超时 ----
     def set_trust_level(self, type_id: str, level: str) -> None:

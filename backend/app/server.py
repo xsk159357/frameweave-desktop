@@ -33,6 +33,7 @@ from .market import MarketService
 from . import email_service, cloud_gateway
 from .worker import limits
 from .plugin_registry import PluginRegistry, PluginLifecycleError
+from .graph_validator import validate_graph
 
 # P3/t3 ② 打包版启动自检：关键产物完整性清单（integrity.manifest，HMAC 签名）校验，
 # 不匹配（exe/_internal 被替换、清单被改）→ 拒绝启动。置于任何服务初始化之前。
@@ -763,6 +764,15 @@ async def create_wf(body: WFCreate):
                     cur = t.inputs.get(handle)
                     if not (isinstance(cur, str) and cur.startswith("@")):
                         t.inputs[handle] = e["source"]
+        # P1 保存级图契约校验（s2 §5）：已知类型节点之间 handle 存在 + 类型兼容；
+        # 未知类型（未安装插件）放行让画布可保存待装模板；required 输入留到运行前检查。
+        save_errors = validate_graph(wf, check_required=False, skip_unknown_types=True)
+        if save_errors:
+            return JSONResponse(
+                {"ok": False, "code": "graph_invalid", "message": "工作流图校验失败",
+                 "errors": save_errors},
+                status_code=422,
+            )
     wfstore.save(wf)
     return wf.to_dict()
 
@@ -818,6 +828,15 @@ async def update_wf(wfid: str, body: WFUpdate):
                 cur = t.inputs.get(handle)
                 if not (isinstance(cur, str) and cur.startswith("@")):
                     t.inputs[handle] = e["source"]
+        # P1 保存级图契约校验（s2 §5）：已知类型节点之间 handle 存在 + 类型兼容；
+        # 未安装插件类型放行（画布保存待装模板），required 输入留到运行前检查。
+        save_errors = validate_graph(wf, check_required=False, skip_unknown_types=True)
+        if save_errors:
+            return JSONResponse(
+                {"ok": False, "code": "graph_invalid", "message": "工作流图校验失败",
+                 "errors": save_errors},
+                status_code=422,
+            )
     wfstore.save(wf)
     return wf.to_dict()
 
@@ -860,6 +879,19 @@ async def run_wf(wfid: str, body: RunRequest):
     if wf is None:
         raise HTTPException(404, "工作流不存在")
     engine = make_engine()
+    # P1 图契约校验（s2-connectivity §5）：边 handle 属于声明端口、类型兼容；
+    # mode=all 额外校验 required 输入必须有入边或显式 @资产引用。
+    # 部分重跑（selection/upstream/downstream）只做结构性校验，不因无关节点
+    # 未连接的 required 端口误阻断合法的局部重跑（运行期单节点仍会报错）。
+    check_required = str(body.mode or "all") == "all"
+    graph_errors = validate_graph(wf, check_required=check_required,
+                                  skip_unknown_types=False)
+    if graph_errors:
+        return JSONResponse(
+            {"ok": False, "code": "graph_invalid", "message": "工作流图校验失败",
+             "errors": graph_errors},
+            status_code=422,
+        )
 
     async def _run_and_save():
         try:

@@ -234,6 +234,15 @@ class KahnScheduler:
         for nid in wf.nodes:
             if color[nid] == WHITE:
                 dfs(nid)
+        # P1 图契约校验（s2-connectivity §5）：端口存在/类型兼容。
+        # 引擎级用结构性校验（不查 required 输入——部分子图运行/重跑不应被未连接
+        # 的无关 required 端口阻断；mode=all 的完整校验由运行 API 严格门负责）。
+        # 与环检测合并返回；执行在调度批次前被阻止，错误带稳定码与端口名。
+        try:
+            from .graph_validator import validate_graph_structural_messages
+            errors.extend(validate_graph_structural_messages(wf))
+        except Exception:  # noqa: BLE001 —— 契约校验器异常不得阻断既有环检测
+            pass
         return errors
 
     def topological_batches(self, wf: Any) -> List[List[str]]:
