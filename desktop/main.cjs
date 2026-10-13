@@ -323,6 +323,10 @@ app.whenReady().then(async () => {
 // ---- 自动更新（electron-updater） ----
 let updateInProgress = false
 
+// 官方更新镜像（大陆可达直链；GitHub 检查失败时自动回退，用户无感）
+// 镜像源需同步发布 GitHub release 产物（latest.yml + exe + blockmap），见 docs/s17-auth-network-optimization.md
+const UPDATE_MIRROR_URL = process.env.FRAMEWEAVE_MIRROR_URL || 'https://shouquan.frameweave.top/update'
+
 function sendUpdateStatus(type, message, version = '') {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('update:status', { type, message, version })
@@ -344,19 +348,48 @@ function friendlyUpdateError(err) {
   return '更新检查失败，请稍后重试'
 }
 
+// 网络类失败判定（用于触发镜像回退；业务性错误如 4xx/无更新不触发）
+function isNetworkError(err) {
+  const raw = String(err && err.message || err || '').toLowerCase()
+  return /timed_?out|timeout|enotfound|network|econnreset|socket|fetch failed|getaddrinfo|eai_again|und_|err_.*net/i.test(raw)
+}
+
+// 检查更新：GitHub（默认源）失败时自动回退官方镜像源重试一次
+async function checkForUpdatesWithFallback() {
+  if (!app.isPackaged) {
+    sendUpdateStatus('info', '开发模式暂不检查更新')
+    return
+  }
+  sendUpdateStatus('info', '正在检查更新…')
+  const explicitFeed = process.env.FRAMEWEAVE_UPDATE_URL
+  try {
+    await autoUpdater.checkForUpdates()
+    // 成功（含 update-available / update-not-available 事件由监听器处理）
+  } catch (e) {
+    const msg = e && e.message || String(e)
+    fwLog('[updater] check 失败:', msg)
+    // 未显式指定更新源 + 网络类失败 → 回退镜像源重试一次
+    if (!explicitFeed && isNetworkError(e)) {
+      fwLog('[updater] 网络失败，回退镜像源:', UPDATE_MIRROR_URL)
+      try {
+        autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL })
+        await autoUpdater.checkForUpdates()
+        sendUpdateStatus('info', '正在检查更新…（镜像源）')
+        return
+      } catch (e2) {
+        fwLog('[updater] 镜像源也失败:', e2 && e2.message || String(e2))
+        sendUpdateStatus('error', friendlyUpdateError(e2))
+        return
+      }
+    }
+    sendUpdateStatus('error', friendlyUpdateError(e))
+  }
+}
+
 function setupAutoUpdate() {
   // 前端可主动触发检查；开发模式也返回明确反馈，避免按钮无反应
   ipcMain.on('check-for-update', () => {
-    if (!app.isPackaged) {
-      sendUpdateStatus('info', '开发模式暂不检查更新')
-      return
-    }
-    sendUpdateStatus('info', '正在检查更新…')
-    autoUpdater.checkForUpdates().catch((e) => {
-      const msg = e && e.message || String(e)
-      fwLog('[updater] check 失败(ipc):', msg)
-      sendUpdateStatus('error', friendlyUpdateError(e))
-    })
+    checkForUpdatesWithFallback()
   })
 
   if (!app.isPackaged) {
@@ -364,13 +397,13 @@ function setupAutoUpdate() {
     return
   }
   // 更新源：默认使用打包时写入的 app-update.yml（build.publish = github provider）；
-  // 显式设置 FRAMEWEAVE_UPDATE_URL 时覆盖为 generic（联调/企业部署用）
+  // 显式设置 FRAMEWEAVE_UPDATE_URL 时覆盖为 generic（联调/企业部署用，且禁用镜像回退）
   const feedUrl = process.env.FRAMEWEAVE_UPDATE_URL
   if (feedUrl) {
     autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl })
     console.log('[updater] 使用覆盖更新源:', feedUrl)
   } else {
-    console.log('[updater] 使用打包配置更新源 (github provider)')
+    console.log('[updater] 使用打包配置更新源 (github provider)，失败自动回退镜像:', UPDATE_MIRROR_URL)
   }
 
   autoUpdater.autoDownload = false      // 用户确认后下载
@@ -431,11 +464,28 @@ function setupAutoUpdate() {
     sendUpdateStatus('error', friendlyUpdateError(err))
   })
 
-  // 启动 5 秒后检查（无网/更新源不通时静默失败，不再产生 unhandledRejection）
+  // 启动 5 秒后检查（无网/更新源不通时静默失败，不再产生 unhandledRejection；
+  // GitHub 失败自动回退镜像源，同样静默——不打断启动体验）
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((e) => {
-      fwLog('[updater] check 失败:', e && e.message || e)
-    })
+    if (!app.isPackaged) return
+    try {
+      autoUpdater.checkForUpdates().catch(async (e) => {
+        const msg = e && e.message || String(e)
+        fwLog('[updater] 启动检查失败:', msg)
+        // 网络类失败 → 静默回退镜像源再查一次
+        if (!process.env.FRAMEWEAVE_UPDATE_URL && isNetworkError(e)) {
+          fwLog('[updater] 启动检查回退镜像源:', UPDATE_MIRROR_URL)
+          try {
+            autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL })
+            await autoUpdater.checkForUpdates()
+          } catch (e2) {
+            fwLog('[updater] 镜像源启动检查也失败:', e2 && e2.message || String(e2))
+          }
+        }
+      })
+    } catch (e) {
+      fwLog('[updater] 启动检查异常:', e && e.message || String(e))
+    }
   }, 5000)
 }
 
