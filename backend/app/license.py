@@ -1,24 +1,16 @@
 # -*- coding: utf-8 -*-
-"""订阅授权服务（M17 本地桩升级版，P3/t3 授权链硬化版）。
+"""【DEPRECATED · 纯云化后不可达】本地授权桩（LicenseService）。
 
-与服务端云端授权同构：
-- 卡密 = 服务端签名（HMAC-SHA256）的短令牌：FW-<b64(payload)>-<sig12>
-  payload: {"plan": "month|quarter|year", "days": N, "serial": 随机}
-  本地桩用内置 dev 密钥签发/验签；云端换成真实密钥。
-- 账号状态：plan(trial/member) + expires_at + device_id（1 账号 1 台设备）
-- 设备绑定：新设备登录 → 旧设备立即出提示并下线
-- 无离线宽限：每次启动在线校验
-- 积分字段预留（credits）
+t41 纯云化改造后，本模块不再是任何授权路由的调用目标：
+- server.py 已删除所有 `license_svc.xxx()` 回落分支（send-code/register/reset/
+  login/activate/verify 全部强制走 cloud_gateway，云 URL 为空或云端不可达一律拒绝）。
+- market.py 的 install/download_auth/install_report 也已改为云端直连，不再接收
+  license_svc。
+- 类定义仅保留供旧快照/审计工具引用；任何调用本类的方法都会遇到
+  cloud_gateway.cloud_enabled() 分支已被移除的问题——新代码不得再引用本模块。
 
-P3 授权链硬化：
-  1) 云端强制（①）：cloud_gateway.cloud_enabled() 时，login/verify/activate 全部强制走
-     云端校验；本地桩仅在显式关闭云端（FRAMEWEAVE_CLOUD_URL=""）时作为离线回退存在。
-     本地桩任何成功响应都带 degraded=True（明确降级标记），杜绝"静默永远通过"。
-  2) 桩替换检测（①）：导入时对授权核心函数（verify/login/activate_card/_parse_card）做
-     code-object 快照；运行期复查，函数被内存替换（stub 换"永远通过"）即判定 tampered，
-     本地桩全部返回失败。打包版由 integrity（exe 哈希清单）兜底，源码版由快照兜底。
-  3) 敏感串经 obf 通道（⑤）：dev 卡密密钥等不以明文出现。
-存储：backend/data/license.json（源码）/ %APPDATA%/FrameWeave/license.json（打包）。
+历史职责（供审计参考，不再执行）：卡密本地签名/验签、本地账号会话、桩替换检测。
+服务端授权权威 = cloud_server.py（HMAC 验签 + 云端 DB）。
 """
 from __future__ import annotations
 
@@ -110,7 +102,7 @@ def _new_session(email: str, device_id: str, password: str = "") -> dict:
 
 
 class LicenseService:
-    """本地授权服务（离线回退桩；云端启用时本类是死代码）。"""
+    """【DEPRECATED】本地授权服务（纯云化后无任何路由调用；仅保留定义供审计引用）。"""
 
     def __init__(self, data_dir: str):
         self.data_dir = data_dir

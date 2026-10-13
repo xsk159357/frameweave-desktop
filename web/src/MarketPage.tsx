@@ -1,8 +1,8 @@
 // 商城页（M18 / t5）：浏览 / 搜索 / 筛选 / 下载安装（进度 + SHA-256 校验 + 错误码 + 重试）/ 回报 / 发布 / 作者页
 // t5 完善：流式下载进度、SHA-256 校验展示、安装状态（XHR 上传进度）、服务端错误码展示、
 //       云端 item_not_found 容错重试、安装后节点库刷新（reload + /api/specs → setSpecs 广播）。
-import { useEffect, useState } from 'react'
-import { Search, X, Package, GitBranch, Download, Upload, Boxes, User, Coins, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Search, X, Package, GitBranch, Download, Upload, Boxes, User, Coins, Loader2, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react'
 import { api, API_BASE, localToken } from './api'
 import { useAppStore } from './store'
 
@@ -28,13 +28,14 @@ interface MarketItem {
 
 // ---- 服务端/客户端错误码 → 用户可读文案（错误码展示） ----
 const CODE_TEXT: Record<string, string> = {
-  item_not_found: '条目不存在（云端可能未同步，已自动重试/回落本地）',
+  item_not_found: '条目不存在（云端可能尚未同步，请稍后刷新重试）',
   item_disabled: '条目已下架',
   item_kind_invalid: '条目类型无效',
   client_version_too_old: '当前客户端版本过低，请先更新到新版',
   login_required: '请先登录后再下载付费插件',
   insufficient_credits: '积分不足',
-  cloud_unavailable: '云端授权服务不可用',
+  cloud_unavailable: '无法连接云端授权服务器，请联网后重试',
+  cloud_not_configured: '需要云端授权：云端授权服务器未配置，请检查网络后重试',
   no_download_url: '服务端未返回下载地址',
   download_empty: '下载内容为空',
   size_mismatch: '文件大小与声明不符',
@@ -80,18 +81,39 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
   const [activeId, setActiveId] = useState('')        // 正在安装的条目 id
   const [step, setStep] = useState<InstallStep | null>(null)
   const [installedSet, setInstalledSet] = useState<Set<string>>(new Set())
+  const [refreshing, setRefreshing] = useState(false)
+  const loadSeq = useRef(0)
 
   // 已安装集合 = 服务端 /api/specs 的 type_id；安装成功 setSpecs 后自动联动（节点库刷新）
   useEffect(() => { setInstalledSet(new Set(specs.map((s) => s.type_id))) }, [specs])
 
-  const load = async () => {
+  const load = async (manual = false) => {
+    const seq = ++loadSeq.current
+    if (manual) setRefreshing(true)
     try {
       const r = await api.marketItems(q, kind, '')
+      if (seq !== loadSeq.current) return
       setItems((r.items || []).filter((i: MarketItem) => !author || i.author === author))
-    } catch (e: any) { setErr(e.message || '加载失败') }
+      setErr('')
+    } catch (e: any) {
+      if (manual) setErr(e.message || '加载失败，请点击刷新重试')
+    } finally {
+      if (manual) setRefreshing(false)
+    }
   }
 
-  useEffect(() => { load() }, [q, kind, author])
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    const stop = () => { if (timer) { clearInterval(timer); timer = null } }
+    const start = () => { stop(); if (document.visibilityState === 'visible') timer = setInterval(() => { void load(false) }, 25000) }
+    void load(false)
+    start()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') { void load(false); start() } else stop()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
+  }, [q, kind, author])
 
   const report = async (id: string, result: 'ok' | 'failed', error = '') => {
     try { await api.marketInstallReport(id, session?.token || '', __APP_VERSION__, result, error) } catch { /* 旧服务兼容 */ }
@@ -136,13 +158,13 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
       }
       reportId = auth.item_id || id
       const dl = auth.download || {}
-      // 相对 stub_path（本地桩内联 zip）与绝对直链统一解析
+      // 相对 stub_path（云端直链/相对路径）与绝对直链统一解析
       const url = api.resolveUrl(dl.url || dl.stub_path || '')
       if (!url) throw fail('no_download_url', '下载授权未返回下载地址')
 
       // ---- 2. 流式下载 + 进度 ----
       setStep({ label: '正在下载插件', pct: 0 })
-      // 本地桩直链（/api/export、/api/market/*/file）受本地授权令牌保护：
+      // 直链（/api/export、/api/market/*/file）受本地授权令牌保护：
       // 仅对本地 API 地址附加 X-FW-Local-Token；GitHub Release 等外域直链不加（防 CORS 预检失败）。
       const downloadHeaders: Record<string, string> = {}
       if (url.startsWith(API_BASE)) downloadHeaders['X-FW-Local-Token'] = localToken()
@@ -221,7 +243,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         download_url: form.download_url,
         tags: form.tags.split(/[,，\s]+/).filter(Boolean),
       })
-      if (r.ok) { setMsg('发布成功'); setShowPublish(false); load() }
+      if (r.ok) { setMsg('发布成功'); setShowPublish(false); await load(true) }
       else setErr(r.message || '发布失败')
     } catch (e: any) { setErr(e.message || '发布失败') }
     finally { setBusy(false) }
@@ -250,6 +272,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         {/* 工具栏 */}
         <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid ' + ('var(--border)') }}>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + ('var(--border)'), borderRadius: 9, padding: '7px 11px', background: 'var(--input-bg)' }}>
+            <button onClick={() => void load(true)} disabled={refreshing} title="刷新商城" style={{ padding: 3, border: 'none', background: 'transparent', color: 'var(--text-faint)', cursor: refreshing ? 'default' : 'pointer' }}><RefreshCw size={15} className={refreshing ? 'fw-spin' : ''} /></button>
             <Search size={15} color="var(--text-faint)" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索节点 / 工作流 / 作者…" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'inherit' }} />
           </div>
@@ -406,7 +429,7 @@ function PublishForm({ onCancel, onSubmit, push }: { onCancel: () => void; onSub
         <input style={input} placeholder="价格（积分，0 = 免费）" type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
         <input style={input} placeholder="网盘直链（百度/123 分享直链，可留空）" value={downloadUrl} onChange={(e) => setDownloadUrl(e.target.value)} />
         <input style={input} placeholder="标签（逗号分隔，如 文案, 视频）" value={tags} onChange={(e) => setTags(e.target.value)} />
-        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 10 }}>提示：上方可直接导出所选节点/工作流 zip，上传到网盘取直链后填入下方；本地桩可留空直链仅作演示。</div>
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 10 }}>提示：可直接导出所选节点/工作流 zip，上传到网盘/Release 取直链后填入下方（纯云端发布，需联网）。</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onCancel} style={{ padding: '6px 14px', borderRadius: 8, cursor: 'pointer', border: '1px solid ' + ('var(--border)'), background: 'transparent', color: 'var(--text-faint)', fontSize: 13 }}>取消</button>
           <button onClick={() => { setSending(true); onSubmit({ kind, title, description, price, download_url: downloadUrl, tags }) }} disabled={!title || sending} style={{ padding: '6px 16px', borderRadius: 8, cursor: sending || !title ? 'wait' : 'pointer', border: 'none', background: 'var(--btn-primary-grad)', color: '#fff', fontSize: 13 }}>发布</button>

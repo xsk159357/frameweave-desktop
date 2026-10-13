@@ -59,7 +59,7 @@ async function reqMulti<T>(path: string, fd: FormData, timeoutMs = 20000): Promi
 export const api = {
   health: () => req<{ok:boolean}>('/api/health'),
 
-  /** 直链/相对路径统一解析：GitHub Release 绝对 URL 原样返回，本地桩 stub 相对路径拼 BASE */
+  /** 直链/相对路径统一解析：GitHub Release 绝对 URL 原样返回，相对直链拼 BASE */
   resolveUrl: (u: string) =>
     !u ? '' : (/^https?:\/\//i.test(u) ? u : API_BASE + (u.startsWith('/') ? u : '/' + u)),
 

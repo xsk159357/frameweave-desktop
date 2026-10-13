@@ -21,7 +21,6 @@ from pydantic import BaseModel
 
 from .assets import AssetStore, create_store
 from .engine import Engine
-from .license import LicenseService
 from .registry import autodiscover, list_specs
 from . import declarative
 from . import templates
@@ -30,7 +29,7 @@ from .draft_validator import validate_jianying_draft
 from .secrets import store_secret, read_secret, list_secret_names, delete_secret
 from .wfstore import WorkflowStore
 from .market import MarketService
-from . import email_service, cloud_gateway
+from . import cloud_gateway
 from .worker import limits
 from .plugin_registry import PluginRegistry, PluginLifecycleError
 from .graph_validator import validate_graph
@@ -215,7 +214,6 @@ try:
 except Exception as _e:  # noqa: BLE001
     print("[prune] 跳过:", _e)
 
-license_svc = LicenseService(DATA_DIR)
 market_svc = MarketService(DATA_DIR)
 
 # P1 生命周期注册表（t3）：plugins.json 状态机 + 安装事务管线
@@ -958,7 +956,21 @@ async def get_asset_file(aid: str):
     return FileResponse(asset.path, filename=os.path.basename(asset.path))
 
 
-# ---- 授权 API（本地桩 + P3 云端强制/HMAC 验签） ----
+# ---- 授权 API（纯云化：无本地 LicenseService 回落，强制云端） ----
+_CLOUD_UNAVAILABLE = "无法连接云端授权服务器，请联网后重试"
+_CLOUD_NOT_CONFIGURED = "需要云端授权：云端授权服务器未配置，请检查网络后重试"
+
+
+def _cloud_required() -> dict:
+    """纯云化门：云端未配置（FRAMEWEAVE_CLOUD_URL 为空/未设）时拒绝本地兜底。
+
+    任何路径都不存在本地授权成功：云 URL 为空 → 明确报错；云端不可达 → 明确报错。
+    """
+    if not cloud_gateway.cloud_enabled():
+        return {"ok": False, "message": _CLOUD_NOT_CONFIGURED, "code": "cloud_not_configured"}
+    return {}
+
+
 def _cloud_auth_fail(resp: dict) -> dict:
     """云端响应验签失败/重放检测 → 统一拒绝（sig_fail 显式透出，前端按"重新登录/认为未授权"）。"""
     return {"ok": False, "message": resp.get("message") or resp.get("reason") or "云端授权校验失败",
@@ -967,94 +979,86 @@ def _cloud_auth_fail(resp: dict) -> dict:
 
 @app.post("/api/auth/email/send-code")
 async def send_email_code(body: EmailCodeRequest):
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_email_code(body.email, body.scene)
-        if resp is None:
-            return {"ok": False, "message": "云端授权服务不可用"}
-        if resp.get("sig_fail"):
-            return _cloud_auth_fail(resp)
-        return resp
-    if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
-    if body.scene not in ("register", "reset_password"): return {"ok": False, "code": "INVALID_SCENE", "message": "验证码场景不正确"}
-    ok, message = await asyncio.to_thread(email_service.issue_code, body.email, body.scene)
-    return {"ok": ok, "message": message, "expires_in": 300, "retry_after": 60}
+    gate = _cloud_required()
+    if gate:
+        return gate
+    resp = cloud_gateway.cloud_email_code(body.email, body.scene)
+    if resp is None:
+        return {"ok": False, "message": _CLOUD_UNAVAILABLE}
+    if resp.get("sig_fail"):
+        return _cloud_auth_fail(resp)
+    return resp
 
 @app.post("/api/auth/register")
 async def register(body: RegisterRequest):
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_register(body.email, body.code, body.password, body.device_id)
-        if resp is None:
-            return {"ok": False, "message": "云端授权服务不可用"}
-        if resp.get("sig_fail"):
-            return _cloud_auth_fail(resp)
-        return resp
-    if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
-    if len(body.password) < 8: return {"ok": False, "code": "WEAK_PASSWORD", "message": "密码至少 8 位"}
-    verified, message = await asyncio.to_thread(email_service.verify_code, body.email, "register", body.code)
-    if not verified: return {"ok": False, "message": message}
-    return license_svc.register_verified(body.email, body.password, body.device_id)
+    gate = _cloud_required()
+    if gate:
+        return gate
+    resp = cloud_gateway.cloud_register(body.email, body.code, body.password, body.device_id)
+    if resp is None:
+        return {"ok": False, "message": _CLOUD_UNAVAILABLE}
+    if resp.get("sig_fail"):
+        return _cloud_auth_fail(resp)
+    return resp
 
 @app.post("/api/auth/password/reset")
 async def reset_password(body: ResetPasswordRequest):
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_reset_password(body.email, body.code, body.new_password)
-        if resp is None:
-            return {"ok": False, "message": "云端授权服务不可用"}
-        if resp.get("sig_fail"):
-            return _cloud_auth_fail(resp)
-        return resp
-    if not email_service.valid_qq_email(body.email): return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
-    if len(body.new_password) < 8: return {"ok": False, "message": "密码至少 8 位"}
-    verified, message = await asyncio.to_thread(email_service.verify_code, body.email, "reset_password", body.code)
-    if not verified: return {"ok": False, "message": message}
-    result = license_svc.reset_password(body.email, body.new_password)
-    if not result.get("ok"):
-        return {"ok": True, "message": "如果该邮箱已注册，密码重置将完成"}
-    return result
+    gate = _cloud_required()
+    if gate:
+        return gate
+    resp = cloud_gateway.cloud_reset_password(body.email, body.code, body.new_password)
+    if resp is None:
+        return {"ok": False, "message": _CLOUD_UNAVAILABLE}
+    if resp.get("sig_fail"):
+        return _cloud_auth_fail(resp)
+    return resp
 
 @app.post("/api/auth/login")
 async def login(body: LoginRequest):
-    if not email_service.valid_qq_email(body.email):
-        return {"ok": False, "code": "INVALID_EMAIL", "message": "目前仅支持 QQ 邮箱（@qq.com）"}
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_login(body.email, body.password, body.device_id)
-        if resp is None:
-            return {"ok": False, "message": "云端授权服务不可用"}
-        if resp.get("sig_fail"):
-            return _cloud_auth_fail(resp)
-        return resp
-    return license_svc.login(body.email, body.password, body.device_id)
+    gate = _cloud_required()
+    if gate:
+        return gate
+    resp = cloud_gateway.cloud_login(body.email, body.password, body.device_id)
+    if resp is None:
+        return {"ok": False, "message": _CLOUD_UNAVAILABLE}
+    if resp.get("sig_fail"):
+        return _cloud_auth_fail(resp)
+    return resp
 
 @app.post("/api/auth/activate")
 async def activate(body: ActivateRequest):
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_activate(body.email, body.card)
-        if resp is None:
-            return {"ok": False, "message": "云端授权服务不可用"}
-        if resp.get("sig_fail"):
-            return _cloud_auth_fail(resp)
-        return resp
-    return license_svc.activate_card(body.email, body.card)
+    gate = _cloud_required()
+    if gate:
+        return gate
+    resp = cloud_gateway.cloud_activate(body.email, body.card)
+    if resp is None:
+        return {"ok": False, "message": _CLOUD_UNAVAILABLE}
+    if resp.get("sig_fail"):
+        return _cloud_auth_fail(resp)
+    return resp
 
 if DEV_ENDPOINTS:
     @app.post("/api/dev/issue-card")
     async def dev_issue_card(body: dict):
-        """本地桩专用：模拟管理后台发行卡密（正式版在云端管理后台）。"""
-        plan = body.get("plan", "month")
-        days = int(body.get("days", 30))
-        return {"ok": True, "card": license_svc.issue_card(plan, days), "plan": plan, "days": days}
+        """云端管理后台签发卡密（纯云化：仅云端 admin 路径可签发，本地桩已删除）。"""
+        gate = _cloud_required()
+        if gate:
+            return gate
+        return {"ok": False, "message": "卡密签发请在云端管理后台（/admin）操作", "code": "cloud_admin_only"}
 
 
-# ---- 商城 API（M18 本地桩） ----
+# ---- 商城 API（纯云化：云端优先，云端不可达不再回落本地 hub） ----
 @app.get("/api/market/items")
 async def market_items(q: str = "", kind: str = "", official: str = ""):
-    # 云化时优先返回云端条目（含 GitHub Release 直链元数据），云端不可达回落本地桩。
-    if cloud_gateway.cloud_enabled():
-        cloud_items = await asyncio.to_thread(cloud_gateway.cloud_market_items)
-        if cloud_items is not None:
-            return {"items": cloud_items, "count": len(cloud_items)}
-    items = market_svc.list_items(q, kind, official)
-    return {"items": items, "count": len(items)}
+    # 纯云化：云端优先返回条目；云端不可达/未配置 → 明确报错，绝不回落本地桩。
+    if not cloud_gateway.cloud_enabled():
+        return {"ok": False, "code": "cloud_not_configured",
+                "message": "需要云端商城：云端授权服务器未配置，请检查网络后重试"}
+    cloud_items = await asyncio.to_thread(cloud_gateway.cloud_market_items)
+    if cloud_items is None:
+        return {"ok": False, "code": "cloud_unavailable",
+                "message": "无法连接云端商城，请联网后重试"}
+    return {"items": cloud_items, "count": len(cloud_items)}
 
 @app.post("/api/market/items")
 async def market_publish(body: MarketPublish):
@@ -1072,32 +1076,32 @@ async def market_publish(body: MarketPublish):
 
 @app.post("/api/market/items/{item_id}/download-auth")
 async def market_download_auth(item_id: str, body: MarketDownloadAuth):
-    """下载授权/记录接口：返回 GitHub Release 直链（服务器不代理文件）。
+    """下载授权/记录接口（纯云化）：转发云端授权/记账，云端不可达 → 明确报错。
 
-    云化时转发云端授权/记账；云端不可达或返回 item_not_found 时回落本地桩
-    （迁移/同步期容错：条目可能尚未同步到新云端；item_disabled、login_required、
-    insufficient_credits 等业务错误按云端权威返回，不回落）。
+    不再回落本地 hub（原注释「云端不可达或返回 item_not_found 时回落本地桩」已移除）；
+    item_disabled/login_required/insufficient_credits 等业务错误按云端权威返回。
     """
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_market_download_auth(item_id, body.token, body.client_version)
-        if resp is not None and not (resp.get("ok") is False and resp.get("code") == "item_not_found"):
-            return resp
-        # 云端不可达（None）或 item_not_found → 回落本地桩
-    return market_svc.download_auth(item_id, body.token, license_svc, body.client_version)
+    if not cloud_gateway.cloud_enabled():
+        return {"ok": False, "code": "cloud_not_configured",
+                "message": "需要云端授权：云端授权服务器未配置，请检查网络后重试"}
+    resp = cloud_gateway.cloud_market_download_auth(item_id, body.token, body.client_version)
+    if resp is None:
+        return {"ok": False, "code": "cloud_unavailable",
+                "message": "无法连接云端授权服务器，请联网后重试"}
+    return resp
 
 @app.post("/api/market/items/{item_id}/install-report")
 async def market_install_report(item_id: str, body: MarketInstallReport):
-    """安装回报：客户端装完/失败后回报，云端/本地记录安装计数与流水。
-
-    与 download-auth 相同的容错：云端不可达或 item_not_found 时回落本地桩
-    （防同步期云端不认识条目导致回报丢失）。
-    """
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_market_install_report(
-            item_id, body.token, body.client_version, body.result, body.error)
-        if resp is not None and not (resp.get("ok") is False and resp.get("code") == "item_not_found"):
-            return resp
-    return market_svc.install_report(item_id, body.token, body.client_version, body.result, body.error)
+    """安装回报（纯云化）：转发云端记录；云端不可达 → 明确报错，不回落本地桩。"""
+    if not cloud_gateway.cloud_enabled():
+        return {"ok": False, "code": "cloud_not_configured",
+                "message": "需要云端授权：云端授权服务器未配置，请检查网络后重试"}
+    resp = cloud_gateway.cloud_market_install_report(
+        item_id, body.token, body.client_version, body.result, body.error)
+    if resp is None:
+        return {"ok": False, "code": "cloud_unavailable",
+                "message": "无法连接云端授权服务器，请联网后重试"}
+    return resp
 
 @app.post("/api/market/items/{item_id}/install")
 async def market_install(item_id: str, body: MarketInstall):
@@ -1110,7 +1114,7 @@ async def market_install(item_id: str, body: MarketInstall):
     自请求死锁。
     """
     result = await asyncio.to_thread(
-        market_svc.install, item_id, body.token, license_svc, declarative.USER_NODES_DIR)
+        market_svc.install, item_id, body.token, declarative.USER_NODES_DIR)
     if result.get("ok") and result.get("kind") != "workflow":
         try:
             await asyncio.to_thread(plugin_registry.sync)
@@ -1198,35 +1202,30 @@ async def export_workflow(wfid: str):
 if DEV_ENDPOINTS:
     @app.post("/api/dev/add-credits")
     async def dev_add_credits(body: dict):
-        """本地桩专用：给账号加积分（正式版 = 支付宝充值，M19）。"""
-        email = (body.get("email") or "").strip().lower()
-        for s in license_svc._sessions.values():
-            if s.get("email", "").lower() == email:
-                s["credits"] = int(s.get("credits") or 0) + int(body.get("amount", 0))
-                license_svc._save()
-                return {"ok": True, "credits": s["credits"]}
-        return {"ok": False, "message": "账号不存在"}
+        """已删除本地桩加积分：纯云化后积分在云端账户管理，本地不接受写积分。"""
+        gate = _cloud_required()
+        if gate:
+            return gate
+        return {"ok": False, "code": "cloud_admin_only",
+                "message": "加积分请在云端管理后台（/admin）操作", "credits": 0}
 
 
 @app.api_route("/api/auth/verify", methods=["GET", "POST"])
 async def verify(token: str = "", device_id: str = "", body: dict = None):
-    """订阅校验：兼容 GET(query) 与 POST(body)，契约与云端一致。
+    """订阅校验（纯云化）：响应 HMAC 验签 + nonce 防重放；云端不可达/未配置 → 拒绝。
 
-    P3/t3 ④：cloud_enabled 时强制云端，响应 HMAC 验签 + nonce 防重放；
-    验签失败/无签名/重放 → 拒绝（sig_fail 透出，前端按未授权处理）。
-    本地桩（显式 FRAMEWEAVE_CLOUD_URL=""）返回带 degraded 降级标记的结果。
+    任何路径都不存在本地授权成功：无云端配置或云端不可达都返回明确错误。
     """
     body = body or {}
-    if cloud_gateway.cloud_enabled():
-        resp = cloud_gateway.cloud_verify(token or body.get("token", ""), device_id or body.get("device_id", ""))
-        if resp is None:
-            return {"ok": False, "reason": "云端授权服务不可用"}
-        if resp.get("sig_fail"):
-            return {"ok": False, "reason": resp.get("reason") or "云端响应校验失败", "sig_fail": True}
-        return resp
-    token = token or str(body.get("token") or "")
-    device_id = device_id or str(body.get("device_id") or "")
-    return license_svc.verify(token, device_id)
+    gate = _cloud_required()
+    if gate:
+        return {"ok": False, "reason": _CLOUD_NOT_CONFIGURED, "code": "cloud_not_configured"}
+    resp = cloud_gateway.cloud_verify(token or body.get("token", ""), device_id or body.get("device_id", ""))
+    if resp is None:
+        return {"ok": False, "reason": _CLOUD_UNAVAILABLE}
+    if resp.get("sig_fail"):
+        return {"ok": False, "reason": resp.get("reason") or "云端响应校验失败", "sig_fail": True}
+    return resp
 
 
 # ---- WebSocket ----

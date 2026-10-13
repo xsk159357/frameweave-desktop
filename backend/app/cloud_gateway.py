@@ -24,6 +24,7 @@ import json
 import os
 import socket
 import threading
+import time
 import uuid
 from typing import Optional
 
@@ -40,6 +41,9 @@ _IPV4_FALLBACK_LOCK = threading.Lock()
 _SKIP_SIGN_FIELDS = {"signature", "sig"}
 # HMAC 结果截取：云端的签名要用同样的 truncate 长度（24 字节 = 48 hex）
 SIG_TRUNCATE_BYTES = 24
+# 超时分层：连接阶段短预算（秒）——连接超时/冷连接用更小的 socket 默认超时
+# 快速失败，读响应整体超时由 _post 的 attempt 级 timeout 控制（末次放宽到 ≥12s）。
+CONNECT_TIMEOUT = 5.0
 
 
 def _verify_secret() -> str:
@@ -135,38 +139,114 @@ def _urlopen_ipv4(req, timeout: int):
             socket.getaddrinfo = original
 
 
+def _set_response_read_timeout(resp, timeout: float) -> None:
+    """urllib 已完成连接/TLS/响应头后，把响应 socket 切换到 body 读取预算。
+
+    CPython 的 HTTPResponse 使用 fp.raw._sock；若实现不暴露该内部字段，保持 urllib
+    建立连接时的 timeout 即可（安全降级，不影响普通响应）。
+    """
+    try:
+        sock = resp.fp.raw._sock
+        sock.settimeout(float(timeout))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _http_body(resp, read_timeout: float) -> bytes:
+    _set_response_read_timeout(resp, read_timeout)
+    return resp.read()
+
+
 def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
+    """云端 POST 代理（含网络容错重试，纯云化）。
+
+    重试策略：
+    - 仅网络层异常重试（URLError/超时/EOF/连接重置/读响应失败），最多 2 次
+      指数退避（0.5s/1s）；首请求/跨国冷连接偶发抖动用慢速容错（末次 attempt
+      超时放宽到 ≥12s）。IPv4 回退逻辑（_urlopen_ipv4）保持不变。
+    - 业务错误（读到 HTTP 响应体，含 4xx/5xx、ok:false、签名失败）绝不重试，
+      避免注册/激活/扣费等副作用重复提交。
+    - 重试后仍失败才返回 None（调用方按"云端不可达"拒绝离线回落）。
+    """
+    import urllib.error as ur_err
     import urllib.request as ur
     url = cloud_url()
     _dbg("CLOUD_URL=%r enabled=%s path=%s" % (url, cloud_enabled(), path))
     if not cloud_enabled():
         return None
-    try:
+    tries = ((timeout, 0.0), (timeout, 0.5), (max(timeout, 12), 1.0))
+    last_net_err: Optional[BaseException] = None
+    for attempt, (t, backoff) in enumerate(tries):
+        if backoff > 0:
+            try:
+                time.sleep(backoff)
+            except Exception:  # noqa: BLE001
+                pass
         req = ur.Request(url + path,
                          data=json.dumps(body).encode(),
                          headers={"Content-Type": "application/json",
                                   "User-Agent": "FrameWeave-Client/" + CLIENT_VERSION,
                                   "Accept": "application/json"},
                          method="POST")
+        # 超时分层：连接阶段用 CONNECT_TIMEOUT 短预算（快速失败），读响应 body 用
+        # attempt 级 t（末次放宽容错首请求/冷连接）。不额外改全局 socket 默认超时
+        # （避免 setdefaulttimeout/ipv4 锁的全局副作用）。
+        connect_t = min(t, CONNECT_TIMEOUT)
         try:
             # VM 网络优先走 IPv4；若 IPv4 失败，再回退系统默认地址族（含 IPv6）。
-            with _urlopen_ipv4(req, timeout) as resp:
-                _body = json.loads(resp.read().decode() or "{}")
+            with _urlopen_ipv4(req, connect_t) as resp:
+                _body = json.loads(_http_body(resp, t).decode() or "{}")
                 _dbg("CLOUD_OK path=%s family=ipv4 resp=%s" % (path, str(_body)[:200]))
                 return _body
-        except Exception as _first_err:  # noqa: BLE001
-            _dbg("CLOUD_RETRY_DEFAULT path=%s err=%s" % (path, repr(_first_err)))
+            # 注意：不可在同一路径再持 _IPV4_FALLBACK_LOCK —— _urlopen_ipv4 内部已持锁（非重入）
+        except ur_err.HTTPError as e:
+            # 读到 HTTP 响应体（4xx/5xx）→ 业务层错误：不重试，返回解析后的响应
             try:
-                with ur.urlopen(req, timeout=timeout) as resp:
-                    _body = json.loads(resp.read().decode() or "{}")
+                raw = e.read().decode("utf-8", "replace") or ""
+            except Exception:  # noqa: BLE001
+                raw = ""
+            try:
+                parsed = json.loads(raw) if raw else {}
+            except (ValueError, TypeError):
+                parsed = {}
+            _dbg("CLOUD_HTTP path=%s code=%s resp=%s" % (path, e.code, raw[:200]))
+            if isinstance(parsed, dict):
+                parsed.setdefault("ok", False)
+                parsed.setdefault("message", "云端 HTTP " + str(e.code))
+                return parsed
+            return {"ok": False, "message": "云端 HTTP " + str(e.code) + ((": " + raw[:120]) if raw else ""),
+                    "http_status": e.code}
+        except Exception as _first_err:  # noqa: BLE001 —— 网络层异常，尝试默认地址族
+            _dbg("CLOUD_RETRY_DEFAULT path=%s err=%s" % (path, repr(_first_err)))
+            last_net_err = _first_err
+            try:
+                with ur.urlopen(req, timeout=connect_t) as resp:
+                    _body = json.loads(_http_body(resp, t).decode() or "{}")
                     _dbg("CLOUD_OK path=%s family=default resp=%s" % (path, str(_body)[:200]))
                     return _body
+            except ur_err.HTTPError as e:
+                # 默认地址族也拿到业务响应体 → 不重试
+                try:
+                    raw = e.read().decode("utf-8", "replace") or ""
+                except Exception:  # noqa: BLE001
+                    raw = ""
+                try:
+                    parsed = json.loads(raw) if raw else {}
+                except (ValueError, TypeError):
+                    parsed = {}
+                _dbg("CLOUD_HTTP path=%s code=%s resp=%s" % (path, e.code, raw[:200]))
+                if isinstance(parsed, dict):
+                    parsed.setdefault("ok", False)
+                    parsed.setdefault("message", "云端 HTTP " + str(e.code))
+                    return parsed
+                return {"ok": False, "message": "云端 HTTP " + str(e.code) + ((": " + raw[:120]) if raw else ""),
+                        "http_status": e.code}
             except Exception as _second_err:  # noqa: BLE001
-                _dbg("CLOUD_ERR path=%s err=%s" % (path, repr(_second_err)))
-                return None  # 云端不可达：正式版拒绝离线回落
-    except Exception as _e:  # noqa: BLE001
-        _dbg("CLOUD_ERR path=%s err=%s" % (path, repr(_e)))
-        return None
+                last_net_err = _second_err
+                _dbg("CLOUD_ERR path=%s attempt=%d err=%s" % (path, attempt, repr(_second_err)))
+    if last_net_err is not None:
+        _dbg("CLOUD_GIVE_UP path=%s err=%s" % (path, repr(last_net_err)))
+    return None  # 网络层重试后仍失败：云端不可达（调用方拒绝离线回落）
 
 
 def _checked(resp: Optional[dict], require_signature: bool = False, nonce: str = "") -> Optional[dict]:

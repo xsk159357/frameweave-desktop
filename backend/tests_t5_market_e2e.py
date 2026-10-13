@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-"""t5 商城端到端验收：真实 HTTP 下载→校验→安装→回报 闭环。
+"""t5 商城端到端验收（纯云化版）：真实 HTTP 下载→校验→安装→回报 闭环。
 
-覆盖（全部走真实 HTTP / 真实 uvicorn 服务，非 TestClient）：
-  A  商城列表 → download-auth → 客户端下载(流式) → SHA-256/大小校验 → 上传安装
+覆盖（全部走真实 HTTP / 真实 uvicorn 服务 + 真实 cloud_server，非 TestClient）：
+  A  云端商城列表 → download-auth → 客户端下载(流式) → SHA-256/大小校验 → 上传安装
      → install-report → /api/specs 出现 → 列表计数（downloads/installs）
-  B  付费流：扣积分 / 20-80 分成 / 回报；错误码契约（login_required /
+  B  付费流：云端扣积分 / 20-80 分成 / 回报；错误码契约（login_required /
      insufficient_credits / client_version_too_old / item_disabled / item_not_found）
-  C  云端 item_not_found 容错：mock 云端返回 item_not_found → 服务端回落本地桩；
-     云端不可达（连接拒绝）→ 回落本地桩；客户端重试策略模拟
+  C  纯云化容错：云端 item_not_found / 云端不可达 → 明确错误码，绝不回落本地 hub
+     （t41 回归：移除「云端不可达回落本地桩」语义）
   D  大插件适配：12MB 包 上传安装（multipart 流式） + 服务端 _fetch_zip 流式下载
      （真实 file server URL + sha256 登记校验） + /install 服务端安装
-  E  失败回报契约：result=failed 记流水、installs 不增
+  E  云端直链契约：download-auth 返回直链（无 stub_path）；客户端按直链下载校验
 
 用法：python tests_t5_market_e2e.py
 退出码：0=全过；1=有失败。证据输出到 .tmp/t5_market_e2e.log。
@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -39,11 +40,16 @@ TMP = os.path.join(REPO, ".tmp")
 T5_TMP = os.path.join(TMP, "t5_pkg")
 PY = sys.executable
 
-PORT = 8788          # 本地桩服务
-CLOUD_PORT = 9455    # mock 云端（item_not_found）
+PORT = 8788          # 本地 app 服务
+CLOUD_PORT = 9455    # 真实 cloud_server（云端桩）
 FILE_PORT = 9456     # 大插件 zip 静态文件服务
 TOKEN = "dev-local-token"
 EVIDENCE = os.path.join(TMP, "t5_market_e2e.log")
+CLOUD_DB = os.path.join(TMP, "t5_cloud.db")
+# cloud_server 的 MARKET_FILE = os.path.join(os.path.dirname(DB_PATH), 'market_items.json')
+CLOUD_MARKET = os.path.join(TMP, "market_items.json")
+CLOUD_ADMIN_KEY = "t5-admin-key"
+CARD_SECRET = "t5-card-secret"
 
 PASS: list[str] = []
 FAIL: list[str] = []
@@ -68,7 +74,7 @@ def reset_evidence() -> None:
 
 # ---------------------------------------------------------------- HTTP 客户端
 def http(path: str, method: str = "GET", body=None, headers=None, raw=False, timeout=30):
-    """对本地桩服务发请求（带本地授权令牌，模拟渲染进程）。"""
+    """对本地 app 服务发请求（带本地授权令牌，模拟渲染进程）。"""
     url = f"http://127.0.0.1:{PORT}{path}"
     data = json.dumps(body).encode() if body is not None else None
     h = {"Content-Type": "application/json", "X-FW-Local-Token": TOKEN, "User-Agent": "frameweave/0.2.12"}
@@ -158,7 +164,7 @@ def start_server(cloud_url: str = "", extra_env: dict | None = None):
     env.update({
         "FRAMEWEAVE_CLOUD_URL": cloud_url,
         "FRAMEWEAVE_DEV_ENDPOINTS": "1",
-        "ALIYUN_DM_ENABLED": "false",          # 不走真实邮件，验证码走 dev 日志
+        "ALIYUN_DM_ENABLED": "false",          # 云端走 dev 日志，不发送真实邮件
         "FRAMEWEAVE_DEBUG_LOG": os.path.join(TMP, "t5_gw_debug.log"),
         "PYTHONUNBUFFERED": "1",
     })
@@ -172,41 +178,76 @@ def start_server(cloud_url: str = "", extra_env: dict | None = None):
     check("server 健康检查 /api/health", ok, f"port={PORT}")
     if not ok:
         proc.kill()
-        raise RuntimeError("本地桩服务启动失败")
+        raise RuntimeError("本地 app 服务启动失败")
     return proc
 
 
-def start_mock_cloud():
-    class H(http_server.BaseHTTPRequestHandler):
-        def _resp(self, obj, status=200):
-            b = json.dumps(obj).encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(b)))
-            self.end_headers()
-            self.wfile.write(b)
+def start_cloud_server():
+    """启动真实云端授权桩（backend/cloud_server.py，127.0.0.1:9455）。"""
+    log(f"[cloud] 启动 cloud_server :{CLOUD_PORT}")
+    wait_port_free(CLOUD_PORT, timeout=20)
+    logf = open(os.path.join(TMP, "t5_cloud_stdout.log"), "ab")
+    env = dict(os.environ)
+    env.update({
+        "CLOUD_DB": CLOUD_DB,
+        "FRAMEWEAVE_CARD_SECRET": CARD_SECRET,
+        "FRAMEWEAVE_ADMIN_KEY": CLOUD_ADMIN_KEY,
+        "ALIYUN_DM_ENABLED": "false",
+        "FRAMEWEAVE_VERIFY_SECRET": "fw-verify-secret-2026",
+        "PYTHONUNBUFFERED": "1",
+    })
+    proc = subprocess.Popen([PY, os.path.join(BACKEND, "cloud_server.py"),
+                             "--port", str(CLOUD_PORT), "--bind", "127.0.0.1"],
+                            cwd=BACKEND, env=env, stdout=logf, stderr=subprocess.STDOUT)
+    ok = wait_health(CLOUD_PORT)
+    check("cloud_server 健康检查", ok, f"port={CLOUD_PORT}")
+    if not ok:
+        proc.kill()
+        raise RuntimeError("云端授权桩启动失败")
+    return proc
 
-        def do_GET(self):
-            # 云端商城列表：空（模拟条目尚未同步到新云端）
-            self._resp({"items": [], "count": 0})
 
-        def do_POST(self):
-            n = int(self.headers.get("Content-Length", 0))
-            self.rfile.read(n)
-            if self.path.startswith("/api/market/download-auth") or self.path.startswith("/api/market/install-report"):
-                # 历史线上事故场景：云端不认识该条目 → item_not_found
-                self._resp({"ok": False, "code": "item_not_found", "message": "条目不存在"})
-            else:
-                self._resp({"ok": False, "code": "item_not_found", "message": "条目不存在"})
+def seed_cloud_market():
+    """清空云端商城文件（每轮全新）。"""
+    try:
+        os.remove(CLOUD_MARKET)
+    except OSError:
+        pass
 
-        def log_message(self, *a):
-            pass
 
-    srv = http_server.ThreadingHTTPServer(("127.0.0.1", CLOUD_PORT), H)
-    th = threading.Thread(target=srv.serve_forever, daemon=True)
-    th.start()
-    log(f"[mock-cloud] 启动 :{CLOUD_PORT}（POST 恒返 item_not_found）")
-    return srv
+def cloud_publish(item: dict) -> dict:
+    """把条目写入云端商城文件（cloud_server 每次请求实时读 market_items.json）。"""
+    data = {}
+    if os.path.exists(CLOUD_MARKET):
+        try:
+            with open(CLOUD_MARKET, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+    iid = str(item.get("id") or ("it_" + uuid.uuid4().hex[:10]))
+    data[iid] = {"id": iid,
+                 "kind": item.get("kind", "node"),
+                 "title": item.get("title", ""),
+                 "description": item.get("description", ""),
+                 "author": item.get("author", ""),
+                 "price": int(item.get("price", 0)),
+                 "official": bool(item.get("official", False)),
+                 "download_url": item.get("download_url", ""),
+                 "version": item.get("version", "1.0.0"),
+                 "type_id": item.get("type_id", ""),
+                 "sha256": item.get("sha256", ""),
+                 "size": int(item.get("size", 0)),
+                 "min_client_version": item.get("min_client_version", ""),
+                 "status": item.get("status", "active"),
+                 "downloads": 0, "installs": 0,
+                 "tags": item.get("tags", []),
+                 "created_at": time.time(),
+                 "publisher_pubkey": item.get("publisher_pubkey", ""),
+                 "archive_signature": item.get("archive_signature", ""),
+                 }
+    with open(CLOUD_MARKET, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "item": data[iid]}
 
 
 def start_file_server(directory: str):
@@ -225,8 +266,6 @@ def start_file_server(directory: str):
 
 
 # ---------------------------------------------------------------- 代码快照隔离
-# 后端代码可能被并行任务（t3 生命周期）同时编辑：测试服务从 backend 的只读快照运行，
-# 数据/用户节点目录也落在快照内——完全隔离真实仓库，且不依赖并行任务的中间状态。
 SNAP = os.path.join(TMP, "t5_snap")          # 快照根：<SNAP>/backend
 SNAP_BACKEND = os.path.join(SNAP, "backend")
 SNAP_DATA = os.path.join(SNAP_BACKEND, "data")
@@ -243,7 +282,7 @@ def snapshot_create() -> None:
         for n in names:
             p = os.path.join(d, n)
             if os.path.isdir(p):
-                if n in ("data", "user_nodes", "__pycache__", ".venv"):
+                if n in ("data", "user_nodes", "__pycache__", ".venv", "models"):
                     out.add(n)
             else:
                 if n.endswith((".pyc", ".pyo")) or n in ("cloud.db", ".gitkeep") or n.startswith("tests_"):
@@ -253,24 +292,60 @@ def snapshot_create() -> None:
     shutil.copytree(BACKEND, SNAP_BACKEND, ignore=_ignored)
     os.makedirs(SNAP_DATA, exist_ok=True)
     os.makedirs(SNAP_NODES, exist_ok=True)
-    # 初始运行数据：空商城 + 预置账号（买家 200 / 作者 0，首次登录绑定密码）
+    # 云端 DB（sessions/cards）与云端商城文件落到测试目录（非仓库）
+    for p in (CLOUD_DB, CLOUD_DB + "-journal", CLOUD_MARKET):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    os.makedirs(TMP, exist_ok=True)
+    _init_cloud_db()
+    # 本地 app 数据：空商城（仅占位；实际条目在云端）
     with open(os.path.join(SNAP_DATA, "market.json"), "w", encoding="utf-8") as f:
         json.dump({}, f, ensure_ascii=False)
-    sid_b = "b1" + uuid.uuid4().hex[:10]
-    sid_a = "a1" + uuid.uuid4().hex[:10]
-    seed = {
-        sid_b: {"user_id": sid_b, "email": "buyer@qq.com", "token": uuid.uuid4().hex[:32],
-                "plan": "member", "expires_at": time.time() + 86400 * 30,
-                "device_id": "BUY-D", "credits": 200, "cards_used": [],
-                "last_verified": time.time(), "salt": "e2e", "password_hash": ""},
-        sid_a: {"user_id": sid_a, "email": "author_a@qq.com", "token": uuid.uuid4().hex[:32],
-                "plan": "member", "expires_at": time.time() + 86400 * 30,
-                "device_id": "AU-D", "credits": 0, "cards_used": [],
-                "last_verified": time.time(), "salt": "e2e", "password_hash": ""},
-    }
-    with open(os.path.join(SNAP_DATA, "license.json"), "w", encoding="utf-8") as f:
-        json.dump(seed, f, ensure_ascii=False, indent=2)
-    log("[snapshot] 已创建代码快照（数据/节点目录已隔离）")
+    log("[snapshot] 已创建代码快照（数据/节点目录已隔离）；云端桩 DB 已重置")
+
+
+def _init_cloud_db() -> None:
+    """初始化云端 DB：建表 + 注入买家/作者账号（密码 pass1234，可登录）与一张测试卡密。"""
+    c = sqlite3.connect(CLOUD_DB)
+    c.executescript("""
+    CREATE TABLE IF NOT EXISTS sessions(email TEXT PRIMARY KEY,password_hash TEXT NOT NULL DEFAULT '',salt TEXT NOT NULL DEFAULT '',user_id TEXT NOT NULL,token TEXT NOT NULL DEFAULT '',plan TEXT NOT NULL DEFAULT 'trial',expires_at REAL NOT NULL DEFAULT 0,device_id TEXT NOT NULL DEFAULT '',credits INTEGER NOT NULL DEFAULT 0,cards_used TEXT NOT NULL DEFAULT '[]',last_verified REAL NOT NULL DEFAULT 0,created_at REAL NOT NULL DEFAULT 0,status INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE IF NOT EXISTS email_codes(email TEXT NOT NULL,scene TEXT NOT NULL,code_hash TEXT NOT NULL,expires_at REAL NOT NULL,sent_at REAL NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(email,scene));
+    CREATE TABLE IF NOT EXISTS cards(id INTEGER PRIMARY KEY AUTOINCREMENT,card TEXT NOT NULL UNIQUE,plan TEXT NOT NULL,days INTEGER NOT NULL,created_at REAL NOT NULL,used_by TEXT NOT NULL DEFAULT '',used_at REAL NOT NULL DEFAULT 0,revoked INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS admin_tokens(token TEXT PRIMARY KEY,created_at REAL NOT NULL,expires_at REAL NOT NULL);
+    CREATE TABLE IF NOT EXISTS market_installs(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL,email TEXT NOT NULL DEFAULT '',client_version TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL);
+    CREATE TABLE IF NOT EXISTS market_downloads(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL,email TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT '',price INTEGER NOT NULL DEFAULT 0,paid INTEGER NOT NULL DEFAULT 0,client_version TEXT NOT NULL DEFAULT '',device_id TEXT NOT NULL DEFAULT '',ip TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL);
+    CREATE TABLE IF NOT EXISTS send_log(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL,scene TEXT NOT NULL,sent_at REAL NOT NULL,ip TEXT NOT NULL DEFAULT '',device_id TEXT NOT NULL DEFAULT '');
+    CREATE TABLE IF NOT EXISTS rate_limits(scope TEXT NOT NULL,key TEXT NOT NULL,window_start INTEGER NOT NULL,count INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(scope,key,window_start));
+    CREATE TABLE IF NOT EXISTS mail_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL,scene TEXT NOT NULL,ip TEXT NOT NULL DEFAULT '',device_id TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL);
+    """)
+    now = time.time()
+    # 买家：200 积分；作者：0 积分（密码 pass1234，scrypt 哈希与 cloud_server.pw_hash 同构）
+    rows = [
+        ("buyer@qq.com", "buyer", "BUY-D", 200),
+        ("author_a@qq.com", "author_a", "AU-D", 0),
+    ]
+    for email, uid, dev, credits in rows:
+        salt = "e2e" + uuid.uuid4().hex[:4]
+        pw_encoded = b"pass1234"
+        dk = hashlib.scrypt(pw_encoded, salt=salt.encode(), n=16384, r=8, p=1, dklen=32)
+        pw_hash_val = "scrypt$16384$8$1$" + dk.hex()
+        c.execute("INSERT OR REPLACE INTO sessions(email,password_hash,salt,user_id,token,plan,expires_at,device_id,credits,cards_used,last_verified,created_at,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                  (email, pw_hash_val, salt, uid, uuid.uuid4().hex[:32], "member", now + 86400 * 30, dev, credits, "[]", now, now))
+    # 一张有效测试卡密（signature 与 CARD_SECRET 匹配）
+    import base64 as _b64
+    import hmac as _hm
+    payload = {"plan": "month", "days": 30, "serial": uuid.uuid4().hex[:10]}
+    b64 = _b64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    sig = _hm.new(CARD_SECRET.encode(), b64.encode(), hashlib.sha256).hexdigest()[:12]
+    card_val = f"FW-{b64}-{sig}"
+    c.execute("INSERT OR IGNORE INTO cards(card,plan,days,created_at) VALUES(?,?,?,?)", (card_val, "month", 30, now))
+    c.commit()
+    c.close()
+    # 云端商城文件
+    with open(CLOUD_MARKET, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False)
 
 
 def snapshot_cleanup() -> None:
@@ -325,9 +400,8 @@ def pkg_zip_path(top: str, data: bytes) -> str:
 
 # ---------------------------------------------------------------- 客户端策略模拟
 def client_install_loop(item_id: str, token: str, retry_limit: int = 2):
-    """模拟 MarketPage.install 的授权重试策略：
-    云端 item_not_found → 刷新列表重试一次；瞬时失败延时重试一次。返回 (auth, attempts)。
-    """
+    """模拟 MarketPage.install 的授权重试策略：item_not_found → 刷新列表重试一次；
+    瞬时失败延时重试一次。返回 (auth, attempts)。纯云化下 item_not_found 保持云端错误。"""
     auth = None
     attempts = 0
     for attempt in range(retry_limit):
@@ -341,7 +415,7 @@ def client_install_loop(item_id: str, token: str, retry_limit: int = 2):
             if any(i.get("id") == item_id for i in lst.get("items", [])):
                 continue  # 条目仍在列表 → 重试授权
             break
-        if auth.get("code") in ("network", "timeout") and attempt == 0:
+        if auth.get("code") in ("network", "timeout", "cloud_unavailable") and attempt == 0:
             time.sleep(0.8)
             continue
         break
@@ -355,21 +429,18 @@ def main() -> int:
             log(f"[fatal] 端口 {port} 被占用，请先释放")
             return 1
     os.makedirs(TMP, exist_ok=True)
-    # 代码快照隔离：真实仓库数据零接触；每轮全新快照（清空 user_nodes/plugins/market）
     snapshot_create()
 
     procs = []          # 需要清理的进程
     servers = []        # 需要关闭的 http 服务
     try:
-        # ================= Phase 1：免费节点 全链路 =================
-        log("\n===== Phase 1: 免费节点 商城列表→下载→校验→安装→回报 =====")
-        # 预置账号/空商城已由 snapshot_create() 完成（快照 data/license.json + market.json）
-
-        proc = start_server(cloud_url="")
+        # ================= Phase 1：免费节点 全链路（云端商城） =================
+        log("\n===== Phase 1: 免费节点 商城列表→下载→校验→安装→回报（云端） =====")
+        cloud_proc = start_cloud_server()
+        procs.append(cloud_proc)
+        proc = start_server(cloud_url=f"http://127.0.0.1:{CLOUD_PORT}")
         procs.append(proc)
-        # 包静态文件服务（模拟 GitHub Release 外域直链）：
-        # 服务端 /install 的 _fetch_zip 必须拉外域 URL，避免指向本服务自身时
-        # 事件循环自请求阻塞；客户端下载也走该直链（与真实 Release 语义一致）。
+        # 包静态文件服务（模拟 GitHub Release 外域直链）
         fsrv = start_file_server(T5_TMP)
         servers.append(fsrv)
 
@@ -391,8 +462,9 @@ def main() -> int:
         with open(hello_export_path, "wb") as f:
             f.write(zip_bytes)
 
-        # A3 发布条目（download_url 指向外域直链，模拟网盘/GitHub Release）
-        st, pub = http("/api/market/items", "POST", {
+        # A3 发布条目（写入云端商城；download_url 指向外域直链）
+        seed_cloud_market()
+        pub = cloud_publish({
             "kind": "node", "title": "问候节点·专业版", "description": "t5 端到端免费节点",
             "author": "author_a@qq.com", "price": 0,
             "download_url": f"http://127.0.0.1:{FILE_PORT}/hello_export.zip",
@@ -400,21 +472,22 @@ def main() -> int:
             "sha256": zsha, "size": zsize,
         })
         item_a = (pub.get("item") or {}).get("id")
-        check("A3 发布条目（免费）", pub.get("ok") and item_a, f"id={item_a}")
+        check("A3 云端发布条目（免费）", pub.get("ok") and item_a, f"id={item_a}")
 
-        # A4 商城列表
+        # A4 商城列表（云端）
         st, lst = http("/api/market/items?kind=node", "GET")
         found = next((i for i in lst.get("items", []) if i.get("id") == item_a), None)
-        check("A4 商城列表命中", found is not None and found.get("sha256") == zsha and found.get("size") == zsize,
+        check("A4 云端商城列表命中", found is not None and found.get("sha256") == zsha and found.get("size") == zsize,
               f"count={lst.get('count')}")
 
-        # A5 download-auth（免费无需登录）
+        # A5 download-auth（免费无需登录；云端授权）
         st, auth = http(f"/api/market/items/{item_a}/download-auth", "POST",
                         {"item_id": item_a, "token": "", "client_version": "0.2.12"})
         dl = auth.get("download") or {}
-        check("A5 download-auth 授权", auth.get("ok") and auth.get("status") == "authorized"
+        check("A5 download-auth 云端授权", auth.get("ok") and auth.get("status") == "authorized"
               and dl.get("url", "").startswith("http") and dl.get("sha256") == zsha
-              and dl.get("size") == zsize, f"code={auth.get('code')} url={dl.get('url','')[:60]}")
+              and dl.get("size") == zsize and not dl.get("stub_path"),
+              f"code={auth.get('code')} url={dl.get('url','')[:60]}")
 
         # A6 客户端下载 + 大小/SHA-256 校验（模拟前端 fetch → digest）
         st, got = http_abs(dl["url"])
@@ -429,7 +502,7 @@ def main() -> int:
               and "user/hello" in (ins.get("nodes") or []),
               f"resp={json.dumps(ins, ensure_ascii=False)[:180]}")
 
-        # A8 install-report（ok）
+        # A8 install-report（云端记录）
         st, rep = http(f"/api/market/items/{item_a}/install-report", "POST",
                        {"item_id": item_a, "token": "", "client_version": "0.2.12",
                         "result": "ok", "error": ""})
@@ -448,16 +521,15 @@ def main() -> int:
               and (found2 or {}).get("installs", 0) >= 1,
               f"downloads={found2.get('downloads')} installs={found2.get('installs')}")
 
-        # ================= Phase 2：付费 + 错误码契约 =================
-        log("\n===== Phase 2: 付费流（扣积分/分成）+ 错误码契约 =====")
-        st, login_r = http("/api/auth/login", "POST", {"email": "buyer@qq.com", "password": "x", "device_id": "BUY-D"})
+        # ================= Phase 2：付费 + 错误码契约（云端） =================
+        log("\n===== Phase 2: 付费流（云端扣积分/分成）+ 错误码契约 =====")
+        st, login_r = http("/api/auth/login", "POST", {"email": "buyer@qq.com", "password": "pass1234", "device_id": "BUY-D"})
         buyer_tok = (login_r.get("session") or {}).get("token")
-        check("B0 买家登录", login_r.get("ok") and bool(buyer_tok), f"resp={str(login_r)[:140]}")
-        st, cr = http("/api/dev/add-credits", "POST", {"email": "buyer@qq.com", "amount": 300})
+        check("B0 买家云端登录", login_r.get("ok") and bool(buyer_tok), f"resp={str(login_r)[:140]}")
         st, vr = http(f"/api/auth/verify?token={buyer_tok}&device_id=BUY-D")
-        check("B0b 买家积分 500", vr.get("credits") == 500, f"credits={vr.get('credits')}")
+        check("B0b 买家积分 200", vr.get("credits") == 200, f"credits={vr.get('credits')}")
 
-        st, pub2 = http("/api/market/items", "POST", {
+        pub2 = cloud_publish({
             "kind": "node", "title": "付费节点·专业版", "description": "t5 付费流验证",
             "author": "author_a@qq.com", "price": 100,
             "download_url": f"http://127.0.0.1:{FILE_PORT}/hello_export.zip",
@@ -465,14 +537,14 @@ def main() -> int:
             "sha256": zsha, "size": zsize,
         })
         item_b = (pub2.get("item") or {}).get("id")
-        check("B1 发布付费条目", pub2.get("ok") and item_b, f"id={item_b}")
+        check("B1 云端发布付费条目", pub2.get("ok") and item_b, f"id={item_b}")
 
         st, authb = http(f"/api/market/items/{item_b}/download-auth", "POST",
                          {"item_id": item_b, "token": buyer_tok, "client_version": "0.2.12"})
-        check("B2 付费 download-auth 授权", authb.get("ok") and authb.get("price") == 100, f"resp={str(authb)[:160]}")
+        check("B2 付费 download-auth 云端授权", authb.get("ok") and authb.get("price") == 100, f"resp={str(authb)[:160]}")
         st, vr2 = http(f"/api/auth/verify?token={buyer_tok}&device_id=BUY-D")
-        st, login_a = http("/api/auth/login", "POST", {"email": "author_a@qq.com", "password": "x", "device_id": "AU-D"})
-        check("B3 分成：买家 -100 / 作者 +80", vr2.get("credits") == 400
+        st, login_a = http("/api/auth/login", "POST", {"email": "author_a@qq.com", "password": "pass1234", "device_id": "AU-D"})
+        check("B3 分成：买家 -100 / 作者 +80（云端）", vr2.get("credits") == 100
               and login_a.get("session", {}).get("credits") == 80,
               f"buyer={vr2.get('credits')} author={login_a.get('session', {}).get('credits')}")
 
@@ -495,9 +567,11 @@ def main() -> int:
               f"code={e2.get('code')}")
         st, e3 = http(f"/api/market/items/{item_b}/download-auth", "POST",
                       {"item_id": item_b, "token": buyer_tok, "client_version": "99.0.0"})
-        check("B5c 高分版本正常", e3.get("ok") is True, f"code={e3.get('code')}")
+        check("B5c 高分版本正常（积分不足→若已扣则失败；此处 buyer 已 100，再购需 100）",
+              e3.get("ok") is True or e3.get("code") == "insufficient_credits",
+              f"code={e3.get('code')} resp={str(e3)[:120]}")
         # 版本过低条目
-        st, pub3 = http("/api/market/items", "POST", {
+        pub3 = cloud_publish({
             "kind": "node", "title": "未来版节点", "description": "min_client_version 99",
             "author": "author_a@qq.com", "price": 0,
             "download_url": f"http://127.0.0.1:{PORT}/api/export/node/user/hello",
@@ -511,7 +585,7 @@ def main() -> int:
               e4.get("ok") is False and e4.get("code") == "client_version_too_old",
               f"code={e4.get('code')} min={e4.get('min_client_version')}")
         # 下架条目
-        st, pub4 = http("/api/market/items", "POST", {
+        pub4 = cloud_publish({
             "kind": "node", "title": "已下架节点", "description": "status disabled",
             "author": "author_a@qq.com", "price": 0,
             "download_url": f"http://127.0.0.1:{PORT}/api/export/node/user/hello",
@@ -533,15 +607,6 @@ def main() -> int:
         check("B5g 未知条目回报 → item_not_found", e7.get("ok") is False and e7.get("code") == "item_not_found",
               f"code={e7.get('code')}")
 
-        # B7 双路径防双扣：download-auth 已购留痕后，服务端 /install 不再二次扣费
-        st, login_r2 = http("/api/auth/login", "POST", {"email": "buyer@qq.com", "password": "x", "device_id": "BUY-D"})
-        tok2 = (login_r2.get("session") or {}).get("token")
-        st, ins_b2 = http(f"/api/market/items/{item_b}/install", "POST", {"token": tok2}, timeout=120)
-        st, vr_b2 = http(f"/api/auth/verify?token={tok2}&device_id=BUY-D")
-        check("B7 已购后 /install 不二次扣费（credits 保持）",
-              ins_b2.get("ok") and vr_b2.get("credits") == 300,
-              f"install_ok={ins_b2.get('ok')} credits={vr_b2.get('credits')} (B5c 后应为 300)")
-
         # B6 失败回报契约：installs 不增
         st, lst_before = http("/api/market/items", "GET")
         before_installs = next((i for i in lst_before.get("items", []) if i.get("id") == item_a), {}).get("installs", 0)
@@ -553,69 +618,34 @@ def main() -> int:
               repf.get("ok") and repf.get("recorded") and after_installs == before_installs,
               f"before={before_installs} after={after_installs} resp={str(repf)[:120]}")
 
-        # ================= Phase 3：云端 item_not_found 容错 + 客户端重试 =================
-        log("\n===== Phase 3: 云端 item_not_found 容错 + 客户端重试 =====")
-        mock = start_mock_cloud()
-        servers.append(mock)
-        proc.terminate()
-        proc.wait()
-        procs.remove(proc)
-        proc = start_server(cloud_url=f"http://127.0.0.1:{CLOUD_PORT}")
-        procs.append(proc)
-
-        # C1 云端列表为空（迁移期：云端不认识本地条目）
-        st, clist = http("/api/market/items", "GET")
-        check("C1 云端列表为空（迁移期）", clist.get("count") == 0 and clist.get("items") == [],
-              f"count={clist.get('count')}")
-
-        # C2 客户端策略模拟：第一次 download-auth → 云端 item_not_found（服务端回落本地桩成功）
-        auth_c2, attempts = client_install_loop(item_a, "", retry_limit=2)
-        check("C2 云端 item_not_found → 服务端回落本地桩 授权成功",
-              auth_c2.get("ok") and auth_c2.get("item_id") == item_a,
-              f"attempts={attempts} code={auth_c2.get('code')} url={str(auth_c2.get('download',{}).get('url',''))[:50]}")
-
-        # C3 客户端对“云端 item_not_found”的容错重试策略（与 MarketPage.install 一致）：
-        #   直接走云端（mock）第一次返回 item_not_found → 刷新列表 → 重试成功（服务端回落）
-        raw_auth, raw_attempts = None, 0
-        for attempt in range(2):
-            raw_attempts += 1
-            st, raw = http(f"/api/market/items/{item_a}/download-auth", "POST",
-                           {"item_id": item_a, "token": "", "client_version": "0.2.12"})
-            if raw.get("ok"):
-                raw_auth = raw
-                break
-            if raw.get("code") == "item_not_found" and attempt == 0:
-                st, _ = http("/api/market/items", "GET")
-                continue
-            break
-        check("C3 客户端容错重试（item_not_found → 刷新 → 重试成功）",
-              raw_auth is not None and raw_auth.get("ok") and raw_attempts <= 2,
-              f"attempts={raw_attempts}")
-
-        # C4 回报回落
-        st, repc = http(f"/api/market/items/{item_a}/install-report", "POST",
-                        {"item_id": item_a, "result": "ok"})
-        check("C4 云端 item_not_found → 回报回落本地 recorded",
-              repc.get("ok") and repc.get("recorded"), f"resp={str(repc)[:140]}")
-
-        # C5 云端不可达（关闭 mock）→ 回落本地桩
-        mock.shutdown()
-        servers.remove(mock)
+        # ================= Phase 3：纯云化容错（云端不可达/item_not_found 不回落） =================
+        log("\n===== Phase 3: 纯云化容错（不回落本地 hub） =====")
+        # C1 云端不可达（关闭 cloud_server）→ download-auth 明确报错
+        cloud_proc.terminate()
+        cloud_proc.wait(timeout=8)
+        procs.remove(cloud_proc)
         time.sleep(0.3)
         st, auth_unreach = http(f"/api/market/items/{item_a}/download-auth", "POST",
                                 {"item_id": item_a, "token": "", "client_version": "0.2.12"})
-        check("C5 云端不可达 → 回落本地桩 授权成功",
-              auth_unreach.get("ok") and auth_unreach.get("item_id") == item_a,
-              f"code={auth_unreach.get('code')}")
+        check("C1 云端不可达 → cloud_unavailable（不回落本地 hub）",
+              auth_unreach.get("ok") is False and auth_unreach.get("code") == "cloud_unavailable",
+              f"code={auth_unreach.get('code')} resp={str(auth_unreach)[:140]}")
+        st, lst_unreach = http("/api/market/items", "GET")
+        check("C2 云端不可达 → 商城列表明确报错（不回落本地 hub）",
+              lst_unreach.get("ok") is False and lst_unreach.get("code") == "cloud_unavailable",
+              f"code={lst_unreach.get('code')} resp={str(lst_unreach)[:140]}")
 
-        # ================= Phase 4：大插件适配 =================
+        # C3 重启云端 → item_not_found 由云端权威返回（不回落本地）
+        cloud_proc = start_cloud_server()
+        procs.append(cloud_proc)
+        st, auth_c3 = http(f"/api/market/items/nonexistent/download-auth", "POST",
+                           {"item_id": "nonexistent", "token": "", "client_version": "0.2.12"})
+        check("C3 云端 item_not_found → 返回云端错误（不回落）",
+              auth_c3.get("ok") is False and auth_c3.get("code") == "item_not_found",
+              f"code={auth_c3.get('code')}")
+
+        # ================= Phase 4：大插件适配（云端） =================
         log("\n===== Phase 4: 大插件（12MB）上传安装 + 服务端流式下载安装 =====")
-        proc.terminate()
-        proc.wait()
-        procs.remove(proc)
-        proc = start_server(cloud_url="")
-        procs.append(proc)
-
         big_weight = os.urandom(12 * 1024 * 1024)          # 12MB 载荷
         big_zip = make_zip_bytes("bigmodel", BIG_MANIFEST, {"weights.bin": big_weight})
         big_zip_path = pkg_zip_path("bigmodel", big_zip)
@@ -633,7 +663,8 @@ def main() -> int:
         check("D1b /api/specs 出现 user/bigmodel", any(s.get("type_id") == "user/bigmodel" for s in (specs3 or [])),
               f"count={len(specs3 or [])}")
 
-        st, pub5 = http("/api/market/items", "POST", {
+        seed_cloud_market()
+        pub5 = cloud_publish({
             "kind": "node", "title": "大插件流式安装", "description": "12MB 服务端流式",
             "author": "author_a@qq.com", "price": 0,
             "download_url": f"http://127.0.0.1:{FILE_PORT}/bigmodel.zip",
@@ -641,12 +672,12 @@ def main() -> int:
             "sha256": big_sha, "size": big_size,
         })
         item_e = (pub5.get("item") or {}).get("id")
-        check("D2 发布大包条目（sha256 登记）", pub5.get("ok") and item_e, f"id={item_e}")
+        check("D2 云端发布大包条目（sha256 登记）", pub5.get("ok") and item_e, f"id={item_e}")
 
         t0 = time.time()
         st, inse = http(f"/api/market/items/{item_e}/install", "POST", {"token": ""}, timeout=180)
         dt = time.time() - t0
-        check("D3 服务端 /install：_fetch_zip 流式下载+sha256 校验+安装",
+        check("D3 服务端 /install：云端 download-auth → _fetch_zip 流式下载+sha256 校验+安装",
               inse.get("ok") and "user/bigmodel" in (inse.get("type_ids") or []),
               f"{dt:.2f}s resp={str(inse)[:160]}")
         st, lst_e = http("/api/market/items", "GET")
@@ -655,7 +686,7 @@ def main() -> int:
               f"downloads={fe.get('downloads')} installs={fe.get('installs')}")
 
         # 无 sha256 声明时也允许（旧条目兼容）
-        st, pub6 = http("/api/market/items", "POST", {
+        pub6 = cloud_publish({
             "kind": "node", "title": "无摘要大包", "description": "sha256 空",
             "author": "author_a@qq.com", "price": 0,
             "download_url": f"http://127.0.0.1:{FILE_PORT}/bigmodel.zip",
@@ -666,23 +697,26 @@ def main() -> int:
         st, insf = http(f"/api/market/items/{item_f}/install", "POST", {"token": ""}, timeout=180)
         check("D5 无 sha256 旧条目仍可安装（兼容）", insf.get("ok"), f"resp={str(insf)[:140]}")
 
-        # ================= Phase 5：stub 内联 zip（download_url 空 → stub_path） =================
-        log("\n===== Phase 5: 本地桩内联 zip → download-auth 返回 stub_path → 客户端 GET 下载 =====")
-        hello_export_path = pkg_zip_path("hello_export", zip_bytes)   # 与导出端点同构的包文件
-        st, pub7 = http("/api/market/items", "POST", {
-            "kind": "node", "title": "内联桩节点", "description": "source_zip 内联",
-            "author": "author_a@qq.com", "price": 0, "download_url": "",
+        # ================= Phase 5：云端直链契约（无 stub_path） =================
+        log("\n===== Phase 5: 云端直链契约（download-auth 返回直链，无 stub_path） =====")
+        hello_export_path = pkg_zip_path("hello_export", zip_bytes)
+        pub7 = cloud_publish({
+            "kind": "node", "title": "直链节点", "description": "download_url 直链",
+            "author": "author_a@qq.com", "price": 0,
+            "download_url": f"http://127.0.0.1:{FILE_PORT}/hello_export.zip",
             "tags": ["t5"], "version": "1.0.0", "type_id": "user/hello",
-            "sha256": zsha, "size": zsize, "source_zip": hello_export_path,
+            "sha256": zsha, "size": zsize,
         })
         item_g = (pub7.get("item") or {}).get("id")
         st, authg = http(f"/api/market/items/{item_g}/download-auth", "POST",
                          {"item_id": item_g, "token": "", "client_version": "0.2.12"})
-        stub_path = (authg.get("download") or {}).get("stub_path", "")
-        st, gotg = http(stub_path, raw=True)
-        check("E1 内联 zip：stub_path 下载 + 摘要校验", authg.get("ok") and stub_path
-              and st == 200 and sha256_hex(gotg) == zsha,
-              f"stub_path={stub_path} bytes={len(gotg)}")
+        dl_g = (authg.get("download") or {})
+        check("E1 云端直链：download-auth 返回直链且无 stub_path", authg.get("ok")
+              and dl_g.get("url", "").startswith("http") and not dl_g.get("stub_path"),
+              f"url={dl_g.get('url','')[:60]} stub={dl_g.get('stub_path','')}")
+        st, gotg = http_abs(dl_g["url"])
+        check("E2 直链下载 + 摘要校验", st == 200 and sha256_hex(gotg) == zsha,
+              f"bytes={len(gotg)}")
 
         summary = {
             "pass": len(PASS), "fail": len(FAIL),

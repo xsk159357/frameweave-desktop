@@ -150,61 +150,42 @@ class MarketService:
         self._save()
         return item
 
-    def install(self, item_id: str, token: str, license_svc, user_nodes_dir: str) -> dict:
-        """下载并安装条目（node / workflow 均可安装；付费扣积分，20/80 分成进作者）。
+    def install(self, item_id: str, token: str, user_nodes_dir: str) -> dict:
+        """安装条目（纯云化）：先经云端 download-auth 授权（返回直链+sha256），
+        再本地下载解压安装；云端不可达/未授权 → 明确报错，绝不本地过关。
 
         - kind=node：解压插件包到 user_nodes/ 并重扫（declarative.install_zip）。
         - kind=workflow：校验 zip 内含 workflow.json，解压注册到模板注册表
           （templates.install_workflow_zip，templates_dir 由 server 启动时设置）。
-          插件缺失引导：返回 missing_type_ids（模板声明的 type_id 未安装），
-          前端跳商城缺节点引导（MarketPage 既有逻辑）。
+          插件缺失引导：返回 missing_type_ids（模板声明的 type_id 未安装）。
         """
-        it = self._items.get(item_id)
-        if it is None:
-            return {"ok": False, "code": "item_not_found", "message": "条目不存在"}
-        if it.get("status", "active") != "active":
-            return {"ok": False, "code": "item_disabled", "message": "条目已下架"}
-        if it.get("kind") not in ("node", "workflow"):
-            return {"ok": False, "code": "item_kind_invalid", "message": "kind 必须是 node 或 workflow"}
-        # 账号鉴权 + 积分扣费（node / workflow 共用；失败回滚）
-        # t5 契约加固：付费条目经 download-auth 已购（session.purchased 留痕）时，
-        # 服务端 /install 不再二次扣费（防 download-auth→install 双路径双扣）。
-        account = self._find_session(license_svc, token)
-        price = int(it.get("price") or 0)
-        purchased = (account or {}).get("purchased") or {}
-        already_purchased = bool(purchased.get(item_id)) if price > 0 else False
-        charged = False
-        if price > 0:
-            if account is None:
-                return {"ok": False, "code": "login_required", "message": "请先登录后再下载付费条目"}
-            if not already_purchased:
-                if int(account.get("credits") or 0) < price:
-                    return {"ok": False, "code": "insufficient_credits",
-                            "message": f"积分不足：需要 {price}，当前 {account.get('credits', 0)}"}
-                account["credits"] = int(account.get("credits") or 0) - price
-                # 20/80 分成：作者积分入账（作者可能是本地桩账号）
-                author_email = it.get("author", "")
-                for s in license_svc._sessions.values():
-                    if s.get("email", "").lower() == author_email.lower():
-                        s["credits"] = int(s.get("credits") or 0) + int(price * AUTHOR_SHARE)
-                        break
-                account.setdefault("purchased", {})[item_id] = time.time()
-                charged = True
-                license_svc._save()
-        # 拉取 zip：优先 download_url，其次内联 source_zip
+        from . import cloud_gateway
+        if not cloud_gateway.cloud_enabled():
+            return {"ok": False, "code": "cloud_not_configured",
+                    "message": "需要云端授权：云端授权服务器未配置，请检查网络后重试"}
+        auth = cloud_gateway.cloud_market_download_auth(item_id, token, "")
+        if auth is None:
+            return {"ok": False, "code": "cloud_unavailable",
+                    "message": "无法连接云端授权服务器，请联网后重试"}
+        if not auth.get("ok"):
+            return auth
+        dl = (auth.get("download") or {})
+        dl_url = str(dl.get("url") or "")
+        if not dl_url:
+            return {"ok": False, "code": "download_failed", "message": "云端未返回下载直链"}
+        it = self._items.get(item_id) or {
+            "id": item_id, "kind": str(auth.get("kind") or dl.get("kind") or "node"),
+            "title": str(auth.get("title") or dl.get("title") or item_id),
+            "type_id": str(auth.get("type_id") or dl.get("type_id") or ""),
+            "price": int(auth.get("price") or 0),
+            "download_url": dl_url, "sha256": str(dl.get("sha256") or ""),
+            "size": int(dl.get("size") or 0), "status": "active",
+            "source_zip": "", "publisher_pubkey": "", "archive_signature": "",
+        }
+        # 拉取 zip：优先云端直链（内联 source_zip 仅本地桩遗留兼容）
         zip_path = self._fetch_zip(it, user_nodes_dir)
         if zip_path is None:
-            if charged:
-                account["credits"] = int(account.get("credits") or 0) + price  # 回滚
-                account.get("purchased", {}).pop(item_id, None)
-                license_svc._save()
-            return {"ok": False, "code": "download_failed", "message": "下载失败：网盘直链不可用"}
-
-        def _rollback_credit():
-            if charged:
-                account["credits"] = int(account.get("credits") or 0) + price
-                account.get("purchased", {}).pop(item_id, None)
-                license_svc._save()
+            return {"ok": False, "code": "download_failed", "message": "下载失败：云端直链不可用"}
 
         try:
             if it.get("kind") == "workflow":
@@ -214,11 +195,7 @@ class MarketService:
                         zip_path, tpl_id=(it.get("type_id") or "").strip(),
                         tags=it.get("tags") or [], source="market")
                 except Exception as e:  # noqa: BLE001
-                    _rollback_credit()
                     return {"ok": False, "message": "安装失败: " + str(e)}
-                it["downloads"] = int(it.get("downloads") or 0) + 1
-                it["installs"] = int(it.get("installs") or 0) + 1
-                self._save()
                 # 插件缺失引导：模板所需 type_id 未安装时给出清单
                 from .registry import list_specs as _list_specs
                 try:
@@ -241,17 +218,19 @@ class MarketService:
                 # 归档级验签（zip 整体）：有条目 archive_signature 且可验 → 失败拒绝
                 if pubkey and archive_sig:
                     if not sg.verify_archive_signature_b64(zip_path, archive_sig, pubkey):
-                        _rollback_credit()
                         return {"ok": False, "code": limits.ERR_SIGNATURE_VERIFY,
                                 "message": "安装失败：插件包归档签名校验失败（zip 被篡改或签名不匹配）"}
                 dest = declarative.install_zip(zip_path, trust_pubkey=pubkey,
                                                required_sig=False)
             except Exception as e:  # noqa: BLE001
-                _rollback_credit()
                 return {"ok": False, "code": "install_failed", "message": "安装失败: " + str(e)}
-            it["downloads"] = int(it.get("downloads") or 0) + 1
-            it["installs"] = int(it.get("installs") or 0) + 1  # t5：服务端完成安装即计数（与 workflow 分支一致）
-            self._save()
+            # 纯云化：服务端安装成功后向云端回报 install-report（云端记录安装计数）
+            try:
+                from . import cloud_gateway as _cg
+                if _cg.cloud_enabled():
+                    _cg.cloud_market_install_report(item_id, token, "", "ok", "")
+            except Exception:  # noqa: BLE001 —— 回报失败不阻断安装成功语义
+                pass
             return {"ok": True, "message": "安装成功，节点已可用", "installed_to": dest,
                     "type_ids": [s.type_id for s in declarative.list_specs()]}
         finally:
@@ -262,99 +241,19 @@ class MarketService:
             except OSError:
                 pass
 
-    def _find_session(self, license_svc, token: str) -> Optional[dict]:
-        """按 token 找本地桩会话（与 install 内联逻辑一致，避免重复）。"""
-        if not token:
-            return None
-        for s in license_svc._sessions.values():
-            if s.get("token") == token:
-                return s
-        return None
-
-    def download_auth(self, item_id: str, token: str, license_svc,
-                      client_version: str = "") -> dict:
-        """下载授权/记录接口。
-
-        免费插件：直接授权并返回 GitHub Release 直链（服务器绝不代理文件）；
-        付费插件：校验登录 + 积分，扣价并 20/80 分成，记录下载。
-        """
-        it = self._items.get(item_id)
-        if it is None:
-            return {"ok": False, "code": "item_not_found", "message": "条目不存在"}
-        if it.get("status", "active") != "active":
-            return {"ok": False, "code": "item_disabled", "message": "条目已下架"}
-        if not client_meets_min(client_version, it.get("min_client_version", "")):
-            return {"ok": False, "code": "client_version_too_old",
-                    "message": "当前客户端版本过低，需要 %s 及以上" % it.get("min_client_version", ""),
-                    "min_client_version": it.get("min_client_version", "")}
-        account = self._find_session(license_svc, token)
-        price = int(it.get("price") or 0)
-        paid = price > 0
-        if paid:
-            if account is None:
-                return {"ok": False, "code": "login_required", "message": "请先登录后再下载付费节点"}
-            if int(account.get("credits") or 0) < price:
-                return {"ok": False, "code": "insufficient_credits",
-                        "message": f"积分不足：需要 {price}，当前 {account.get('credits', 0)}"}
-            account["credits"] = int(account.get("credits") or 0) - price
-            author_email = it.get("author", "")
-            for s in license_svc._sessions.values():
-                if s.get("email", "").lower() == author_email.lower():
-                    s["credits"] = int(s.get("credits") or 0) + int(price * AUTHOR_SHARE)
-                    break
-            # 已购留痕：后续服务端 /install 不再二次扣费（t5 契约防双扣）
-            account.setdefault("purchased", {})[item_id] = time.time()
-            license_svc._save()
-        it["downloads"] = int(it.get("downloads") or 0) + 1
-        self._append_log("download", {
-            "item_id": item_id, "item_kind": it.get("kind", ""),
-            "email": (account or {}).get("email", ""), "paid": paid, "price": price,
-            "client_version": client_version, "ts": time.time(),
-        })
-        self._save()
-        filename = (it.get("type_id") or item_id).replace("/", "_") or "plugin"
-        dl_url = it.get("download_url", "") or ""
-        # 本地桩：download_url 为空但有内联 zip → 返回本服务 /file 端点相对路径，
-        # 客户端可像网盘直链一样 GET 下载（服务器只在本机桩兜底时不代理官方 Release）。
-        stub_path = ""
-        if not dl_url and it.get("source_zip") and os.path.isfile(it["source_zip"]):
-            stub_path = f"/api/market/items/{item_id}/file"
-        return {
-            "ok": True, "status": "authorized",
-            "item_id": item_id, "title": it.get("title", ""),
-            "version": it.get("version", "1.0.0"), "kind": it.get("kind", ""),
-            "type_id": it.get("type_id", ""), "price": price,
-            "publisher_pubkey": it.get("publisher_pubkey", "") or "",
-            "archive_signature": it.get("archive_signature", "") or "",
-            "download": {
-                "filename": filename + ".zip",
-                "size": int(it.get("size") or 0),
-                "sha256": it.get("sha256", "") or "",
-                "url": dl_url,
-                "stub_path": stub_path,
-                "direct": True,
-            },
-            "direct": True,
-            "min_client_version": it.get("min_client_version", ""),
-            "client_version_ok": True,
-        }
-
     def install_report(self, item_id: str, token: str = "", client_version: str = "",
                        result: str = "ok", error: str = "") -> dict:
-        """安装回报接口：客户端装完/失败后回报，记录安装计数与日志。"""
-        it = self._items.get(item_id)
-        if it is None:
-            return {"ok": False, "code": "item_not_found", "message": "条目不存在"}
-        ok = (result or "ok").lower() in ("ok", "success", "installed")
-        if ok:
-            it["installs"] = int(it.get("installs") or 0) + 1
-            self._save()
-        self._append_log("install", {
-            "item_id": item_id, "result": result or "ok", "error": error or "",
-            "client_version": client_version, "ts": time.time(),
-        })
-        return {"ok": True, "item_id": item_id, "recorded": True,
-                "install_count": int(it.get("installs") or 0)}
+        """安装回报接口（纯云化）：转发云端记录；云端不可达 → 明确报错。"""
+        from . import cloud_gateway
+        if not cloud_gateway.cloud_enabled():
+            return {"ok": False, "code": "cloud_not_configured",
+                    "message": "需要云端授权：云端授权服务器未配置，请检查网络后重试"}
+        resp = cloud_gateway.cloud_market_install_report(
+            item_id, token, client_version, result, error)
+        if resp is None:
+            return {"ok": False, "code": "cloud_unavailable",
+                    "message": "无法连接云端授权服务器，请联网后重试"}
+        return resp
 
     def _append_log(self, kind: str, entry: dict) -> None:
         """追加下载/安装流水到 backend/data/market_log.json（保留操作留痕）。"""
