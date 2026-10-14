@@ -39,6 +39,10 @@ class ASRNode(NodeBase):
                          widget="select", options=["zh", "en", "ja", "ko", "auto"]),
                 PortSpec(name="device", type=PortType.STRING, label="设备", default="auto",
                          widget="select", options=["auto", "cpu", "cuda"]),
+                 PortSpec(name="speaker_mode", type=PortType.STRING, label="说话人模式", default="off",
+                          widget="select", options=["off", "auto", "diarization"]),
+                 PortSpec(name="role_map", type=PortType.JSON, label="角色映射", default={},
+                          widget="json", options=[]),
             ],
             version="1.0.0",
         )
