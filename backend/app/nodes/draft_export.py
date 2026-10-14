@@ -35,6 +35,8 @@ class DraftExportNode(NodeBase):
                 PortSpec(name="segments", type=PortType.SEGMENTS, label="片段列表", required=True),
                 PortSpec(name="audio", type=PortType.AUDIO, label="配音音频", required=False),
                 PortSpec(name="styled_subtitle", type=PortType.SUBTITLE, label="样式字幕", required=False),
+                PortSpec(name="timeline", type=PortType.TIMELINE, label="素材时间线", required=False),
+                PortSpec(name="bgm", type=PortType.AUDIO, label="背景音乐", required=False),
             ],
             outputs=[
                 PortSpec(name="draft", type=PortType.JSON, label="剪映草稿信息"),
@@ -73,6 +75,7 @@ class DraftExportNode(NodeBase):
         store = ctx["store"]
         segs = store.read_json(seg_asset.id) or []
         subs = store.read_json(sub_asset.id) if sub_asset else []
+        timeline_data = store.read_json(timeline_asset.id) if timeline_asset else None
         aspect = params.get("aspect", "16:9")
         res = params.get("resolution", "1080p")
         format_ = params.get("format", "jianying")
@@ -141,7 +144,7 @@ class DraftExportNode(NodeBase):
         draft_asset = store.save_asset(
             Asset(id="", kind=PortType.JSON.value, meta=results),
             payload={"format": format_, "aspect": aspect, "resolution": res,
-                     "tracks": len(segs), "results": results})
+                     "tracks": len(segs), "timeline": timeline_data or {}, "has_bgm": bool(bgm_asset), "results": results})
         xml_asset = store.save_asset(
             Asset(id="", kind=PortType.STRING.value, meta={"format": "prxml"}),
             payload={"text": xml})
