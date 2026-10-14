@@ -467,9 +467,12 @@ class H(BaseHTTPRequestHandler):
  def out_html(self):
   x=ADMIN_HTML.encode('utf-8');self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(x)));self.end_headers();self.wfile.write(x)
  def do_GET(self):
-  path=urlparse(self.path).path
+  parsed=urlparse(self.path); path=parsed.path
   if path=='/api/health':self.out({'ok':True,'service':'frameweave-cloud','version':VERSION,'protocol_version':PROTOCOL_VERSION,'auth_revision':AUTH_REVISION,'market':'v1'})
-  elif path=='/api/market/items' or path=='/api/market/list':self.out(market_list())
+  elif path=='/api/market/items' or path=='/api/market/list':
+   from urllib.parse import parse_qs
+   qs=parse_qs(parsed.query)
+   self.out(market_list({k:(v[0] if v else '') for k,v in qs.items()}))
   elif path=='/admin' or path=='/admin/':self.out_html()
   else:self.out({'ok':False,'message':'Not Found'},404)
  def do_POST(self):
