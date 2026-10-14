@@ -30,7 +30,7 @@ from typing import Optional
 
 from . import obf
 
-CLIENT_VERSION = "0.3.3"  # 与 desktop/package.json / server.APP_VERSION / cloud_server.VERSION 保持一致
+CLIENT_VERSION = "0.3.4"  # 与 desktop/package.json / server.APP_VERSION / cloud_server.VERSION 保持一致
 
 # urllib 默认遵循系统地址顺序；部分 VM 的 IPv6 可解析但不可出网。
 # 仅在一次请求失败后临时优先 IPv4，不修改全局 socket 配置。
