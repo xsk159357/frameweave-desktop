@@ -334,14 +334,20 @@ def cloud_market_install_report(item_id: str, token: str, client_version: str = 
                   "result": result, "error": error})
 
 
-def cloud_market_items() -> Optional[list]:
-    """拉取云端商城条目列表（云化时前端浏览；不可达返回 None 由本地桩回落）。"""
+def cloud_market_items(q: str = "", kind: str = "", official: str = "") -> Optional[list]:
+    """拉取云端商城条目列表，并把搜索/类型/官方筛选参数转发到云端。"""
     import urllib.request as ur
+    from urllib.parse import urlencode
     url = cloud_url()
+    query = urlencode({k: v for k, v in {"q": q, "kind": kind, "official": official}.items() if v})
+    if query:
+        url += "/api/market/items?" + query
+    else:
+        url += "/api/market/items"
     if not cloud_enabled():
         return None
     try:
-        req = ur.Request(url + "/api/market/items",
+        req = ur.Request(url,
                          headers={"Accept": "application/json",
                                   "User-Agent": "FrameWeave-Client/" + CLIENT_VERSION})
         try:

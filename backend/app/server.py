@@ -1084,7 +1084,7 @@ async def market_items(q: str = "", kind: str = "", official: str = ""):
     if not cloud_gateway.cloud_enabled():
         return {"ok": False, "code": "cloud_not_configured",
                 "message": "需要云端商城：云端授权服务器未配置，请检查网络后重试"}
-    cloud_items = await asyncio.to_thread(cloud_gateway.cloud_market_items)
+    cloud_items = await asyncio.to_thread(cloud_gateway.cloud_market_items, q, kind, official)
     if cloud_items is None:
         return {"ok": False, "code": "cloud_unavailable",
                 "message": "无法连接云端商城，请联网后重试"}

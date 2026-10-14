@@ -246,8 +246,22 @@ def find_by_token(tok):
         r=c.execute('SELECT * FROM sessions WHERE token=?',(tok,)).fetchone(); return dict(r) if r else None
     finally: c.close()
 def market_list(b=None):
+    b = b or {}
+    q = str(b.get('q') or '').strip().lower()
+    kind = str(b.get('kind') or '').strip().lower()
+    official = str(b.get('official') or '').strip().lower()
     data=_load_market()
-    items=[dict(it) for it in data.values()]
+    items=[]
+    for raw in data.values():
+        it=dict(raw)
+        if kind and str(it.get('kind') or '').lower() != kind:
+            continue
+        if official in ('1','true','yes') and not bool(it.get('official')):
+            continue
+        hay=' '.join(str(it.get(k) or '') for k in ('id','title','description','author','type_id','kind','tags')).lower()
+        if q and q not in hay:
+            continue
+        items.append(it)
     items.sort(key=lambda x:(not bool(x.get('official')),-int(x.get('downloads') or 0),-float(x.get('created_at') or 0)))
     return {'ok':True,'items':items,'count':len(items)}
 def market_download_auth(b):
