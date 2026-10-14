@@ -446,7 +446,7 @@ const onAddNode = useCallback((typeId: string) => {
     }).catch(() => { /* 新工作流为空 */ })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowId])
+  }, [workflowId, specs])
 
   // ---- 复制 / 粘贴（D2） ----
   const copySelection = useCallback(() => {
