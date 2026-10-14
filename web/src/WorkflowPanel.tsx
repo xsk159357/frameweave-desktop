@@ -122,7 +122,7 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
           <Upload size={12} /> 导入分享
         </button>
         <button disabled={readOnly || templates.length === 0} onClick={() => setShowTemplates(true)} className="fw-btn fw-btn-ghost" style={{ flex: 1, padding: '6px 6px', justifyContent: 'center', fontSize: 11.5 }}>
-          <LayoutTemplate size={12} /> 从模板新建
+          <LayoutTemplate size={12} /> 我的工作流
         </button>
         <input ref={shareInput} type="file" accept=".zip" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) void importSharedWorkflow(file); e.target.value = '' }} />
       </div>
@@ -168,7 +168,7 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
       {showTemplates && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(8,10,18,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTemplates(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: '90vw', borderRadius: 'var(--radius-xl)', padding: 18, background: 'var(--card-grad)', border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--elev-3)' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><LayoutTemplate size={15} color="var(--accent)" /> 从模板新建工作流</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><LayoutTemplate size={15} color="var(--accent)" /> 我的工作流</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {templates.map((t) => (
                 <button key={t.id} onClick={() => newFromTemplate(t.id)} style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-panel)', color: 'var(--text)' }}>

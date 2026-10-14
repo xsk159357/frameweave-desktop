@@ -410,16 +410,29 @@ const onAddNode = useCallback((typeId: string) => {
     let alive = true
     api.getWorkflow(workflowId).then((wf: any) => {
       if (!alive) return
-      const nds = (wf.nodes || []).map((n: any) => {
-        const spec = specs.find((s) => s.type_id === n.type) || specs[0]
+      const savedNodes = wf.nodes || []
+      const savedEdges = wf.edges || []
+      const missingPorts = (node: any, direction: 'inputs' | 'outputs') => {
+        const names = new Set<string>()
+        Object.keys(node[direction] || {}).forEach((name) => names.add(name))
+        savedEdges.forEach((edge: any) => {
+          if (direction === 'inputs' && String(edge.target) === String(node.id)) names.add(String(edge.targetHandle || 'input'))
+          if (direction === 'outputs' && String(edge.source) === String(node.id)) names.add(String(edge.sourceHandle || 'output'))
+        })
+        return Array.from(names).map((name) => ({ name, type: 'ANY', label: name, required: false, default: null, widget: 'text', options: [], description: '未安装节点端口' }))
+      }
+      const nds = savedNodes.map((n: any) => {
+        const spec = specs.find((s) => s.type_id === n.type)
+        const fallbackSpec = spec || ({ type_id: n.type, title: n.type, category: '未安装', version: '', inputs: missingPorts(n, 'inputs'), outputs: missingPorts(n, 'outputs'), params: [], gpu_required: false, gpu_recommended: false, streaming: false } as any)
         return {
           id: n.id, type: 'flow', position: { x: n.x, y: n.y },
+          className: spec ? undefined : 'fw-node-missing',
           data: {
-            type_id: n.type, title: spec?.title || n.type, category: spec?.category || '',
+            type_id: n.type, title: fallbackSpec.title || n.type, category: fallbackSpec.category || '',
             params: n.params || {}, last_params: n.last_params || {},
             run_history: n.run_history || [],
             status: n.status || 'pending', error: n.error || '', progress: n.progress || 0,
-            asset_ids: n.asset_ids || {}, inputs: n.inputs || {}, outputs: n.outputs || {}, spec,
+            asset_ids: n.asset_ids || {}, inputs: n.inputs || {}, outputs: n.outputs || {}, spec: fallbackSpec,
           } as FlowNodeData,
         }
       })
