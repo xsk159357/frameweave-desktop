@@ -65,6 +65,8 @@ class BatchRenderNode(NodeBase):
                          default="batch_", widget="text"),
                 PortSpec(name="max_concurrent", type=PortType.INT, label="最大并发数", default=2,
                          widget="number", description="0=不限制"),
+                 PortSpec(name="resume", type=PortType.BOOL, label="断点续跑", default=True, widget="toggle"),
+                 PortSpec(name="checkpoint_id", type=PortType.STRING, label="检查点", default="", widget="text"),
             ],
             version="1.0.0",
         )
