@@ -30,6 +30,7 @@ class ASRNode(NodeBase):
             outputs=[
                 PortSpec(name="subtitle", type=PortType.SUBTITLE, label="字幕"),
                 PortSpec(name="srt", type=PortType.STRING, label="SRT 文本"),
+                PortSpec(name="speakers", type=PortType.JSON, label="说话人与角色"),
             ],
             params=[
                 PortSpec(name="model", type=PortType.STRING, label="模型", default="large-v3",
@@ -107,7 +108,9 @@ async def transcribe(ctx, inputs, params) -> Dict[str, Any]:
     srt_asset = store.save_asset(
         Asset(id="", kind=PortType.STRING.value, meta={"format": "srt"}),
         payload={"text": srt_text})
-    return {"subtitle": sub_asset, "srt": srt_asset}
+    speakers = {"mode": params.get("speaker_mode", "off"), "roles": params.get("role_map") or {}, "segments": [{"speaker": "unknown", "role": "", "start": x["start"], "end": x["end"], "text": x["text"]} for x in subs]}
+    speaker_asset = store.save_asset(Asset(id="", kind=PortType.JSON.value, meta={"kind": "speaker_roles"}), payload=speakers)
+    return {"subtitle": sub_asset, "srt": srt_asset, "speakers": speaker_asset}
 
 
 class WhisperASRProvider:

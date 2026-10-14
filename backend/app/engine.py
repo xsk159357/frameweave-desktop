@@ -69,6 +69,14 @@ class Workflow:
     edges: List[Dict[str, Any]] = field(default_factory=list)  # {source,target,sourceHandle,targetHandle}
     created_at: float = 0.0
     updated_at: float = 0.0
+    # 影视流水线阶段状态：用于断点续跑、恢复入口和 UI 展示
+    pipeline_stage: str = "created"
+    pipeline_stage_index: int = 0
+    pipeline_stages: List[str] = field(default_factory=lambda: [
+        "created", "scene_detected", "asr_completed", "narration_generated",
+        "visual_matched", "tts_completed", "subtitles_composed", "rendered", "exported",
+    ])
+    pipeline_checkpoint: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -76,6 +84,10 @@ class Workflow:
             "nodes": [n.to_dict() for n in self.nodes.values()],
             "edges": self.edges,
             "created_at": self.created_at, "updated_at": self.updated_at,
+            "pipeline_stage": self.pipeline_stage,
+            "pipeline_stage_index": self.pipeline_stage_index,
+            "pipeline_stages": list(self.pipeline_stages),
+            "pipeline_checkpoint": dict(self.pipeline_checkpoint),
         }
 
     @classmethod
@@ -83,6 +95,10 @@ class Workflow:
         wf = cls(id=d["id"], name=d.get("name", "未命名工作流"),
                  edges=d.get("edges", []), created_at=d.get("created_at", time.time()))
         wf.updated_at = d.get("updated_at", time.time())
+        wf.pipeline_stage = d.get("pipeline_stage", "created")
+        wf.pipeline_stage_index = int(d.get("pipeline_stage_index", 0) or 0)
+        wf.pipeline_stages = list(d.get("pipeline_stages") or wf.pipeline_stages)
+        wf.pipeline_checkpoint = dict(d.get("pipeline_checkpoint") or {})
         for nd in d.get("nodes", []):
             n = GraphNode(
                 id=nd["id"], type_id=nd["type"],

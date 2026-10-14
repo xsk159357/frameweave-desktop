@@ -804,6 +804,35 @@ async def create_wf(body: WFCreate):
     wfstore.save(wf)
     return wf.to_dict()
 
+@app.patch("/api/workflows/{wfid}/pipeline-stage")
+async def update_pipeline_stage(wfid: str, body: dict):
+    """更新影视流水线阶段检查点，供断点续跑与恢复 UI 使用。"""
+    wf = wfstore.get(wfid)
+    if wf is None:
+        raise HTTPException(404, "工作流不存在")
+    stage = str(body.get("stage") or "").strip()
+    if stage not in wf.pipeline_stages:
+        raise HTTPException(422, "未知流水线阶段: " + stage)
+    wf.pipeline_stage = stage
+    wf.pipeline_stage_index = wf.pipeline_stages.index(stage)
+    checkpoint = body.get("checkpoint")
+    if isinstance(checkpoint, dict):
+        wf.pipeline_checkpoint = {**wf.pipeline_checkpoint, **checkpoint}
+    wfstore.save(wf)
+    return {"ok": True, "workflow_id": wfid, "stage": wf.pipeline_stage,
+            "stage_index": wf.pipeline_stage_index, "stages": wf.pipeline_stages,
+            "checkpoint": wf.pipeline_checkpoint}
+
+@app.post("/api/workflows/{wfid}/resume")
+async def resume_pipeline(wfid: str):
+    """返回工作流最近检查点，客户端可从该阶段继续执行。"""
+    wf = wfstore.get(wfid)
+    if wf is None:
+        raise HTTPException(404, "工作流不存在")
+    return {"ok": True, "workflow_id": wfid, "stage": wf.pipeline_stage,
+            "stage_index": wf.pipeline_stage_index, "stages": wf.pipeline_stages,
+            "checkpoint": wf.pipeline_checkpoint}
+
 @app.get("/api/workflows/{wfid}")
 async def get_wf(wfid: str):
     wf = wfstore.get(wfid)

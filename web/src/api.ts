@@ -163,6 +163,10 @@ export const api = {
     }),
 
   getWorkflow: (id: string) => req<Record<string, unknown>>('/api/workflows/' + id),
+  updatePipelineStage: (id: string, stage: string, checkpoint: Record<string, unknown> = {}) =>
+    req<{ok: boolean; workflow_id: string; stage: string; stage_index: number; stages: string[]; checkpoint: Record<string, unknown>}>('/api/workflows/' + encodeURIComponent(id) + '/pipeline-stage', { method: 'PATCH', body: JSON.stringify({ stage, checkpoint }) }),
+  resumePipeline: (id: string) =>
+    req<{ok: boolean; workflow_id: string; stage: string; stage_index: number; stages: string[]; checkpoint: Record<string, unknown>}>('/api/workflows/' + encodeURIComponent(id) + '/resume', { method: 'POST' }),
 
   deleteWorkflow: (id: string) =>
     req<{ok:boolean}>('/api/workflows/' + id, { method: 'DELETE' }),
