@@ -196,13 +196,13 @@
    - 已装插件列表（名称 / type_id / 版本 / 类别 / 节点数 / 导出 zip / 删除）
    - 「导入插件包…」文件选择（.zip）→ installUserNode → 重扫 → 列表刷新 + toast
    - 「打开插件目录」按钮（后端 reveal 机制复用）
-   - 「插件规范」帮助链接 → docs/node-plugin-spec.md
+   - 「插件规范」帮助链接 → docs/specs/node-plugin-spec.md
    - 商城入口跳转（MarketPage kind=node）
 3. **添加节点菜单整合**：用户节点/插件节点按 category 出现；缺失节点提示安装（9.2 错误态 + 商城查询）
 4. **删除**：后端无 uninstall 接口 → 本期「删除」= 移除插件目录（新增 `POST /api/user_nodes/{type_id}/remove`，P2）
 
 ### 5A.4 插件规范与识别方法
-完整规范见 [docs/node-plugin-spec.md](docs/node-plugin-spec.md)（新交付）：
+完整规范见 [docs/specs/node-plugin-spec.md](docs/specs/node-plugin-spec.md)（新交付）：
 - 包结构：`user_nodes/<pkg>/manifest.json` + 可选资源
 - manifest：type_id（唯一 `pkg/节点名`）/ title / category / kind（transform）/ inputs / outputs / params / transform ops
 - 识别：启动与 reload 时 scan() 扫目录读 manifest → 校验白名单 → 注册 NodeSpec → specs 下发

@@ -8,4 +8,4 @@
 - desktop/  — Electron 壳
 
 ## 快速开始
-见 docs/M0_开发指南.md
+见 [docs/guides/开发指南.md](docs/guides/开发指南.md)（完整开发指南；文档索引见 [docs/README.md](docs/README.md)）

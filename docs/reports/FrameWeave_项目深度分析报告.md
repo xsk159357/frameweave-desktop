@@ -1,7 +1,7 @@
 # 拾帧 FrameWeave 项目深度分析报告（v0.2.12）
 
 > 分析对象：F:\1223\解说工坊\FrameWeave（自研产品，全量源码逐文件阅读）
-> 依据：backend/app 全部模块 + cloud_server.py + 10 个核心节点插件 + web/src 全部组件 + desktop 壳 + scripts 构建链 + docs/M1-M19 里程碑报告 + git 历史（HEAD f8d37fc）
+> 依据：backend/app 全部模块 + cloud_server.py + 10 个核心节点插件 + web/src 全部组件 + desktop 壳 + scripts 构建链 + docs/records（M1-M19 里程碑报告）+ git 历史（HEAD f8d37fc）
 > 声明：本文所有结论来自磁盘源码与文档，未运行程序；「观察」标注为代码审查意见，非已验证缺陷
 
 ---
