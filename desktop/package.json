@@ -1,6 +1,6 @@
 {
   "name": "frameweave-desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",

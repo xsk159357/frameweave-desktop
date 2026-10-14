@@ -1,11 +1,11 @@
 {
   "v": 1,
-  "generated_at": "2026-10-13T19:04:45.901Z",
+  "generated_at": "2026-10-14T10:40:37.745Z",
   "files": {
-    "main.cjs": "c2a93adcbb9e4a907d3c5b488901f1a466b39ab40282098ba9a84ad799da0986",
-    "preload.cjs": "45fa7ea1fbb2c0cd53449a98f653f143f56b70697b146e27e6265a3bdc75aefd",
-    "web/dist/assets/index-Bakf0MEf.js": "48fef9bc906eac4b3abdba019138ced934cedaa8caeab5f145b18227980912e3",
+    "main.cjs": "9f41d125b049055bd0ee6c450274b263774b165486d61cf0abafb16704a29384",
+    "preload.cjs": "b8745814bc1903a79c99f8faf6700db6781c7d376671d9fa32faf95bead1e6a2",
     "web/dist/assets/index-Cf9XWsb4.css": "276766d0d8c23d95a7da63fa6337e3c90e265edc60461f00e265e4d27f93cbc4",
-    "web/dist/index.html": "e67276100d8c11c0555cb6e406e5091c11f924747de5d3c343d98070e76ea51c"
+    "web/dist/assets/index-CXQS1YZi.js": "84ed37c4cd05fbccc4e786617771f01e7af76847333c92a8f65c65a02e41f720",
+    "web/dist/index.html": "fe379de1ec03db023354758e61dd6b9a2b0102a4ceeb30a93250237044e0ede9"
   }
 }
