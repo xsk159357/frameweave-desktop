@@ -1,6 +1,6 @@
 // 左侧工作流列表（v1.2：替代节点库侧栏；节点添加移入画布右键菜单）
 import { useEffect, useState } from 'react'
-import { Plus, Search, FileText, Download, Trash2, Puzzle, Layers, PencilLine } from 'lucide-react'
+import { Plus, Search, FileText, Download, Trash2, Puzzle, Layers, PencilLine, LayoutTemplate } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -18,6 +18,8 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
   const [list, setList] = useState<{ id: string; name: string; updated_at: number }[]>([])
   const [query, setQuery] = useState('')
   const [plugCount, setPlugCount] = useState(0)
+  const [templates, setTemplates] = useState<{ id: string; title: string; description: string; nodes: number }[]>([])
+  const [showTemplates, setShowTemplates] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null)
   const [nameBox, setNameBox] = useState<null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }>(null)
   const [nameInput, setNameInput] = useState('')
@@ -25,6 +27,7 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
   const refresh = async () => {
     try { const l = await api.listWorkflows(); setList(l || []) } catch { /* ignore */ }
     try { const u = await api.userNodes(); setPlugCount((u.nodes || []).length) } catch { /* ignore */ }
+    try { const t = await api.listTemplates(); setTemplates(t || []) } catch { /* ignore */ }
   }
   useEffect(() => { refresh() }, [workflowId])
 
@@ -51,6 +54,16 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
         else pushToast('没有工作流了，点 + 新建', 'info')
       }
     } catch (e: any) { pushToast('删除失败: ' + (e.message || e), 'err') }
+  }
+
+  const newFromTemplate = async (tplId: string) => {
+    setShowTemplates(false)
+    try {
+      const created = await api.createFromTemplate(tplId)
+      setWorkflow((created as any).id, (created as any).name || '模板工作流')
+      setTimelineNodeId(null)
+      refresh()
+    } catch (e: any) { pushToast('创建模板失败: ' + (e.message || e), 'err') }
   }
 
   const submitName = async () => {
@@ -94,6 +107,13 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
           <><Plus size={13} /> 新建工作流</>
         </button>
       </div>
+      {/* 从模板新建：保留在左侧工作流区域，不再占用顶部标题栏 */}
+      <div style={{ padding: '0 12px 8px' }}>
+        <button disabled={readOnly || templates.length === 0} onClick={() => setShowTemplates(true)}
+          className="fw-btn fw-btn-ghost" style={{ width: '100%', padding: '6px 10px', justifyContent: 'center', fontSize: 12 }}>
+          <LayoutTemplate size={13} /> 从模板新建
+        </button>
+      </div>
       {/* 搜索 */}
       <div style={{ padding: '0 12px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '5px 9px' }}>
@@ -133,6 +153,22 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
           )
         })}
       </div>
+      {showTemplates && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(8,10,18,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTemplates(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: '90vw', borderRadius: 'var(--radius-xl)', padding: 18, background: 'var(--card-grad)', border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--elev-3)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><LayoutTemplate size={15} color="var(--accent)" /> 从模板新建工作流</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {templates.map((t) => (
+                <button key={t.id} onClick={() => newFromTemplate(t.id)} style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-panel)', color: 'var(--text)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 650 }}>{t.title}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.description} · {t.nodes} 节点</div>
+                </button>
+              ))}
+              {templates.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>暂无模板，请先从商城安装工作流模板。</div>}
+            </div>
+          </div>
+        </div>
+      )}
       {/* 底部占位（插件入口已置顶） */}
       {menu && (
         <div style={{ position: 'fixed', left: menu.x, top: menu.y, zIndex: 60, minWidth: 168,

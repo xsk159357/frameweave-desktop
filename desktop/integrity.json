@@ -1,11 +1,11 @@
 {
   "v": 1,
-  "generated_at": "2026-10-14T10:40:37.745Z",
+  "generated_at": "2026-10-14T16:10:08.136Z",
   "files": {
     "main.cjs": "9f41d125b049055bd0ee6c450274b263774b165486d61cf0abafb16704a29384",
     "preload.cjs": "b8745814bc1903a79c99f8faf6700db6781c7d376671d9fa32faf95bead1e6a2",
     "web/dist/assets/index-Cf9XWsb4.css": "276766d0d8c23d95a7da63fa6337e3c90e265edc60461f00e265e4d27f93cbc4",
-    "web/dist/assets/index-CXQS1YZi.js": "84ed37c4cd05fbccc4e786617771f01e7af76847333c92a8f65c65a02e41f720",
-    "web/dist/index.html": "fe379de1ec03db023354758e61dd6b9a2b0102a4ceeb30a93250237044e0ede9"
+    "web/dist/assets/index-CRvpyTZI.js": "9589df53f92f68696295ce4a0dd25b4a4218ffc77d4d1bfdc9fe8b1f46213c26",
+    "web/dist/index.html": "c38e7af0ccbb4f4583660bdd157c60c124d001c9044f579e2b25e3e93d1474be"
   }
 }

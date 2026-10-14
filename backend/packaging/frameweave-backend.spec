@@ -64,6 +64,9 @@ a = Analysis(
         (os.path.join(_SPEC_DIR, '..', 'models_registry.json'), '.'),
         # 插件 schema 权威依据（manifest_v2 文档引用；含则不缺）
         (os.path.join(_SPEC_DIR, '..', 'schemas'), 'schemas'),
+        # P3 官方插件验签信任锚与撤销清单：signatures.py 按 __file__ 同目录读取
+        (os.path.join(_SPEC_DIR, '..', 'app', 'fw_official_pubkey.json'), 'app'),
+        (os.path.join(_SPEC_DIR, '..', 'app', 'revocations.json'), 'app'),
         # IndexTTS2 服务脚本（打包版外部 indextts 目录未就绪时保留随包副本）
         (os.path.join(_SPEC_DIR, '..', 'voice_clone'), 'voice_clone'),
     ],

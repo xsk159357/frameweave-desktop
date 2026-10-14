@@ -1,6 +1,6 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, Store, Crown, Sparkles, ChevronDown, Plus, LayoutTemplate, CheckCircle2, AlertCircle, Info, Trash2, Puzzle, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
+import { RefreshCw, Store, Crown, Sparkles, CheckCircle2, AlertCircle, Info, Puzzle, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -17,7 +17,6 @@ export default function App() {
   const specs = useAppStore((s) => s.specs)
   const setSpecs = useAppStore((s) => s.setSpecs)
   const workflowId = useAppStore((s) => s.workflowId)
-  const workflowName = useAppStore((s) => s.workflowName)
   const setWorkflow = useAppStore((s) => s.setWorkflow)
   const timelineNodeId = useAppStore((s) => s.timelineNodeId)
   const nodeAssets = useAppStore((s) => s.nodeAssets)
@@ -30,10 +29,6 @@ export default function App() {
   const [showAccount, setShowAccount] = useState(false)
   const [showWorkflowDrawer, setShowWorkflowDrawer] = useState(false)
   const [engineReady, setEngineReady] = useState(false)
-  const [wfMenu, setWfMenu] = useState(false)
-  const [wfList, setWfList] = useState<{ id: string; name: string; updated_at: number }[]>([])
-  const [tplList, setTplList] = useState<{ id: string; title: string; description: string; nodes: number }[]>([])
-  const [showTpl, setShowTpl] = useState(false)
   const [backend, setBackend] = useState<null | boolean>(null)
   const [authNotice, setAuthNotice] = useState('')
   const [showProfile, setShowProfile] = useState(false)
@@ -132,39 +127,7 @@ export default function App() {
     return () => { alive = false }
   }, [session, setSpecs, setWorkflow])
 
-  // 打开工作流下拉时拉取列表
-  const openWfMenu = async () => {
-    setWfMenu(true)
-    try {
-      const list = await api.listWorkflows()
-      setWfList(list || [])
-      try { const t = await api.listTemplates(); setTplList(t || []) } catch { /* ignore */ }
-    } catch { /* ignore */ }
-  }
-
-  const switchWf = (id: string, name: string) => {
-    setWorkflow(id, name)
-    setWfMenu(false)
-    useAppStore.getState().setTimelineNodeId(null)
-  }
-
-  const newWf = async () => {
-    setWfMenu(false)
-    try {
-      const created = await api.createWorkflow('新工作流')
-      setWorkflow((created as any).id, '新工作流')
-      useAppStore.getState().setTimelineNodeId(null)
-    } catch (e: any) { useAppStore.getState().pushToast('新建失败: ' + (e.message || e), 'err') }
-  }
-
-  const newFromTpl = async (tplId: string) => {
-    setShowTpl(false); setWfMenu(false)
-    try {
-      const created = await api.createFromTemplate(tplId)
-      setWorkflow((created as any).id, (created as any).name || '模板工作流')
-      useAppStore.getState().setTimelineNodeId(null)
-    } catch (e: any) { useAppStore.getState().pushToast('创建失败: ' + (e.message || e), 'err') }
-  }
+  // 模板入口从左侧工作流管理区打开；顶部保持简洁，当前工作流由左侧列表体现。
 
   // M17：在线校验（启动即验 + 每 30s 周期轮询）
   // 产品策略：账号登录制，单端在线——同一账号在新设备登录后，旧设备立即被踢下线。
@@ -287,74 +250,6 @@ export default function App() {
           <span style={{ fontWeight: 750, fontSize: 15, letterSpacing: .2 }}>拾帧 FrameWeave</span>
           <span className="fw-pill" style={{ border: '1px solid var(--border)', color: 'var(--text-faint)', background: 'transparent', fontWeight: 500 }}>v{__APP_VERSION__}</span>
         </div>
-        {/* 工作流下拉（A3） */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => wfMenu ? setWfMenu(false) : openWfMenu()}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999,
-              border: 'var(--glass-border)', background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-              boxShadow: 'var(--glass-inner)', maxWidth: 220, cursor: 'pointer', color: 'var(--text-dim)',
-            }}
-          >
-            <FileText size={13} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-            <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workflowName || workflowId}</span>
-            <ChevronDown size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-          </button>
-          {wfMenu && (
-            <div style={{
-              position: 'absolute', left: 0, top: 40, zIndex: 500, width: 280,
-              background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-              border: 'var(--glass-border)', borderRadius: 14, boxShadow: 'var(--glass-inner), var(--shadow-lg)',
-              padding: 6,
-            }}>
-              <div style={{ padding: '6px 10px 4px', fontSize: 10.5, fontWeight: 700, letterSpacing: 1, color: 'var(--text-faint)' }}>工作流（{wfList.length}）</div>
-              <div style={{ maxHeight: 220, overflow: 'auto' }}>
-                {wfList.map((w) => (
-                  <div key={w.id} onClick={() => switchWf(w.id, w.name)}
-                    style={{
-                      padding: '7px 10px', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
-                      fontSize: 12.5, color: w.id === workflowId ? 'var(--text)' : 'var(--text-dim)',
-                      background: w.id === workflowId ? 'var(--hover-bg)' : 'transparent',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = w.id === workflowId ? 'var(--hover-bg)' : 'var(--hover-bg)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = w.id === workflowId ? 'var(--hover-bg)' : 'transparent' }}
-                  >
-                    <FileText size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name || w.id}</span>
-                    {w.id === workflowId && <span style={{ color: 'var(--accent)' }}>●</span>}
-                  </div>
-                ))}
-              </div>
-              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-              <div style={{ padding: '6px 10px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
-                onClick={newWf} onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
-                <Plus size={13} /> 新建工作流
-              </div>
-              <div style={{ padding: '6px 10px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}
-                onClick={() => setShowTpl(true)} onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
-                <LayoutTemplate size={13} /> 从模板新建…
-              </div>
-              {workflowId && (
-                <div style={{ padding: '6px 10px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 7 }}
-                  onClick={async () => {
-                    if (!window.confirm('删除当前工作流？此操作不可恢复。')) return
-                    setWfMenu(false)
-                    try {
-                      await api.deleteWorkflow(workflowId)
-                      useAppStore.getState().pushToast('工作流已删除', 'info')
-                      const list = await api.listWorkflows()
-                      if (list.length > 0) setWorkflow(list[0].id, (list[0] as any).name || '')
-                      else { const c = await api.createWorkflow('新工作流'); setWorkflow((c as any).id, '新工作流') }
-                    } catch (e: any) { useAppStore.getState().pushToast('删除失败: ' + (e.message || e), 'err') }
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.12)' }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
-                  <Trash2 size={13} /> 删除当前工作流
-                </div>
-              )}
-            </div>
-          )}
-        </div>
         <span style={{ flex: 1 }} />
         {/* 右侧操作（分组：更新｜插件/商城｜设置/账户；预留原生控件区 150px） */}
         <div className="fw-topbar-actions fw-topbar-groups" style={{ position: 'relative' }}>
@@ -393,34 +288,6 @@ export default function App() {
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
       {/* 模板选择弹层 */}
-      {showTpl && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(8,10,18,.46)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTpl(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            width: 560, maxWidth: '90vw', borderRadius: 'var(--radius-xl)', padding: 18,
-            background: 'var(--card-grad)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-            border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--elev-3)',
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><LayoutTemplate size={15} color="var(--accent)" /> 从模板新建工作流</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {tplList.map((t) => (
-                <div key={t.id} onClick={() => newFromTpl(t.id)} style={{
-                  padding: '10px 12px', borderRadius: 12, cursor: 'pointer', border: '1px solid var(--border)',
-                  background: 'var(--bg-panel)', transition: 'border-color .15s',
-                }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)' }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 650 }}>{t.title}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.description} · {t.nodes} 节点</div>
-                </div>
-              ))}
-              {tplList.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.7, padding: '4px 2px' }}>
-                  暂无模板。<br />节点与模板由商城提供——请先到<strong>「商城」</strong>安装节点后，再从商城/导出导入工作流模板。
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 主体：工作流导航 + 中央画布（方案 B：画布为焦点，导航固定可见） */}
       <div className="fw-main-layout">
         <aside className="fw-workspace-sidebar" aria-label="工作流导航">
