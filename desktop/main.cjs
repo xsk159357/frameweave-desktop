@@ -391,6 +391,19 @@ function setupAutoUpdate() {
   ipcMain.on('check-for-update', () => {
     checkForUpdatesWithFallback()
   })
+  ipcMain.on('download-update', () => {
+    if (!updateInProgress) {
+      updateInProgress = true
+      autoUpdater.downloadUpdate().catch((err) => {
+        updateInProgress = false
+        sendUpdateStatus('error', friendlyUpdateError(err))
+      })
+    }
+  })
+  ipcMain.on('install-update', () => {
+    if (updateInProgress) return
+    autoUpdater.quitAndInstall()
+  })
 
   if (!app.isPackaged) {
     console.log('[updater] 开发模式跳过自动更新')
@@ -413,21 +426,7 @@ function setupAutoUpdate() {
     const v = info && info.version
     sendUpdateStatus('info', '发现新版本 ' + v + '，请在弹窗中确认下载', v)
     mainWindow && mainWindow.webContents.send('update:available', v)
-    if (mainWindow && !updateInProgress) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '发现新版本',
-        message: '发现新版本 ' + v + '，是否现在下载并安装？',
-        buttons: ['立即更新', '稍后'],
-        defaultId: 0,
-        cancelId: 1,
-      }).then(({ response }) => {
-        if (response === 0) {
-          updateInProgress = true
-          autoUpdater.downloadUpdate()
-        }
-      })
-    }
+
   })
 
   autoUpdater.on('update-not-available', () => {
@@ -443,17 +442,7 @@ function setupAutoUpdate() {
 
   autoUpdater.on('update-downloaded', (info) => {
     updateInProgress = false
-    if (mainWindow) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '更新就绪',
-        message: '新版本 ' + info.version + ' 已下载完成，重启应用完成更新？',
-        buttons: ['立即重启', '稍后'],
-        defaultId: 0,
-      }).then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall()
-      })
-    }
+    sendUpdateStatus('downloaded', '新版本 ' + info.version + ' 已下载完成', info.version)
   })
 
   autoUpdater.on('error', (err) => {

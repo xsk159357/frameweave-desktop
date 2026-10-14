@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('frameweave', {
   log: (level, msg) => ipcRenderer.send('fw-log', { level, msg }),
   // 自动更新桥
   checkForUpdate: () => ipcRenderer.send('check-for-update'),
+  downloadUpdate: () => ipcRenderer.send('download-update'),
+  installUpdate: () => ipcRenderer.send('install-update'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, v) => cb(v)),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
   onUpdateStatus: (cb) => ipcRenderer.on('update:status', (_e, s) => cb(s)),

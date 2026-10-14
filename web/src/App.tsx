@@ -1,6 +1,6 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
-import { RefreshCw, Store, Crown, Sparkles, CheckCircle2, AlertCircle, Info, Puzzle, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
+import { RefreshCw, Store, Crown, Sparkles, CheckCircle2, AlertCircle, Info, Puzzle, Download, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
@@ -31,6 +31,7 @@ export default function App() {
   const [engineReady, setEngineReady] = useState(false)
   const [backend, setBackend] = useState<null | boolean>(null)
   const [authNotice, setAuthNotice] = useState('')
+  const [updateState, setUpdateState] = useState<{ mode: 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'latest'; version?: string; message?: string; progress?: number } | null>(null)
   const [showProfile, setShowProfile] = useState(false)
   const [profileCard, setProfileCard] = useState('')
   const [subscriptionExpired, setSubscriptionExpired] = useState(() => !!session?.expiresAt && session.expiresAt <= Date.now())
@@ -43,14 +44,28 @@ export default function App() {
     try { ;(window as any).frameweave?.window?.setTitlebarTheme?.(settings.theme) } catch { /* 浏览器模式忽略 */ }
   }, [settings.theme])
 
-  // 自动更新状态反馈：按钮点击、最新版本、错误、开发模式均显示 toast
+  // 自动更新状态统一进入更新面板，不再使用原生丑陋弹窗。
   useEffect(() => {
     const onStatus = (s: any) => {
-      const kind = s?.type === 'error' ? 'err' : s?.type === 'ok' ? 'ok' : 'info'
-      useAppStore.getState().pushToast(s?.message || '更新状态未知', kind)
+      const type = s?.type === 'error' ? 'error' : s?.type === 'ok' ? 'latest' : s?.type === 'downloaded' ? 'downloaded' : 'checking'
+      setUpdateState((prev) => ({ mode: type, version: s?.version || prev?.version, message: s?.message }))
     }
-    try { const w = (window as any).frameweave; w?.onUpdateStatus?.(onStatus) } catch { /* 浏览器模式 */ }
+    const onAvailable = (v: string) => setUpdateState({ mode: 'available', version: v, message: '新版本已准备好下载' })
+    const onProgress = (p: number) => setUpdateState((prev) => ({ mode: 'downloading', version: prev?.version, progress: p, message: '正在下载更新' }))
+    try {
+      const w = (window as any).frameweave
+      w?.onUpdateStatus?.(onStatus)
+      w?.onUpdateAvailable?.(onAvailable)
+      w?.onUpdateProgress?.(onProgress)
+    } catch { /* 浏览器模式 */ }
   }, [])
+
+  const triggerUpdateCheck = () => {
+    setUpdateState({ mode: 'checking', message: '正在检查更新…' })
+    try { (window as any).frameweave?.checkForUpdate() } catch { setUpdateState({ mode: 'error', message: '当前环境不支持自动更新' }) }
+  }
+  const closeUpdate = () => setUpdateState(null)
+
 
   // 画布右键菜单「导入节点插件」事件
   useEffect(() => {
@@ -260,7 +275,7 @@ export default function App() {
             <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
           </div>}
           <div className="fw-topbar-group">
-            <button className="fw-btn fw-btn-ghost" onClick={() => { try { (window as any).frameweave?.checkForUpdate() } catch { /* 浏览器模式 */ } }}>
+            <button className="fw-btn fw-btn-ghost" onClick={triggerUpdateCheck}>
               <><RefreshCw size={13} /> 更新</>
             </button>
           </div>
@@ -286,6 +301,27 @@ export default function App() {
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}
       {showPlugin && <PluginPanel onClose={() => setShowPlugin(false)} />}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+
+      {updateState && (
+        <div className="fw-update-overlay" role="dialog" aria-modal="true" aria-labelledby="fw-update-title">
+          <div className="fw-update-card">
+            <div className="fw-update-mark"><Download size={22} /></div>
+            <div className="fw-update-kicker">FRAMEWEAVE UPDATE</div>
+            <h2 id="fw-update-title">{updateState.mode === 'available' ? '发现新版本' : updateState.mode === 'downloading' ? '正在下载更新' : updateState.mode === 'downloaded' ? '更新已准备好' : updateState.mode === 'latest' ? '已是最新版本' : updateState.mode === 'error' ? '更新遇到问题' : '检查更新'}</h2>
+            <p className="fw-update-message">{updateState.message || '正在获取更新状态…'}</p>
+            {updateState.version && <div className="fw-update-version">v{updateState.version}</div>}
+            {updateState.mode === 'downloading' && <div className="fw-update-progress"><div className="fw-update-progress-track"><div className="fw-update-progress-fill" style={{ width: `${Math.max(0, Math.min(100, updateState.progress || 0))}%` }} /></div><div className="fw-update-progress-meta"><span>{Math.round(updateState.progress || 0)}%</span><span>请保持应用开启</span></div></div>}
+            <div className="fw-update-actions">
+              {updateState.mode === 'available' && <button className="fw-btn fw-btn-primary" onClick={() => { setUpdateState((p) => p ? ({ ...p, mode: 'downloading', progress: 0, message: '正在下载更新' }) : p); try { (window as any).frameweave?.downloadUpdate() } catch {} }}><Download size={14} /> 下载更新</button>}
+              {updateState.mode === 'downloaded' && <button className="fw-btn fw-btn-primary" onClick={() => { try { (window as any).frameweave?.installUpdate() } catch {} }}>立即重启安装</button>}
+              {(updateState.mode === 'checking' || updateState.mode === 'downloading') && <button className="fw-btn fw-btn-ghost" disabled>处理中…</button>}
+              {updateState.mode === 'latest' && <button className="fw-btn fw-btn-primary" onClick={closeUpdate}>知道了</button>}
+              {updateState.mode === 'error' && <button className="fw-btn fw-btn-primary" onClick={triggerUpdateCheck}>重试</button>}
+              {(updateState.mode === 'available' || updateState.mode === 'error') && <button className="fw-btn fw-btn-ghost" onClick={closeUpdate}>稍后</button>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 模板选择弹层 */}
       {/* 主体：工作流导航 + 中央画布（方案 B：画布为焦点，导航固定可见） */}
