@@ -97,6 +97,12 @@ export const api = {
 
   reloadUserNodes: () => req<{ ok: boolean; loaded: number; nodes: string[] }>('/api/user_nodes/reload', { method: 'POST' }),
 
+  importWorkflowZip: (file: File, timeoutMs = 120000) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return reqMulti<{ ok: boolean; tpl_id: string; name: string; node_count: number; message?: string }>('/api/workflows/import', fd, timeoutMs)
+  },
+
   // ---- P1 插件生命周期（t3）：禁用/启用/升级/回滚/卸载/健康检查/指标 ----
   pluginDisable: (pkg: string) =>
     req<{ ok: boolean; state?: string; pkg?: string; type_id?: string; version?: string; already?: boolean; code?: string; message?: string }>('/api/user_nodes/' + encodeURIComponent(pkg) + '/disable', { method: 'POST' }),

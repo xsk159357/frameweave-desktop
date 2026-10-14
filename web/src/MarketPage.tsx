@@ -52,6 +52,10 @@ function codeText(code?: string) {
   return (code && CODE_TEXT[code]) || code || '未知错误'
 }
 
+function itKind(items: MarketItem[], id: string) {
+  return items.find((item) => item.id === id)?.kind || ''
+}
+
 function fmtSize(n?: number) {
   if (!n) return ''
   if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(1) + ' GB'
@@ -202,26 +206,37 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         setStep({ label: 'SHA-256 校验通过', pct: 100, sha: actual.slice(0, 16) })
       }
 
-      // ---- 4. 上传安装（XHR 流式上传，10 分钟超时 + 实时进度；大插件适配） ----
-      setStep({ label: '正在安装插件', pct: 0 })
+      // ---- 4. 按类型导入：节点安装 / 工作流模板导入 ----
       const name = dl.filename || (auth.type_id || id).split('/').pop() + '.zip'
       const file = new File([blob], name, { type: 'application/zip' })
-      const installed = await api.installUserNode(file, (p) => setStep({ label: '正在安装插件', pct: p }))
-      if (!installed.ok) throw fail((installed as any).code || 'install_failed', installed.message || '插件安装失败')
+      const isWorkflow = auth.kind === 'workflow' || itKind(items, id) === 'workflow'
+      if (isWorkflow) {
+        setStep({ label: '正在导入工作流', pct: 0 })
+        const imported = await api.importWorkflowZip(file)
+        if (!imported.ok) throw fail('workflow_import_failed', imported.message || '工作流导入失败')
+        setStep({ label: '工作流已导入', pct: 100 })
+      } else {
+        setStep({ label: '正在安装节点', pct: 0 })
+        const installed = await api.installUserNode(file, (p) => setStep({ label: '正在安装节点', pct: p }))
+        if (!installed.ok) throw fail((installed as any).code || 'install_failed', installed.message || '节点安装失败')
+      }
 
       // ---- 5. 安装回报（失败容错：旧服务不识别回报时不影响安装成功） ----
       setStep({ label: '回报安装结果' })
       await report(reportId, 'ok')
 
-      // ---- 6. 节点库刷新（reload 重扫 + /api/specs → setSpecs 广播 fw-nodes-installed） ----
-      setStep({ label: '刷新节点库' })
-      await api.reloadUserNodes()
-      try { const s = await api.specs(); setSpecs(s || []) } catch { /* ignore */ }
+      // ---- 6. 节点刷新；工作流导入后由模板列表自动读取 ----
+      if (!isWorkflow) {
+        setStep({ label: '刷新节点库' })
+        await api.reloadUserNodes()
+        try { const s = await api.specs(); setSpecs(s || []) } catch { /* ignore */ }
+      }
       if (session?.token && session?.deviceId) {
         try { const v = await api.verify(session.token, session.deviceId); if (v.ok && v.credits != null) setCredits(v.credits) } catch { /* ignore */ }
       }
-      setMsg('安装成功，节点已可用')
-      pushToast('插件安装成功，节点已可用', 'ok')
+      const successText = isWorkflow ? '工作流已导入，可从左侧模板入口创建' : '节点安装成功，节点已可用'
+      setMsg(successText)
+      pushToast(successText, 'ok')
       load()
     } catch (e: any) {
       const code = e.code || ''
@@ -325,13 +340,21 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
                     {it.sha256 && <span title={'SHA-256: ' + it.sha256} style={{ fontFamily: 'var(--font-mono)' }}><ShieldCheck size={10} style={{ verticalAlign: -1 }} /> SHA-256 {it.sha256.slice(0, 12)}…</span>}
                     {it.size ? <span>{fmtSize(it.size)}</span> : null}
                     {it.min_client_version ? <span style={{ color: '#e0a800' }}>需 v{it.min_client_version}+</span> : null}
-                    {installed && <span style={{ color: 'var(--success)', marginLeft: 'auto' }}><CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> 已安装</span>}
+                    {it.kind === 'workflow' && <span style={{ color: 'var(--success)', marginLeft: 'auto' }}>工作流</span>}
+                    {installed && it.kind === 'node' && <span style={{ color: 'var(--success)', marginLeft: 'auto' }}><CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> 已安装</span>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--text-faint)' }}>
                     <button onClick={() => setAuthor(it.author)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}><User size={12} /> {it.author}</button>
                     <span>↓ {it.downloads}</span>
                     {typeof it.installs === 'number' && <span>✓ {it.installs}</span>}
                     <div style={{ flex: 1 }} />
+                    {it.kind === 'workflow' && (
+                      <button onClick={() => install(it.id)} disabled={busy}
+                        title="下载并导入工作流"
+                        style={{ padding: '4px 12px', borderRadius: 8, cursor: busy ? 'default' : 'pointer', fontSize: 12, border: 'none', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--success-soft)', color: 'var(--success)' }}>
+                        <Download size={13} /> 下载并导入
+                      </button>
+                    )}
                     {it.kind === 'node' && (
                       <button onClick={() => install(it.id)} disabled={busy || installed}
                         title={installed ? '该节点已安装' : (it.type_id ? '下载并安装 ' + it.type_id : '下载并安装')}

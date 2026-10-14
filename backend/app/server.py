@@ -736,6 +736,36 @@ async def create_wf_from_template(tpl_id: str):
         result["warning"] = "模板引用的部分节点类型未安装，画布可打开但缺少对应节点"
     return result
 
+@app.post("/api/workflows/import", status_code=201)
+async def import_workflow_zip(file: UploadFile = File(...)):
+    """导入可分享的工作流 zip，注册到本地模板库。
+
+    zip 内必须包含 workflow.json；导入后立即出现在模板列表，用户可从
+    左侧「从模板新建」创建工作流。工作流包不直接写入 workflows，避免
+    导入未审核内容绕过模板校验。
+    """
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(400, "工作流分享包必须是 .zip")
+    fd, tmp = tempfile.mkstemp(prefix="fw_workflow_", suffix=".zip")
+    os.close(fd)
+    try:
+        with open(tmp, "wb") as out:
+            while True:
+                chunk = await file.read(limits.ZIP_BLOCK)
+                if not chunk:
+                    break
+                out.write(chunk)
+        try:
+            meta = templates.install_workflow_zip(tmp, source="user-share")
+        except (ValueError, OSError) as exc:
+            raise HTTPException(422, "工作流导入失败: " + str(exc)) from exc
+        return {"ok": True, **meta, "message": "工作流已导入，可从模板列表创建"}
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
 @app.get("/api/workflows")
 async def list_wf():
     return [{"id": w.id, "name": w.name, "updated_at": w.updated_at} for w in wfstore.list()]

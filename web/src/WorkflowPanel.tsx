@@ -1,6 +1,6 @@
 // 左侧工作流列表（v1.2：替代节点库侧栏；节点添加移入画布右键菜单）
-import { useEffect, useState } from 'react'
-import { Plus, Search, FileText, Download, Trash2, Puzzle, Layers, PencilLine, LayoutTemplate } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Search, FileText, Download, Upload, Trash2, Puzzle, Layers, PencilLine, LayoutTemplate } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 
@@ -23,6 +23,7 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null)
   const [nameBox, setNameBox] = useState<null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }>(null)
   const [nameInput, setNameInput] = useState('')
+  const shareInput = useRef<HTMLInputElement>(null)
 
   const refresh = async () => {
     try { const l = await api.listWorkflows(); setList(l || []) } catch { /* ignore */ }
@@ -54,6 +55,14 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
         else pushToast('没有工作流了，点 + 新建', 'info')
       }
     } catch (e: any) { pushToast('删除失败: ' + (e.message || e), 'err') }
+  }
+
+  const importSharedWorkflow = async (file: File) => {
+    try {
+      const imported = await api.importWorkflowZip(file)
+      pushToast(imported.message || '工作流已导入，可从模板列表创建', 'ok')
+      await refresh()
+    } catch (e: any) { pushToast('导入工作流失败: ' + (e.message || e), 'err') }
   }
 
   const newFromTemplate = async (tplId: string) => {
@@ -107,12 +116,15 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
           <><Plus size={13} /> 新建工作流</>
         </button>
       </div>
-      {/* 从模板新建：保留在左侧工作流区域，不再占用顶部标题栏 */}
-      <div style={{ padding: '0 12px 8px' }}>
-        <button disabled={readOnly || templates.length === 0} onClick={() => setShowTemplates(true)}
-          className="fw-btn fw-btn-ghost" style={{ width: '100%', padding: '6px 10px', justifyContent: 'center', fontSize: 12 }}>
-          <LayoutTemplate size={13} /> 从模板新建
+      {/* 模板操作：导入分享包 / 从模板新建 */}
+      <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6 }}>
+        <button disabled={readOnly} onClick={() => shareInput.current?.click()} className="fw-btn fw-btn-ghost" style={{ flex: 1, padding: '6px 6px', justifyContent: 'center', fontSize: 11.5 }} title="导入别人分享的工作流 zip">
+          <Upload size={12} /> 导入分享
         </button>
+        <button disabled={readOnly || templates.length === 0} onClick={() => setShowTemplates(true)} className="fw-btn fw-btn-ghost" style={{ flex: 1, padding: '6px 6px', justifyContent: 'center', fontSize: 11.5 }}>
+          <LayoutTemplate size={12} /> 从模板新建
+        </button>
+        <input ref={shareInput} type="file" accept=".zip" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) void importSharedWorkflow(file); e.target.value = '' }} />
       </div>
       {/* 搜索 */}
       <div style={{ padding: '0 12px 8px' }}>
