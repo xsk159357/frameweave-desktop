@@ -12,6 +12,7 @@
 - G6  transform op 白名单（递归）+ 键 ⊆ outputs + 媒体端口禁入
 - G7  permission 五作用域（fs/network/subprocess/secret/env），未知键拒绝
 - G8  dependencies（channel: pip|bundle|market）+ ui 声明（entry 须在 ui/ 子树内）
+       + web 目录声明（S1-T7：entry 须在 web/ 子树内，/extensions/<pkg>/... 注入前端）
 - G9  大小/成员/压缩比上限 —— 由 worker/limits.py + declarative._extract_zip_safe 实施
 - G10 signature 占位（无签名=社区级+警告；结构非法=拒绝；core/ 前缀强制要求签名）
 
@@ -45,6 +46,7 @@ from .errors import (
     ERR_UI,
     ERR_UNKNOWN_FIELD,
     ERR_VERSION,
+    ERR_WEB,
     PluginManifestError,
     first_gate_code,
 )
@@ -59,6 +61,9 @@ PORT_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ENTRYPOINT_RE = re.compile(r"^[A-Za-z0-9_./-]+\.py$")
 CLASS_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 UI_ENTRY_RE = re.compile(r"^ui/[A-Za-z0-9_./-]+\.(js|mjs|css)$")
+# S1-T7（R-平台-7）：插件 web 目录（EXTENSION_WEB_DIRS 等价）。
+# entry 必须指向包内 web/ 子树；平台静态服务 /extensions/<pkg>/... 并注入前端画布。
+WEB_ENTRY_RE = re.compile(r"^web/[A-Za-z0-9_./-]+\.(js|mjs|css)$")
 
 CATEGORIES = {"输入", "语义", "分析", "音频", "剪辑", "输出", "控制", "用户节点"}
 KINDS = {"transform", "python"}
@@ -95,7 +100,9 @@ TOP_LEVEL_KEYS = {
     "title", "category", "description", "version", "kind", "runtime",
     "entrypoint", "class_name", "inputs", "outputs", "params", "transform",
     "gpu_required", "gpu_recommended", "streaming", "permission",
-    "dependencies", "ui", "signature",
+    "dependencies", "ui", "web", "signature",
+    # S1-T4（R-平台-4）：/object_info 语义字段（可选，默认空/False）
+    "search_aliases", "deprecated",
 }
 PORT_KEYS = {
     "name", "type", "label", "required", "default", "widget", "options",
@@ -184,6 +191,15 @@ def _compat_normalize(m: Dict[str, Any], warnings: List[str]) -> Tuple[Dict[str,
             elif out.get("runtime", "transform") == "transform" or isinstance(out.get("transform"), dict):
                 out["kind"] = "transform"
             warnings.append(f"v1 兼容通道：已按内容探测 kind={out.get('kind')!r}")
+        # S1-T4：/object_info 语义字段缺省注入（search_aliases 列表 / deprecated 布尔）
+        if not isinstance(out.get("search_aliases"), list):
+            if "search_aliases" in out:
+                warnings.append("v1 兼容通道：search_aliases 非列表，已重置为 []")
+            out["search_aliases"] = []
+        if not isinstance(out.get("deprecated"), bool):
+            if "deprecated" in out:
+                warnings.append("v1 兼容通道：deprecated 非布尔，已重置为 False")
+            out["deprecated"] = False
         # 元字段缺省
         if not out.get("title"):
             out["title"] = out.get("type_id", "未命名节点")
@@ -270,6 +286,15 @@ def _check_meta(m: Dict[str, Any], issues: List[str]) -> None:
     cat = m.get("category")
     if cat not in CATEGORIES:
         issues.append(f"G2: category 不在枚举内: {cat!r}（{sorted(CATEGORIES)}）")
+    # S1-T4（R-平台-4）：/object_info 语义字段类型校验（可选字段，类型错即拒）
+    sa = m.get("search_aliases")
+    if sa is not None and not isinstance(sa, list):
+        issues.append("G2: search_aliases 必须是字符串列表")
+    elif isinstance(sa, list) and any(not isinstance(x, str) for x in sa):
+        issues.append("G2: search_aliases 元素必须为字符串")
+    dep = m.get("deprecated")
+    if dep is not None and not isinstance(dep, bool):
+        issues.append("G2: deprecated 必须是布尔值")
 
 
 def _check_kind(m: Dict[str, Any], issues: List[str]) -> None:
@@ -475,6 +500,37 @@ def _check_ui(m: Dict[str, Any], issues: List[str]) -> None:
         issues.append("G8: ui.capabilities 必须是字符串数组")
 
 
+def _check_web(m: Dict[str, Any], issues: List[str]) -> None:
+    """G8：web 目录声明（S1-T7 / R-平台-7，EXTENSION_WEB_DIRS 等价）。
+
+    插件可携带 web/ 目录（静态资源 + 前端注入脚本）。entry 必须指向包内
+    web/ 子树（js|mjs|css），不得绝对路径或含 `..`；服务面由平台限定为
+    web/ 子树本身（/extensions/<pkg>/...），不暴露包内其它文件。
+    """
+    web = m.get("web")
+    if web is None:
+        return
+    if not isinstance(web, dict):
+        issues.append("G8: web 必须是对象")
+        return
+    for k in web:
+        if k not in ("entry", "sandbox", "capabilities"):
+            issues.append(f"G8: web 未知字段 {k!r}（entry/sandbox/capabilities）")
+    entry = web.get("entry")
+    if not isinstance(entry, str) or not WEB_ENTRY_RE.match(entry):
+        issues.append(f"G8: web.entry 不合法: {entry!r}（须 web/*.js|mjs|css，包内相对路径）")
+    else:
+        parts = entry.replace("\\", "/").split("/")
+        if any(p in ("..", "") for p in parts[:-1]) or entry.startswith("/"):
+            issues.append(f"G8: web.entry 不得逃逸 web/ 目录: {entry!r}")
+    sandbox = web.get("sandbox")
+    if sandbox is not None and not isinstance(sandbox, dict):
+        issues.append("G8: web.sandbox 必须是对象")
+    caps = web.get("capabilities")
+    if caps is not None and (not isinstance(caps, list) or not all(isinstance(x, str) for x in caps)):
+        issues.append("G8: web.capabilities 必须是字符串数组")
+
+
 def _check_signature(m: Dict[str, Any], issues: List[str], warnings: List[str]) -> bool:
     """G10：signature 结构校验 + 撤销清单检查（真实验签在安装管线 signatures.check_install_signature）。"""
     from .. import signatures as _sg
@@ -544,6 +600,7 @@ def validate_manifest(data: Any) -> ManifestResult:
     _check_permission(norm, issues)
     _check_dependencies(norm, issues)
     _check_ui(norm, issues)
+    _check_web(norm, issues)
     signed = _check_signature(norm, issues, warnings)
     if issues:
         codes = []
@@ -569,7 +626,9 @@ def validate_manifest(data: Any) -> ManifestResult:
             codes.append(ERR_OP)
         if any(i.startswith("G7:") for i in issues):
             codes.append(ERR_PERMISSION)
-        if any(i.startswith("G8: ui") for i in issues):
+        if any(i.startswith("G8: web") for i in issues):
+            codes.append(ERR_WEB)
+        elif any(i.startswith("G8: ui") for i in issues):
             codes.append(ERR_UI)
         elif any(i.startswith("G8:") for i in issues):
             codes.append(ERR_DEPENDENCIES)
@@ -606,4 +665,12 @@ def validate_manifest_file(pkg_dir: str) -> ManifestResult:
             raise PluginManifestError(ERR_UI, [f"ui.entry 逃逸包目录: {ui['entry']}"])
         if not os.path.isfile(ui_path):
             result.warnings.append(f"G8: ui.entry 文件在包内不存在: {ui['entry']}")
+    # S1-T7（R-平台-7）：web 目录 entry 文件层校验（存在性；缺失仅警告，同 ui 语义）
+    web = norm.get("web")
+    if isinstance(web, dict) and isinstance(web.get("entry"), str):
+        web_path = os.path.abspath(os.path.join(pkg_dir, web["entry"]))
+        if not web_path.startswith(base + os.sep):
+            raise PluginManifestError(ERR_WEB, [f"web.entry 逃逸包目录: {web['entry']}"])
+        if not os.path.isfile(web_path):
+            result.warnings.append(f"G8: web.entry 文件在包内不存在: {web['entry']}")
     return result

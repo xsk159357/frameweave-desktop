@@ -341,6 +341,8 @@ _MODEL_DIR_NAMES: Dict[str, str] = {
     "whisper-srt": "faster-whisper-large-v3",
     "transnetv2": "transnetv2",
     "chinese-clip": "chinese-clip-vit-base-patch16",
+    "dinov2-small": "dinov2-small",
+    "dinov2-base": "dinov2-base",
     "index-tts": "index-tts-code",
     "demucs": "demucs",
 }
@@ -353,15 +355,18 @@ _MODEL_ENV: Dict[str, str] = {
     "whisper-srt": "FRAMEWEAVE_WHISPER_DIR",
     "transnetv2": "FRAMEWEAVE_TRANSNET_DIR",
     "chinese-clip": "FRAMEWEAVE_CLIP_DIR",
+    "dinov2-small": "FRAMEWEAVE_DINO_DIR",
+    "dinov2-base": "FRAMEWEAVE_DINO_DIR",
     "index-tts": "INDEX_TTS_ROOT",
     "demucs": "FRAMEWEAVE_DEMUCS_DIR",
 }
-# HF 缓存路径模式（faster-whisper 系）
+# HF 缓存路径模式（faster-whisper 系 + chinese-clip）
 _HF_PATTERNS: Dict[str, str] = {
     "faster-whisper-small": "models--Systran--faster-whisper-small",
     "faster-whisper-base": "models--Systran--faster-whisper-base",
     "faster-whisper-medium": "models--Systran--faster-whisper-medium",
     "faster-whisper-large-v3": "models--Systran--faster-whisper-large-v3",
+    "chinese-clip": "models--OFA-Sys--chinese-clip-vit-base-patch16",
 }
 
 
@@ -425,7 +430,7 @@ def resolve_model(id: str, requested: str = "", env: Optional[Dict[str, str]] = 
         warnings.append(f"models_registry 已登记 {id}（下载源 {registry_info.get('repo', '?')}），"
                         "但本地未就绪；请先运行模型下载/就绪节点")
 
-    # e. HF 缓存（whisper 系）
+    # e. HF 缓存（whisper 系 / chinese-clip；快照目录存在即 ready，作为模型目录喂 CLIP/WhisperModel）
     pat = _HF_PATTERNS.get(id)
     if pat:
         hf_root = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub", pat)
@@ -434,7 +439,8 @@ def resolve_model(id: str, requested: str = "", env: Optional[Dict[str, str]] = 
             if os.path.isdir(snaps):
                 for name in sorted(os.listdir(snaps)):
                     sp = os.path.join(snaps, name)
-                    if os.path.isfile(os.path.join(sp, "model.bin")):
+                    need = "pytorch_model.bin" if id == "chinese-clip" else "model.bin"
+                    if os.path.isfile(os.path.join(sp, need)):
                         return {"ready": True, "path": os.path.abspath(sp), "source": "hf_cache",
                                 "warnings": warnings, "repair_hint": "", "requested": req}
 

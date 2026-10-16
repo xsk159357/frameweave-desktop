@@ -43,7 +43,13 @@ class NodeSpec:
 
 
 class NodeBase:
-    """节点执行基类。子类实现 run(ctx, inputs, params) -> outputs dict。"""
+    """节点执行基类。子类实现 run(ctx, inputs, params) -> outputs dict。
+
+    spec()/run() 的 NotImplementedError 是**抽象基类契约**（每个具体节点必须覆写，
+    R-节点-5 空壳清零语义），不是占位 raise；setup() 的 NotImplementedError 被引擎
+    捕获视为"无初始化"（engine._run_one / host_bootstrap）。任何注册到注册表的
+    具体节点若未覆写 spec/run，会在首次调用时显式失败（不被静默吞掉）。
+    """
 
     @classmethod
     def spec(cls) -> NodeSpec:

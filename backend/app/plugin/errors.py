@@ -25,6 +25,7 @@ ERR_OP = "manifest_op"                                # G6: transform op 白名�
 ERR_PERMISSION = "manifest_permission"                # G7: permission 五作用域
 ERR_DEPENDENCIES = "manifest_dependencies"            # G8: dependencies 声明/通道
 ERR_UI = "manifest_ui"                                # G8: ui 声明/资源目录
+ERR_WEB = "manifest_web"                              # G8: web 目录声明/资源目录（S1-T7）
 ERR_SIGNATURE = "manifest_signature"                  # G10: signature 结构/占位
 ERR_UNKNOWN_FIELD = "manifest_unknown_field"          # v2 严格模式 additionalProperties
 ERR_MANIFEST_GATE = "manifest_gate"                   # 其他校验门失败（兜底）
@@ -33,7 +34,7 @@ ERR_MANIFEST_GATE = "manifest_gate"                   # 其他校验门失败（
 _GATE_ORDER: List[str] = [
     ERR_SCHEMA_VERSION, ERR_ENGINE_API, ERR_META, ERR_TYPE_ID, ERR_VERSION,
     ERR_KIND, ERR_PORTS, ERR_OP, ERR_PERMISSION, ERR_DEPENDENCIES, ERR_UI,
-    ERR_SIGNATURE, ERR_UNKNOWN_FIELD,
+    ERR_WEB, ERR_SIGNATURE, ERR_UNKNOWN_FIELD,
 ]
 
 

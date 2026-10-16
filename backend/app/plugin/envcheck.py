@@ -115,6 +115,8 @@ _MODEL_CHECKS = [
     ("faster-whisper-large-v3", "Whisper 大模型转写"),
     ("transnetv2", "TransNetV2 镜头切分模型"),
     ("chinese-clip", "Chinese-CLIP 图文匹配模型"),
+    ("dinov2-small", "DINOv2-Small 语义精排模型(B3)"),
+    ("dinov2-base", "DINOv2-Base 语义精排模型(B3)"),
     ("index-tts", "IndexTTS2 本地克隆配音"),
     ("demucs", "Demucs 人声分离模型"),
 ]
@@ -177,7 +179,7 @@ def _check_secrets() -> Dict[str, Any]:
 
 def _check_permissions() -> Dict[str, Any]:
     from app.worker.perm import PermissionGate, PermissionDenied
-    mode = "worker" if os.environ.get("FW_PLUGIN_EXEC", "") == "worker" else "inprocess"
+    mode = "inprocess" if os.environ.get("FW_PLUGIN_EXEC", "") == "inprocess" else "worker"
     # 样例 manifest：网络通配 + 本地 TTS 服务 + subprocess ffmpeg + secret 通配
     manifest = {
         "permission": {
@@ -203,6 +205,27 @@ def _check_permissions() -> Dict[str, Any]:
     return {"id": "permissions", "name": "权限门(执行模式+网络)", "status": "ok",
             "detail": f"执行模式={mode}；网络判定：" + "；".join(verdicts),
             "code": "", "repair": []}
+
+
+def _check_model_help_hint() -> Dict[str, Any]:
+    """B3 DINOv2 模型下载指引（S2-T0）：主下载 + 备选源 + 降级路径。"""
+    mdir = os.path.join(deps.models_dir(), "dinov2-small")
+    return {
+        "id": "model_help:dinov2",
+        "name": "DINOv2 下载指引(B3)",
+        "status": "ok",
+        "detail": ("DINOv2-S 下载: hf download facebook/dinov2-small --local-dir "
+                   f"\"{mdir}\"（或 modelscope download --model facebook/dinov2-small）；"
+                   "DINOv2-Base 同理（facebook/dinov2-base → DATA_DIR/models/dinov2-base）。"
+                   "语义精排回退链：dinov2_base → dinov2_small → chinese-clip → 灰度投票粗筛；"
+                   "chinese-clip 已在本机 HF 缓存就绪（可先行复用 match_visual embedder 路径）。"
+                   "log-mel 音频特征依赖 ffmpeg 已由统一 resolver 解析。"),
+        "code": "", "repair": [
+            f"下载：hf download facebook/dinov2-small --local-dir \"{mdir}\"",
+            f"放置：{mdir}（DATA_DIR/models 约定；B3 节点参数 model_dir 可直指）",
+            "接线：设置 FRAMEWEAVE_DINO_DIR 指向模型目录，或让 B3 节点回退 chinese-clip/灰度投票",
+        ],
+    }
 
 
 def _check_data_dir() -> Dict[str, Any]:
@@ -231,6 +254,7 @@ def run_envcheck() -> Dict[str, Any]:
     checks.append(_check_secrets())
     checks.append(_check_permissions())
     checks.append(_check_data_dir())
+    checks.append(_check_model_help_hint())
     # 概要
     counts = {"ok": 0, "warn": 0, "fail": 0}
     for c in checks:

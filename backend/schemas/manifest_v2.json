@@ -48,6 +48,16 @@
       "enum": ["输入", "语义", "分析", "音频", "剪辑", "输出", "控制", "用户节点"]
     },
     "description": { "type": "string" },
+    "search_aliases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "S1-T4（R-平台-4）：/object_info.search_aliases 的 manifest 来源（可选；前端搜索与第三方解析用）"
+    },
+    "deprecated": {
+      "type": "boolean",
+      "default": false,
+      "description": "S1-T4（R-平台-4）：/object_info.deprecated 的 manifest 来源（可选；标记节点已废弃，前端灰显）"
+    },
     "version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$",
@@ -176,6 +186,23 @@
         "key_id": { "type": "string", "minLength": 1 },
         "value": { "type": "string", "minLength": 1 },
         "over": { "type": "string", "minLength": 1 }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "G8 (S1-T7 / R-平台-7): web 目录声明（EXTENSION_WEB_DIRS 等价）。entry 必须指向包内 web/ 子树（js|mjs|css），平台静态服务 /extensions/<pkg>/... 并注入前端画布",
+      "properties": {
+        "entry": {
+          "type": "string",
+          "pattern": "^web/[A-Za-z0-9_./-]+\\.(js|mjs|css)$",
+          "description": "G8/WEB_ENTRY_RE: 必须 web/ 前缀且为 js|mjs|css（与代码 WEB_ENTRY_RE 一致，防逃逸）"
+        },
+        "sandbox": { "type": "object" },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     }
   },

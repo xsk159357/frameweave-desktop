@@ -61,6 +61,22 @@ def set_user_nodes_dir(path: str) -> None:
 _decl: Dict[str, Type[NodeBase]] = {}
 _plugin_modules: Dict[str, Any] = {}
 _scan_errors: List[Dict[str, Any]] = []
+# S1-T4（R-平台-4）：每 type_id 的 /object_info 语义元数据（scan 时从规范化 manifest 收集）
+_pkg_meta: Dict[str, Dict[str, Any]] = {}
+
+
+def object_meta(type_id: str) -> Dict[str, Any]:
+    """取某 type_id 的 /object_info 语义元数据（search_aliases/deprecated/kind/pkg）。
+
+    插件节点在 scan() 时登记；未登记（内置 @register 节点、或插件未加载）返回空 dict，
+    由 /object_info 组装器用默认值补齐。
+    """
+    return dict(_pkg_meta.get(type_id) or {})
+
+
+def list_object_meta() -> Dict[str, Dict[str, Any]]:
+    """全量 /object_info 语义元数据快照（type_id → meta，副本防外部改动）。"""
+    return {tid: dict(v) for tid, v in _pkg_meta.items()}
 
 
 # ---------- manifest -> NodeSpec ----------
@@ -264,9 +280,10 @@ def scan() -> int:
     失败包不静默吞异常：每条错误以 {pkg, code, message} 记录（scan_errors() 可取），
     并打印日志；仅跳过 .staging/.backup/_vendor 等保留目录。
     """
-    global _scan_errors
+    global _scan_errors, _pkg_meta
     _decl.clear()
     _scan_errors = []
+    _pkg_meta = {}
     if not os.path.isdir(USER_NODES_DIR):
         return 0
     count = 0
@@ -292,6 +309,13 @@ def scan() -> int:
                 _decl[type_id] = _make_python_class(norm, os.path.join(USER_NODES_DIR, entry))
             else:
                 _decl[type_id] = _make_class(norm)
+            # S1-T4：登记 /object_info 语义元数据（校验器已注入默认值与类型把关）
+            _pkg_meta[type_id] = {
+                "search_aliases": list(norm.get("search_aliases") or []),
+                "deprecated": bool(norm.get("deprecated")),
+                "kind": str(norm.get("kind") or ""),
+                "pkg": entry,
+            }
             for w in result.warnings:
                 print(f"[declarative] {entry}: {w}")
             count += 1
@@ -335,6 +359,61 @@ def pkg_dir(type_id: str) -> Optional[str]:
         except Exception:  # noqa: BLE001
             continue
     return None
+
+
+# ---------- S1-T7（R-平台-7）：插件 web 目录 / EXTENSION_WEB_DIRS 等价 ----------
+def web_extensions() -> List[Dict[str, Any]]:
+    """枚举已加载插件携带的 web 目录（声明 manifest.web.entry 的 active 包）。
+
+    返回 [{pkg, type_id, version, entry, url}]：url 为平台静态服务相对路径
+    `/extensions/<pkg>/<entry>`（前端经 API_BASE 拼绝对地址加载脚本/资源）。
+    仅报告通过 manifest v2 强校验（G1-G10，含 G8 web 门）的 live 包；
+    禁用/隔离/缺失目录的包不出现在清单（前端不再注入其脚本）。
+    """
+    out: List[Dict[str, Any]] = []
+    if not os.path.isdir(USER_NODES_DIR):
+        return out
+    for entry in sorted(os.listdir(USER_NODES_DIR)):
+        if entry.startswith(".") or entry in _RESERVED_DIRS:
+            continue
+        pkg = os.path.join(USER_NODES_DIR, entry)
+        mpath = os.path.join(pkg, "manifest.json")
+        if not os.path.isfile(mpath):
+            continue
+        try:
+            with open(mpath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            result = manifest_v2.validate_manifest(data)
+            norm = result.manifest
+        except (OSError, ValueError, manifest_v2.PluginManifestError):
+            continue
+        web = norm.get("web")
+        if not isinstance(web, dict) or not isinstance(web.get("entry"), str):
+            continue
+        # 文件层：web.entry 必须真实存在于包内 web/ 子树（缺失即不注入）
+        entry_rel = web["entry"].replace("\\", "/")
+        web_abs = os.path.abspath(os.path.join(pkg, entry_rel))
+        base = os.path.abspath(pkg) + os.sep
+        if not web_abs.startswith(base) or not os.path.isfile(web_abs):
+            continue
+        url = "/extensions/" + entry + "/" + entry_rel
+        out.append({
+            "pkg": entry,
+            "type_id": str(norm.get("type_id") or entry),
+            "version": str(norm.get("version") or ""),
+            "entry": entry_rel,
+            "capabilities": list(web.get("capabilities") or []),
+            "url": url,
+        })
+    return out
+
+
+def web_dir(pkg: str) -> Optional[str]:
+    """返回插件包 <pkg>/web 目录绝对路径（仅 live 包；供静态服务路径解析）。"""
+    if not pkg or pkg.startswith(".") or pkg in _RESERVED_DIRS:
+        return None
+    d = os.path.join(USER_NODES_DIR, pkg, "web")
+    return d if os.path.isdir(d) else None
 
 
 # ---------- 安装（五上限 + staging 原子安装） ----------

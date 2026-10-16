@@ -503,8 +503,21 @@ def test_env_switch():
         else:
             os.environ["FW_PLUGIN_EXEC"] = old
     e2 = Engine(AssetStore(os.path.join(TMP, "store_env2")))
-    check("T6.10b 默认 → InProcessExecutor",
-          isinstance(e2.executor, InProcessExecutor), str(type(e2.executor)))
+    check("T6.10b 默认（未设）→ WorkerExecutor（S1-T2/R-平台-2 默认隔离）",
+          isinstance(e2.executor, WorkerExecutor), str(type(e2.executor)))
+    e3 = Engine(AssetStore(os.path.join(TMP, "store_env3")))
+    old3 = os.environ.get("FW_PLUGIN_EXEC")
+    os.environ["FW_PLUGIN_EXEC"] = "inprocess"
+    try:
+        e3 = Engine(AssetStore(os.path.join(TMP, "store_env3")))
+    finally:
+        if old3 is None:
+            os.environ.pop("FW_PLUGIN_EXEC", None)
+        else:
+            os.environ["FW_PLUGIN_EXEC"] = old3
+    # 显式 inprocess 且无 L2 插件 → InProcessExecutor（显式降级）
+    check("T6.10c 显式 FW_PLUGIN_EXEC=inprocess（无 L2）→ InProcessExecutor",
+          isinstance(e3.executor, InProcessExecutor), str(type(e3.executor)))
 
 
 # ================================================================ T6.11 Engine 全链路
@@ -849,14 +862,16 @@ def test_mode_report():
     importlib.reload(decl)
     try:
         os.environ.pop("FW_PLUGIN_EXEC", None)
+        from app.engines import WorkerExecutor
         store = AssetStore(os.path.join(TMP, "store_mode_inproc"))
         eng = Engine(store)
-        check("T6.16a 默认进程内模式（Engine 装配）", eng.execution_mode() == "inprocess"
-              and Engine.current_execution_mode() == "inprocess",
+        check("T6.16a 默认 worker 模式（Engine 装配，S1-T2/R-平台-2）",
+              eng.execution_mode() == "worker" and Engine.current_execution_mode() == "worker"
+              and isinstance(eng.executor, WorkerExecutor),
               "mode=%s cur=%s" % (eng.execution_mode(), Engine.current_execution_mode()))
         r = eng.network_gate_report("core/tts", "http://127.0.0.1:3900/engines")
-        check("T6.16b 进程内：网络不经权限门（gated=False）",
-              r.get("gated") is False and r.get("mode") == "inprocess", str(r))
+        check("T6.16b 默认 worker：网络经权限门（gated=True）",
+              r.get("gated") is True and r.get("mode") == "worker", str(r))
 
         os.environ["FW_PLUGIN_EXEC"] = "worker"
         from app.engines import WorkerExecutor

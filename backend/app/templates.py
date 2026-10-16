@@ -104,8 +104,46 @@ def oneclick_template() -> Dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# 官方内置模板源（返回结构对齐 workflow.json，可被安装流程导入）
+# ---------------------------------------------------------------------------
+def minimal_template() -> Dict[str, Any]:
+    """离线最小链：文本输入 → 文本长度 → JSON 包装 → 控制台输出。
+
+    S1-T6（R-平台-6）——只使用平台内置基础节点（core/text_input、core/text_length、
+    core/json_output、core/console_output），零插件、零网络、零模型即可跑通，
+    解决 registry 空壳化后离线首次打开画布为空、无可运行模板的问题。
+    """
+    nodes = [
+        {"id": "n1", "type": "core/text_input", "x": 80, "y": 320,
+         "params": {"value": "离线基础工作流可用"}, "status": "pending", "inputs": {}},
+        {"id": "n2", "type": "core/text_length", "x": 300, "y": 320,
+         "params": {}, "status": "pending", "inputs": {"text": "n1"}},
+        {"id": "n3", "type": "core/json_output", "x": 520, "y": 320,
+         "params": {}, "status": "pending", "inputs": {"length": "n2"}},
+        {"id": "n4", "type": "core/console_output", "x": 740, "y": 320,
+         "params": {"note": "离线最小链（S1-T6）"}, "status": "pending", "inputs": {"json": "n3"}},
+    ]
+    edges = [
+        {"source": "n1", "target": "n2", "sourceHandle": "text", "targetHandle": "text"},
+        {"source": "n2", "target": "n3", "sourceHandle": "length", "targetHandle": "length"},
+        {"source": "n3", "target": "n4", "sourceHandle": "json", "targetHandle": "json"},
+    ]
+    return {
+        "tpl_id": "minimal",
+        "name": "离线最小链 · 基础节点演示",
+        "description": "只依赖平台内置基础节点（输入/控制/JSON/输出），离线零配置即可跑通的最小工作流",
+        "version": "1.0.0",
+        "kind": "workflow",
+        "tags": ["最小", "官方", "离线"],
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
 _BUILTIN_TEMPLATES: Dict[str, Any] = {
     "oneclick": oneclick_template,
+    "minimal": minimal_template,
 }
 
 

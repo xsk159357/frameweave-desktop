@@ -135,6 +135,11 @@ function probePort() {
         try {
           const j = JSON.parse(body)
           const compatible = j && j.service === 'frameweave' && j.protocol_version === 3 && j.auth_revision === 'email-code-v2'
+          // S1-T10（分层授权）：壳层对降级模式给出可见提示（本地节点执行不受影响）
+          if (compatible && j.auth && j.auth.mode && j.auth.mode !== 'online') {
+            console.warn('[auth] 授权降级模式: ' + j.auth.mode +
+              (j.auth.degraded ? '（离线缓存/未配置——云端功能受限，本地节点执行不受影响）' : ''))
+          }
           resolve(compatible ? 'frameweave' : (j ? 'other' : null))
         } catch { resolve('other') }
       })

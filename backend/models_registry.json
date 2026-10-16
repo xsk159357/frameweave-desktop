@@ -40,6 +40,20 @@
       "size_mb": 84,
       "fallback_repo": "adefossez/htdemucs",
       "note": "demucs 首次使用自动下载到模型缓存；节点经 python_exe 指定解释器"
+    },
+    "dinov2-small": {
+      "repo": "facebook/dinov2-small",
+      "file": "pytorch_model.bin",
+      "size_mb": 89,
+      "fallback_repo": "facebook/dinov2-small",
+      "note": "B3 精选复刻匹配语义精排主模型（DINOv2-S，FP32≈89MB）；本地目录：DATA_DIR/models/dinov2-small 或 FRAMEWEAVE_DINO_DIR；兜底语义回退链 dinov2_base→dinov2_small→chinese-clip→灰度投票"
+    },
+    "dinov2-base": {
+      "repo": "facebook/dinov2-base",
+      "file": "pytorch_model.bin",
+      "size_mb": 344,
+      "fallback_repo": "facebook/dinov2-base",
+      "note": "B3 精选复刻匹配语义精排（DINOv2-Base，FP32≈344MB）；本地目录：DATA_DIR/models/dinov2-base 或 FRAMEWEAVE_DINO_DIR；兜底语义回退链 dinov2_base→dinov2_small→chinese-clip→灰度投票"
     }
   }
 }

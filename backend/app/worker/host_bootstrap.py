@@ -61,10 +61,21 @@ class WorkerBootstrap:
             for fn in sorted(os.listdir(in_dir)):
                 if not fn.endswith(".json"):
                     continue
+                # supervisor._materialize_inputs 对结构化资产会同时写
+                # <port>.json（描述符）与 <port>.payload.json（原始载荷）。
+                # 载荷文件内容是标量（INT 9 / STRING 等），不能当描述符解析
+                # （'int' object has no attribute 'get' 使内置离线链在 worker
+                # 模式崩溃）；载荷经描述符的 payload_file 字段装载
+                # （_asset_from_desc / _input_index），故伴随文件一律跳过。
+                if fn.endswith(".payload.json"):
+                    continue
                 try:
                     with open(os.path.join(in_dir, fn), "r", encoding="utf-8") as f:
                         desc = json.load(f)
                 except (OSError, ValueError):
+                    continue
+                if not isinstance(desc, dict):
+                    # 防御：非对象描述符（标量载荷文件等）不当作端口输入
                     continue
                 port = fn[:-5]
                 aid = desc.get("aid") or ("port:" + port)

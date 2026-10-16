@@ -1,0 +1,1 @@
+{"schema_version": 2, "engine_api": "1.0", "type_id": "user/blocker", "title": "Blocker", "category": "\u63a7\u5236", "description": "t", "version": "1.0.0", "kind": "python", "runtime": "python", "entrypoint": "node.py", "class_name": "BlockerNode", "inputs": [], "outputs": [{"name": "out", "type": "JSON"}], "params": [], "permission": {}}

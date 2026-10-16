@@ -20,6 +20,53 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Protocol, Set, runtime_checkable
 
+# S1-T8 / C1（R-平台-8 第一路线）：控制流能力契约——
+# ExecutionBlocker 提供一等语义；嵌套子图由 Engine._run_nested_subgraph
+# （engine.py）内联执行（子图内嵌套执行 / 输入输出映射 / 跨层缓存），
+# 已从 Roadmap 升级为 available。
+EXECUTION_CONTROL_ROADMAP = {
+    "nested_subgraph": "available",
+    "execution_blocker": "available",
+    "executor_spi": "available",
+}
+
+# 子图节点类型（C1 / R-平台-8 第一路线）：引擎按类型识别并内联执行。
+SUBGRAPH_TYPE_IDS = ("core/subgraph", "core/group")
+# 子图图定义参数名（params["graph"]：dict 或 JSON 字符串）
+SUBGRAPH_PARAM = "graph"
+# 子图输入种子节点：把外层输入资产注入内层端口（引擎内部机制节点）
+SUBGRAPH_SEED_TYPE = "core/asset_ref"
+
+
+def is_subgraph_type(type_id: str) -> bool:
+    """该类型是否为子图节点（引擎内联执行，不经常规节点 run 通道）。"""
+    return type_id in SUBGRAPH_TYPE_IDS
+
+
+def parse_subgraph_graph(params: Dict[str, Any]) -> Dict[str, Any]:
+    """从节点 params 解析子图图定义（dict 或 JSON 字符串，两种写法兼容）。
+
+    图定义结构（键与 Workflow/画布语义对齐）：
+      inputs:  [{name, node, port}]  外层输入端口 → 内层 (node, port)（经种子注入）
+      outputs: [{name, node, port}]  内层 (node, port) 输出 → 外层输出端口
+      nodes:   [{id, type, params?}] 内层节点
+      edges:   [{source, target, sourceHandle?, targetHandle?}] 内层连线
+    解析失败抛 ValueError（由 _run_nested_subgraph 收口为节点 FAILED）。
+    """
+    graph = (params or {}).get(SUBGRAPH_PARAM)
+    if isinstance(graph, str):
+        try:
+            graph = json.loads(graph)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"子图参数 {SUBGRAPH_PARAM!r} 不是合法 JSON 字符串: {e}") from e
+    if not isinstance(graph, dict):
+        raise ValueError(
+            f"子图节点缺少 {SUBGRAPH_PARAM!r} 参数（须为对象或 JSON 字符串）")
+    for key in ("nodes",):
+        if key not in graph or not isinstance(graph[key], list):
+            raise ValueError(f"子图定义缺少合法 {key!r} 列表")
+    return graph
+
 from .registry import get_spec
 from .assets import Asset
 
@@ -201,6 +248,29 @@ def list_engine_ext() -> Dict[str, List[str]]:
     return {k: sorted(v.keys()) for k, v in _ENGINE_EXTS.items()}
 
 
+def asset_for_literal(host: Any, node: Any, port_name: str, val: Any) -> Asset:
+    """字面量输入 → 资产（按端口类型包装，与连线输入同构；S1-T12 / R-平台-3）。
+
+    POST /prompt 的字面量直填输入（如 core/text_length 的 text='hello world 12345'）
+    必须统一落资产后再入 inputs：直接填原始值会被内置节点资产契约
+    （store.read_json(asset.id)）吞掉（AttributeError 被 except 兜住 → 输出恒 0）。
+    inprocess 与 worker 两个执行通道共用本函数，保证两通道语义一致。
+    """
+    kind = "JSON"
+    try:
+        spec = get_spec(node.type_id)
+        for p in spec.inputs:
+            if p.name == port_name:
+                kind = p.type.value
+                break
+    except Exception:  # noqa: BLE001 —— 未知 spec 兜底 JSON
+        pass
+    asset = Asset(id="", kind=kind,
+                  meta={"node": getattr(node, "id", "") or "",
+                        "port": port_name, "literal": True})
+    return host.store.save_asset(asset, payload=val)
+
+
 # ---------------------------------------------------------------- 官方默认：KahnScheduler
 class KahnScheduler:
     """DFS 环检测 + Kahn 拓扑批次（逻辑迁自 Engine.validate/topological_batches）。"""
@@ -238,9 +308,26 @@ class KahnScheduler:
         # 引擎级用结构性校验（不查 required 输入——部分子图运行/重跑不应被未连接
         # 的无关 required 端口阻断；mode=all 的完整校验由运行 API 严格门负责）。
         # 与环检测合并返回；执行在调度批次前被阻止，错误带稳定码与端口名。
+        # C1（R-平台-8 第一路线）：子图节点端口是动态的（由 params["graph"] 声明），
+        # 结构校验器无法静态枚举其端口——凡涉及子图节点的句柄/类型兼容错误在本层
+        # 豁免（内层图在执行时由 _run_nested_subgraph 走同一校验器严格把关；
+        # 普通节点的端口/类型错误保持硬性阻断，字节级不弱化）。
         try:
-            from .graph_validator import validate_graph_structural_messages
-            errors.extend(validate_graph_structural_messages(wf))
+            from .graph_validator import validate_graph
+            subgraph_nodes = {nid for nid, g in wf.nodes.items()
+                              if is_subgraph_type(getattr(g, "type_id", "") or "")}
+            for er in validate_graph(wf, check_required=False):
+                code = str(er.get("code") or "")
+                nid = str(er.get("node_id") or "")
+                if code in ("source_handle_invalid", "target_handle_invalid") \
+                        and nid in subgraph_nodes:
+                    continue
+                if code == "port_type_incompatible":
+                    src = str(er.get("source") or "").split(".")[0]
+                    tgt = str(er.get("target") or "").split(".")[0]
+                    if src in subgraph_nodes or tgt in subgraph_nodes:
+                        continue
+                errors.append(str(er.get("message") or code))
         except Exception:  # noqa: BLE001 —— 契约校验器异常不得阻断既有环检测
             pass
         return errors
@@ -284,12 +371,28 @@ class IncrementalCacheProvider:
         spec = get_spec(node.type_id)
         parts = [spec.type_id, spec.version]
         parts.append(json.dumps(node.params, sort_keys=True, ensure_ascii=False))
+        # S1-T12（R-平台-3）：字面量输入参与缓存键——不同字面量不得命中同一
+        # 缓存（否则跨请求串味：不同输入同一资产 id、结果串到旧字面量）。
+        parts.append(json.dumps(node.literal_inputs or {},
+                                sort_keys=True, ensure_ascii=False, default=str))
         for port_name, up_id in node.inputs.items():
             up = wf.nodes.get(up_id)
-            if up and up.asset_ids.get(port_name):
-                parts.append(up.asset_ids[port_name])
-            else:
-                parts.append("none")
+            aid = None
+            if up:
+                # C1（R-平台-8 第一路线）：槽位感知——/prompt 链接与子图种子/内部边
+                # 按 input_slots 解析上游真实输出端口（同名端口回落原行为，零破坏）。
+                out_port = port_name
+                slot = (getattr(node, "input_slots", None) or {}).get(port_name)
+                if slot is not None:
+                    try:
+                        up_spec = get_spec(up.type_id)
+                        outs = up_spec.outputs if up_spec is not None else []
+                        if 0 <= int(slot) < len(outs):
+                            out_port = outs[int(slot)].name
+                    except Exception:  # noqa: BLE001 —— 未知 spec 兜底同名查找
+                        out_port = port_name
+                aid = up.asset_ids.get(out_port)
+            parts.append(aid if aid else "none")
         raw = json.dumps(parts, ensure_ascii=False)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
@@ -424,6 +527,12 @@ class InProcessExecutor:
             host._emit({"type": "node_update", "node_id": nid, "status": node.status.value,
                         "error": node.error, "progress": node.progress})
 
+        # S1-T12 遗留观察项修复（E1）：级联失效——预扫描用上游旧资产 id 计算键，
+        # 上游参数/资产指纹变化的节点即使键变化，其下游键在预扫描阶段仍不变；
+        # 这里把「将重算（PENDING）节点 → targets 内下游 SUCCESS/CACHED 节点」
+        # 一并置为 PENDING，使下游随上游新资产自动重算（编辑上游后直接重跑不再陈旧）。
+        host.cascade_invalidate(wf, targets)
+
         for level in batches:
             to_run = [nid for nid in level if nid in targets and wf.nodes[nid].status == NodeStatus.PENDING]
             if not to_run:
@@ -464,7 +573,8 @@ class WorkerExecutor(InProcessExecutor):
     - 复刻 InProcessExecutor 的循环（缓存/拓扑/状态语义不变），仅替换单节点执行路径：
       run_node → WorkerPool（驻留复用 W4 + 崩溃重试 S2）→ WorkerSupervisor。
     - 失败/超时/崩溃/越权统一按 §1.4 错误码收口为节点 FAILED；worker 崩溃绝不波及主进程。
-    - 启用：环境开关 FW_PLUGIN_EXEC=worker（Engine.__init__ 解析），默认不开启（L0 迁移窗口）。
+    - 启用（S1-T2/R-平台-2）：默认开启——FW_PLUGIN_EXEC 留空 = worker（权限门五作用域
+      默认生效）；FW_PLUGIN_EXEC=inprocess 仅显式降级，且 L2 无签名包仍强制 worker。
     """
 
     def __init__(self, pool: Any = None, **kw: Any):
@@ -478,6 +588,11 @@ class WorkerExecutor(InProcessExecutor):
 
         node = wf.nodes[nid]
         try:
+            # C1（R-平台-8 第一路线）：子图节点是引擎平台能力（内联执行嵌套
+            # 工作流），不经 worker 通道（worker 无内层引擎环境）——统一回主进程
+            # _run_one 分发；内层节点随后照常按各自信任级路由（含 worker）。
+            if is_subgraph_type(node.type_id):
+                return await host._run_one(wf, nid)
             # 收集输入资产（语义与 Engine._run_one 一致）
             inputs: Dict[str, Any] = {}
             for port_name, up_id in node.inputs.items():
@@ -493,13 +608,33 @@ class WorkerExecutor(InProcessExecutor):
                 aid = up.asset_ids.get(port_name)
                 inputs[port_name] = host.store.get(aid) if aid else None
 
+            # S1-T3/R-平台-3：字面量直填输入（无上游链接的输入端口）——统一按端口
+            # 类型包装为资产再入 inputs，与 inprocess 通道同构（worker 侧经
+            # supervisor._materialize_inputs → host_bootstrap 描述符/载荷装载）。
+            for port_name, val in (node.literal_inputs or {}).items():
+                if port_name not in node.inputs:
+                    inputs[port_name] = asset_for_literal(host, node, port_name, val)
+
             node.status = NodeStatus.RUNNING
             node.started_at = _time.time()
             host._emit({"type": "node_update", "node_id": nid, "status": "running", "progress": 0.0})
 
             from .worker.pool import WorkerPool
-            pool = self._pool or WorkerPool(host)
-            self._pool = pool
+            # S1-T9（t5 发现修复，R-平台-9）：池生命周期绑定 Engine（host），
+            # 而不是单例 executor 实例。WorkerExecutor 在模块尾部以单例注册，
+            # 若把池挂到 self._pool，跨 Engine 复用的 supervisor 会保留首次
+            # host（旧 store）——后续运行输出被导入旧 store，新 store 缓存索引
+            # 被 trim（execution_cached 永不触发）。host._worker_pool 保证每个
+            # Engine 各持一池（同引擎内 keep_alive 复用语义不变）。
+            pool = self._pool                      # 显式注入（测试/宿主覆盖）优先
+            if pool is None:
+                pool = getattr(host, "_worker_pool", None)
+            if pool is None:
+                pool = WorkerPool(host)
+                try:
+                    host._worker_pool = pool
+                except Exception:  # noqa: BLE001 —— 只读 host 兜底：池不缓存
+                    pass
             outputs = await pool.run(host, node, inputs)
             node.asset_ids = {}
             for port_name, val in outputs.items():
@@ -564,3 +699,33 @@ register_engine_ext("scheduler", "default", KahnScheduler())
 register_engine_ext("cache", "default", IncrementalCacheProvider)
 register_engine_ext("executor", "default", InProcessExecutor())
 register_engine_ext("executor", "worker", WorkerExecutor())
+
+
+# ---------------------------------------------------------------- 逐节点信任路由执行器
+class TrustAwareExecutor(InProcessExecutor):
+    """inprocess 显式降级 + 存在 L2 无签名包时的逐节点路由执行器（S1-T12/R-平台-2/6）。
+
+    R-平台-2 不变式是「L2 无签名包强制 worker」（供应链投毒面不受门禁约束），
+    而非「整个平台强制 worker」：出厂内置 core_* 节点（L0 签名）与官方模板
+    在用户显式 FW_PLUGIN_EXEC=inprocess 时应能同进程跑通离线链（R-平台-6
+    出厂语义：内置节点+官方模板默认可跑；用户显式降级不被静默忽略）。
+    本执行器按节点自身信任级路由：
+      - L0/L1（官方签名/审核签名） → 同进程（host._run_one）；
+      - L2（无签名社区包）        → worker 进程隔离（WorkerExecutor，
+        权限门五作用域生效，R-平台-2 强制语义在节点级保持）。
+    """
+    def __init__(self):
+        self._worker: Optional["WorkerExecutor"] = None
+
+    async def run_node(self, host: Any, wf: Any, nid: str) -> bool:
+        # C1：子图节点为平台能力，无论信任级都内联执行（不落 worker）。
+        if is_subgraph_type(wf.nodes[nid].type_id):
+            return await host._run_one(wf, nid)
+        if host.trust_level(wf.nodes[nid].type_id) == "L2":
+            if self._worker is None:
+                self._worker = WorkerExecutor()
+            return await self._worker.run_node(host, wf, nid)
+        return await host._run_one(wf, nid)
+
+
+register_engine_ext("executor", "inprocess", TrustAwareExecutor())

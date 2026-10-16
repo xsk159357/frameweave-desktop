@@ -11,13 +11,16 @@ param(
   [string]$CloudDir = "/opt/frameweave-cloud",
   [string]$Service = "frameweave-cloud.service",
   [string]$SourcePath = (Join-Path $PSScriptRoot "..\backend\cloud_server.py"),
+  [string]$AdminHtmlPath = (Join-Path $PSScriptRoot "..\backend\admin.html"),
   [switch]$CheckOnly
 )
 $ErrorActionPreference = "Stop"
 function Fail($msg) { Write-Host "[update] FAIL: $msg" -ForegroundColor Red; exit 1 }
 $resolved = (Resolve-Path $SourcePath).Path
 if (-not (Test-Path -LiteralPath $resolved)) { Fail "source not found: $resolved" }
-Write-Host "[update] source: $resolved"
+$admResolved = $null
+if (Test-Path -LiteralPath $AdminHtmlPath) { $admResolved = (Resolve-Path $AdminHtmlPath).Path }
+Write-Host "[update] source: $resolved  admin.html: $(if ($admResolved) { $admResolved } else { '(none)' })"
 
 # --- credentials resolution ---
 $pw = $env:FW_SERVER_PASSWORD
@@ -43,6 +46,7 @@ pw = os.environ.get("FW_SERVER_PASSWORD", "") or None
 key = os.environ.get("FW_SSH_KEY", "") or None
 local = os.environ["FW_SRC_PATH"]
 check_only = os.environ.get("FW_CHECK_ONLY", "0") == "1"
+admin_local = os.environ.get("FW_ADMIN_HTML", "") or ""
 kw = dict(hostname=host, port=port, username=user, timeout=15, look_for_keys=False, allow_agent=False)
 if key and os.path.exists(key): kw["key_filename"] = key
 if pw: kw["password"] = pw
@@ -57,7 +61,14 @@ ts = time.strftime("%Y%m%d%H%M%S")
 out, err = run("mkdir -p %s/backups/%s && cp -a %s/cloud_server.py %s/backups/%s/ 2>/dev/null; echo BACKUP_OK" % (cloud, ts, cloud, cloud, ts))
 print(out.strip()); 
 if not check_only:
-    sftp = c.open_sftp(); sftp.put(local, cloud + "/cloud_server.py"); sftp.close(); print("[upload] cloud_server.py ->", cloud)
+    sftp = c.open_sftp()
+    sftp.put(local, cloud + "/cloud_server.py"); print("[upload] cloud_server.py ->", cloud)
+    if admin_local:
+        try: sftp.stat(cloud + "/admin.html")
+        except Exception: pass
+        sftp.put(admin_local, cloud + "/admin.html"); print("[upload] admin.html ->", cloud)
+        st = sftp.stat(cloud + "/admin.html"); print("[admin] remote size", st.st_size)
+    sftp.close()
 out, err = run("python3 -m py_compile %s/cloud_server.py && echo COMPILE_OK" % cloud)
 print(out.strip()); 
 if "COMPILE_OK" not in out: Fail(err or out)
@@ -79,6 +90,7 @@ c.close(); print("[update] OK")
 '@
 $env:FW_SERVER_HOST=$Server; $env:FW_SERVER_PORT=[string]$Port; $env:FW_SERVER_USER=$User
 $env:FW_CLOUD_DIR=$CloudDir; $env:FW_SRC_PATH=$resolved; $env:FW_SERVICE=$Service
+$env:FW_ADMIN_HTML=$(if ($admResolved) { $admResolved } else { "" })
 $env:FW_SSH_KEY = if ($useKey) { $keyPath } else { "" }
 $env:FW_CHECK_ONLY=$(if ($CheckOnly) { "1" } else { "0" })
 if ($useKey) { $env:FW_SERVER_PASSWORD="" } else { $env:FW_SERVER_PASSWORD=$pw }
