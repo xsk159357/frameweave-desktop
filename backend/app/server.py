@@ -1,13 +1,16 @@
-"""FrameWeave 本地服务入口：FastAPI + WebSocket 事件推送。
+﻿"""FrameWeave 本地服务入口：FastAPI + WebSocket 事件推送。
 
 启动: uvicorn app.server:app --port 8788
 """
 from __future__ import annotations
 import asyncio
+import itertools
 import json
 import os
 import sys
 import tempfile
+import time
+import uuid
 import zipfile
 import shutil
 import asyncio
@@ -20,8 +23,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .assets import AssetStore, create_store
-from .engine import Engine
-from .registry import autodiscover, list_specs
+from .engine import Engine, GraphNode, NodeStatus, Workflow
+from .registry import autodiscover, get_class, get_spec, list_specs, object_info
 from . import declarative
 from . import templates
 from . import obf
@@ -30,9 +33,11 @@ from .secrets import store_secret, read_secret, list_secret_names, delete_secret
 from .wfstore import WorkflowStore
 from .market import MarketService
 from . import cloud_gateway
+from . import authz
 from .worker import limits
 from .plugin_registry import PluginRegistry, PluginLifecycleError
 from .graph_validator import validate_graph
+from .queue import RunTask, TaskQueueManager
 
 # P3/t3 ② 打包版启动自检：关键产物完整性清单（integrity.manifest，HMAC 签名）校验，
 # 不匹配（exe/_internal 被替换、清单被改）→ 拒绝启动。置于任何服务初始化之前。
@@ -66,6 +71,8 @@ def _resolve_data_dir():
     return d
 
 DATA_DIR = _resolve_data_dir()
+# S1-T10（分层授权）：离线授权缓存落 DATA_DIR（云端 HMAC 验签 + 到期前刷新）
+authz.init(DATA_DIR)
 
 
 def _tmp_upload_dir() -> str:
@@ -82,9 +89,17 @@ def _tmp_upload_dir() -> str:
     return d
 
 AUTH_REVISION = "email-code-v2"
-BACKEND_PROTOCOL = 3
+# P2-10：API 版本化 —— BACKEND_PROTOCOL 语义化为 主.次 协议版本。
+# 兼容性保证：主版本（3）为既有线协议兼容位（desktop/main.cjs 与云端以 ===3 判定）；
+# 次版本表达"向后兼容的新增能力"（如新增端点/事件字段），主版本变更表示不兼容破坏。
+# bump 说明（06 §3 S3-T17 / P2-10）：新增不破坏既有交互的能力 → 只升次版本；
+# 移除/改写既有端点或字段语义 → 升主版本并同步 desktop/main.cjs、cloud_server.py。
+BACKEND_PROTOCOL = 3                              # 主版本（线协议兼容位，保持 ===3 判定）
+BACKEND_PROTOCOL_MINOR = 1                        # 次版本：v3.1 —— P2-10 起启用语义化次版本
+BACKEND_PROTOCOL_VERSION = f"{BACKEND_PROTOCOL}.{BACKEND_PROTOCOL_MINOR}"
+PROTOCOL_COMPAT_MAJOR = BACKEND_PROTOCOL          # 兼容位导出（语义化文档用）
 # 版本唯一真源：desktop/package.json（bump 时同步此常量 + cloud_server.py VERSION + preload/cloud_gateway）
-APP_VERSION = "0.3.4"
+APP_VERSION = "0.3.5"
 app = FastAPI(title="FrameWeave Local Service", version=APP_VERSION)
 
 # ---- 本地 API 鉴权（H3 修复 + P3/t3 ③ 防 dev 绕过） ----
@@ -129,7 +144,7 @@ async def local_token_guard(request: Request, call_next):
     if path.startswith("/api/secrets") or path.startswith("/api/export") or path.startswith("/api/assets"):
         need = True
     elif method in ("POST", "PUT", "DELETE") and path.startswith(
-            ("/api/workflows", "/api/market", "/api/user_nodes", "/api/util", "/api/draft")):
+            ("/api/workflows", "/api/market", "/api/user_nodes", "/api/util", "/api/draft", "/api/queue")):
         need = True
     if need:
         tok = request.headers.get(obf.x_fw_token_header(), "")
@@ -254,25 +269,114 @@ class WSManager:
 
 manager = WSManager()
 
-# 保持运行中任务引用，防止被垃圾回收（wfid → asyncio.Task）
-_RUNNING_TASKS: dict[str, "asyncio.Task"] = {}
-def _task_done(wfid: str):
-    def _done(t: "asyncio.Task"):
-        _RUNNING_TASKS.pop(wfid, None)
-    return _done
+# ---- S1-T1 任务队列（P0-1 / R-平台-1）----
+# 替代审计项 server.py:258-262 的全局单任务表 _RUNNING_TASKS：
+#   - FIFO 排队 + 优先级（priority 越小越先调度）
+#   - 并发上限（默认 4 ≥ 3：≥3 个工作流可并行入队/执行）
+#   - 逐任务取消（GET /api/queue 前身 + DELETE /api/queue/{id}）
+#   - 同一工作流重复 run 不再取消旧任务（各自独立执行）
+_QUEUE_MAX_CONCURRENT = max(1, int(os.environ.get("FRAMEWEAVE_MAX_CONCURRENT", "4") or "4"))
+task_queue = TaskQueueManager(max_concurrent=_QUEUE_MAX_CONCURRENT)
 
 
-def make_engine() -> Engine:
+def make_engine(prompt_id: str = "") -> Engine:
+    """构造执行引擎；prompt_id（队列任务 task_id）用于把引擎事件翻译为
+    Comfy 对齐的 /ws 事件（R-平台-5：executing/executed/execution_error/
+    progress/progress_state/execution_cached），原 node_update 事件保留广播。
+
+    事件翻译在 server 层完成（引擎保持平台语义），经 WSManager 广播给订阅客户端。
+    """
     async def _broadcast(evt: Dict[str, Any]):
         await manager.broadcast(evt)
     def ev(evt: Dict[str, Any]):
         # engine._emit 是同步回调，这里把事件投递回事件循环异步广播
         try:
             loop = asyncio.get_running_loop()
-            asyncio.ensure_future(_broadcast(evt), loop=loop)
+            for payload in _ws_event_payloads(evt, prompt_id):
+                asyncio.ensure_future(_broadcast(payload), loop=loop)
         except RuntimeError:
             pass
     return Engine(store, on_event=ev)
+
+
+def _ws_event_payloads(evt: Dict[str, Any], prompt_id: str) -> List[Dict[str, Any]]:
+    """引擎事件 → /ws 广播载荷列表：原事件 + Comfy 对齐事件（R-平台-5）。
+
+    映射（对齐 ComfyUI server /ws 语义）：
+      node_update running → executing{node,prompt_id} + progress{value,max}
+      node_update success → executed{node,prompt_id,output:asset_ids}
+      node_update failed  → execution_error{prompt_id,node_id,exception_message}
+      node_update cached  → execution_cached{nodes:[node_id],prompt_id}
+      node_update cancelled → progress_state{value:3}（取消）
+      execution_done      → executing{node:null} + progress_state{value:0}（空闲）
+      graph_error         → execution_error{prompt_id,node_id:"",exception_message}
+    """
+    out: List[Dict[str, Any]] = [evt]  # 保留原始事件（node_update 兼容）
+    t = evt.get("type")
+    if t == "node_update":
+        nid = evt.get("node_id", "")
+        status = evt.get("status")
+        if status == "running":
+            out.append({"type": "executing", "data": {"node": nid, "prompt_id": prompt_id}})
+            p = evt.get("progress")
+            if p is not None:
+                out.append({"type": "progress",
+                            "data": {"value": float(p), "max": 1.0, "prompt_id": prompt_id}})
+        elif status == "success":
+            out.append({"type": "executed", "data": {"node": nid, "prompt_id": prompt_id,
+                                                     "output": dict(evt.get("asset_ids") or {})}})
+        elif status == "failed":
+            out.append({"type": "execution_error",
+                        "data": {"prompt_id": prompt_id, "node_id": nid,
+                                 "node_type": "", "exception_type": "RuntimeError",
+                                 "exception_message": str(evt.get("error") or "")}})
+        elif status == "cached":
+            out.append({"type": "execution_cached",
+                        "data": {"nodes": [nid], "prompt_id": prompt_id}})
+        elif status == "cancelled":
+            out.append({"type": "progress_state", "data": {"value": 3}})
+    elif t == "execution_done":
+        out.append({"type": "executing", "data": {"node": None, "prompt_id": prompt_id}})
+        out.append({"type": "progress_state", "data": {"value": 0}})
+    elif t == "graph_error":
+        out.append({"type": "execution_error",
+                    "data": {"prompt_id": prompt_id, "node_id": "",
+                             "node_type": "", "exception_type": "GraphError",
+                             "exception_message": str(evt.get("message") or "")}})
+    return out
+
+
+async def _queue_run_task(task: RunTask) -> None:
+    """任务队列执行体：取工作流最新快照 → engine.execute → 持久化节点状态。
+
+    取消语义：engine.execute 内部 CancelledError 完整回滚资产/杀子进程树，
+    finally 仍落盘（节点状态 SUCCESS/FAILED/CANCELLED 与旧单任务表一致）。
+    S1-T3（R-平台-3）：task.wfid 命中瞬时 prompt 工作流（_prompt_wfs）时，
+    执行不落盘 wfstore，改为写 ComfyUI 语义的 prompt 历史（/history/{prompt_id}）。
+    """
+    wf = _prompt_wfs.pop(task.wfid, None)
+    persist = wf is None
+    if wf is None:
+        wf = wfstore.get(task.wfid)
+        if wf is None:
+            raise FileNotFoundError(f"工作流不存在: {task.wfid}")
+    engine = make_engine(prompt_id=task.task_id)
+    error = ""
+    try:
+        # R-平台-5：任务开始 → executing node=null（Comfy 语义）+ progress_state running
+        await manager.broadcast({"type": "executing",
+                                 "data": {"node": None, "prompt_id": task.task_id}})
+        await manager.broadcast({"type": "progress_state", "data": {"value": 1}})
+        await engine.execute(wf, run_node_ids=set(task.node_ids or []), run_mode=task.mode)
+    except Exception as e:  # noqa: BLE001 —— 失败仍按节点级状态落盘/记录历史
+        error = str(e)
+    finally:
+        if persist:
+            wfstore.save(wf)  # 持久化执行后的节点状态（取消/失败同样落盘）
+        else:
+            _record_prompt_history(task.wfid, wf, error=error)
+
+task_queue.set_runner(_queue_run_task)
 
 
 # ---- API 模型 ----
@@ -289,6 +393,7 @@ class WFUpdate(BaseModel):
 class RunRequest(BaseModel):
     mode: str = "all"
     node_ids: Optional[List[str]] = None
+    priority: int = 0  # S1-T1：越小越先调度（默认 0，同优先级保持 FIFO）
 
 class LoginRequest(BaseModel):
     email: str
@@ -374,11 +479,15 @@ def _protect_secret_params(nodes) -> None:
 # ---- 工作流 API ----
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "service": "frameweave", "version": APP_VERSION, "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
+    return {"ok": True, "service": "frameweave", "version": APP_VERSION,
+            "protocol_version": BACKEND_PROTOCOL, "protocol_version_semver": BACKEND_PROTOCOL_VERSION,
+            "auth_revision": AUTH_REVISION,
+            "auth": authz.auth_status()}
 
 @app.get("/api/system/build-info")
 async def build_info():
-    return {"ok": True, "service": "frameweave", "version": APP_VERSION, "protocol_version": BACKEND_PROTOCOL, "auth_revision": AUTH_REVISION}
+    return {"ok": True, "service": "frameweave", "version": APP_VERSION, "protocol_version": BACKEND_PROTOCOL,
+            "protocol_version_semver": BACKEND_PROTOCOL_VERSION, "auth_revision": AUTH_REVISION}
 
 # ---- 用户节点（声明式插件） ----
 @app.get("/api/user_nodes")
@@ -584,21 +693,146 @@ async def user_nodes_metrics():
     return plugin_registry.metrics()
 
 
+# ---- S1-T7（R-平台-7）：插件 web 目录（EXTENSION_WEB_DIRS 等价） ----
+@app.get("/api/extensions")
+async def api_extensions():
+    """已加载插件的 web 目录清单（前端注入机制的数据源）。
+
+    返回 [{pkg, type_id, version, entry, capabilities, url}]，url 为平台静态
+    服务相对路径 /extensions/<pkg>/<entry>；仅包含通过 manifest v2（G1-G10，
+    含 G8 web 门）的 live 包。前端据此刻画布注入自定义 UI 组件。
+    """
+    return {"extensions": declarative.web_extensions()}
+
+
+_WEB_MIME = {
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".map": "application/json",
+}
+
+
+@app.get("/extensions/{pkg}/{path:path}")
+async def extensions_static(pkg: str, path: str):
+    """静态服务插件 web 目录（EXTENSION_WEB_DIRS 等价）。
+
+    仅服务声明了 manifest.web.entry 的 live 包，且只暴露 <pkg>/web/ 子树：
+    - pkg 不得以 '.' 开头 / 不在保留目录（.staging/.backup/_vendor/.git）；
+    - manifest v2 校验失败（隔离/坏包）→ 404；
+    - 目标按包目录解析（URL 形如 /extensions/<pkg>/<entry>，entry 含 web/ 前缀），
+      再以 <pkg>/web/ realpath 双校验强制收束在 web/ 子树内（拒绝路径穿越）；
+    - 目录请求/缺失文件 → 404。
+    该端点不要求本地令牌（<script src> 无法携带自定义头），与 /api/specs
+    同为登录前可用的只读资源；注入内容仅来自用户本机安装的插件包。
+    """
+    from fastapi.responses import FileResponse
+    from .plugin import manifest_v2 as _mv
+    from .plugin.errors import PluginManifestError as _PME
+    if (not pkg or pkg.startswith(".") or pkg in ("staging", "backup", "_vendor", "git")
+            or pkg.startswith((".staging", ".backup", "_vendor", ".git"))):
+        raise HTTPException(404, "插件不存在")
+    live = os.path.join(declarative.USER_NODES_DIR, pkg)
+    if not os.path.isdir(live) or not os.path.isfile(os.path.join(live, "manifest.json")):
+        raise HTTPException(404, "插件不存在")
+    # 仅 manifest 校验通过的包可被静态服务（隔离/坏包不暴露）
+    try:
+        _mv.validate_manifest_file(live)
+    except (_PME, OSError, ValueError):
+        raise HTTPException(404, "插件未通过 manifest 校验")
+    web_root = os.path.abspath(os.path.join(live, "web"))
+    if not os.path.isdir(web_root):
+        raise HTTPException(404, "插件未声明 web 目录")
+    rel = path.replace("\\", "/").lstrip("/")
+    target = os.path.abspath(os.path.join(live, rel))
+    real_web = os.path.realpath(web_root)
+    real_target = os.path.realpath(target)
+    if real_target != real_web and not real_target.startswith(real_web + os.sep):
+        raise HTTPException(404, "路径非法")
+    if not os.path.isfile(real_target):
+        raise HTTPException(404, "资源不存在")
+    ext = os.path.splitext(real_target)[1].lower()
+    return FileResponse(real_target, media_type=_WEB_MIME.get(ext, "application/octet-stream"))
+
+
 @app.get("/api/specs")
 async def specs():
-    """节点类型清单（前端渲染节点面板）。保持数组形态（前端/测试兼容）。"""
-    out = []
-    for spec in list_specs():
+    """节点类型清单（前端渲染节点面板）。保持数组形态（前端/测试兼容）。
+
+    S1-T4（R-平台-4）：与 /api/object_info 同源生成——两者都从 registry.object_info()
+    单一来源组装；/api/specs 只做数组投影，不再有独立逻辑。
+    """
+    oi = object_info()
+    return [{
+        "type_id": tid, "title": v["display_name"], "category": v["category"],
+        "description": v["description"], "version": v["version"],
+        "inputs": _oi_ports_to_spec(v, "input", True),
+        "outputs": _oi_ports_to_spec(v, None, False),
+        "params": _oi_ports_to_spec(v, "param", True),
+        "gpu_required": v.get("gpu_required", False),
+        "gpu_recommended": v.get("gpu_recommended", False),
+        "streaming": v.get("streaming", False),
+        # S1-T4 语义字段（与 object_info 对齐；旧前端/测试可取用）
+        "search_aliases": v.get("search_aliases", []),
+        "deprecated": v.get("deprecated", False),
+    } for tid, v in oi.items()]
+
+
+def _oi_ports_to_spec(v: Dict[str, Any], role: Optional[str], is_input: bool) -> List[Dict[str, Any]]:
+    """object_info 端口元组 [type, meta] → 旧 /api/specs 端口对象（向后兼容投影）。
+
+    保留 FW 连线/参数区分（画布连线手柄只画连线输入，参数表单只画参数）：
+    - role="input"：取 input.required+optional 中 meta.port_role=="input"（连线输入端口）；
+    - role="param"：取 meta.port_role=="param"（表单参数端口）；
+    - role=None 且非输入：从 output/output_name 组装输出端口（Comfy 输出无元组）。
+    端口顺序遵守 input_order（inputs 在前、params 随后按声明序）。
+    """
+    out: List[Dict[str, Any]] = []
+    if role is None and not is_input:
+        for i, name in enumerate(v.get("output_name") or []):
+            out.append({
+                "name": name, "type": (v.get("output") or [])[i]
+                if i < len(v.get("output") or []) else "ANY",
+                "label": name, "required": True, "default": None,
+                "widget": "text", "options": [], "description": "",
+            })
+        return out
+    src: Dict[str, Any] = {**((v.get("input") or {}).get("required") or {}),
+                           **((v.get("input") or {}).get("optional") or {})}
+    for name, (typ, meta) in src.items():
+        if role is not None and meta.get("port_role") != role:
+            continue
         out.append({
-            "type_id": spec.type_id, "title": spec.title, "category": spec.category,
-            "description": spec.description, "version": spec.version,
-            "inputs": [p.__dict__ for p in spec.inputs],
-            "outputs": [p.__dict__ for p in spec.outputs],
-            "params": [p.__dict__ for p in spec.params],
-            "gpu_required": spec.gpu_required, "gpu_recommended": spec.gpu_recommended,
-            "streaming": spec.streaming,
+            "name": name, "type": typ, "label": meta.get("label", name),
+            "required": bool(meta.get("required")),
+            "default": meta.get("default"), "widget": meta.get("widget", "text"),
+            "options": meta.get("options", []), "description": meta.get("description", ""),
         })
     return out
+
+
+@app.get("/api/object_info")
+async def object_info_endpoint():
+    """ComfyUI /object_info 等价语义（R-平台-4 直采）：
+
+    每个节点输出 input（required/optional/hidden）+ input_order + is_input_list +
+    output（含 list 标记 output_is_list）+ output_name + description +
+    search_aliases + category + deprecated + version/kind/pkg。
+
+    前端节点面板与第三方客户端统一从此单一来源渲染（web 不再独立拼装 /api/specs）。
+    """
+    return object_info()
 
 @app.get("/api/port_types")
 async def port_types():
@@ -935,7 +1169,6 @@ async def run_wf(wfid: str, body: RunRequest):
     wf = wfstore.get(wfid)
     if wf is None:
         raise HTTPException(404, "工作流不存在")
-    engine = make_engine()
     # P1 图契约校验（s2-connectivity §5）：边 handle 属于声明端口、类型兼容；
     # mode=all 额外校验 required 输入必须有入边或显式 @资产引用。
     # 部分重跑（selection/upstream/downstream）只做结构性校验，不因无关节点
@@ -949,31 +1182,280 @@ async def run_wf(wfid: str, body: RunRequest):
              "errors": graph_errors},
             status_code=422,
         )
-
-    async def _run_and_save():
-        try:
-            await engine.execute(wf, run_node_ids=set(body.node_ids or []), run_mode=body.mode)
-        finally:
-            wfstore.save(wf)  # 持久化执行后的节点状态
-
-    # 用全局引用保持 task 不被 GC；同一工作流重复运行先取消旧任务
-    t = asyncio.create_task(_run_and_save())
-    old = _RUNNING_TASKS.get(wfid)
-    if old and not old.done():
-        old.cancel()
-    _RUNNING_TASKS[wfid] = t
-    t.add_done_callback(_task_done(wfid))
-    return {"ok": True, "message": "执行已开始"}
+    # S1-T1：入队执行。同一工作流重复 run 不再取消旧任务——各自入队、
+    # 取最新快照独立执行（R-平台-1：FIFO 排队 + 优先级 + 并发上限）。
+    task = await task_queue.enqueue(wfid, mode=body.mode, node_ids=body.node_ids,
+                                    priority=body.priority)
+    pos = task_queue.position_of(task.task_id)
+    return {"ok": True, "message": "执行已入队", "task_id": task.task_id,
+            "queue_position": pos}
 
 
 @app.post("/api/workflows/{wfid}/cancel")
 async def cancel_wf(wfid: str):
-    """取消运行中的工作流（F3：运行中可停止）。"""
-    t = _RUNNING_TASKS.get(wfid)
-    if t and not t.done():
-        t.cancel()
-        return {"ok": True, "message": "已请求取消执行"}
-    return {"ok": True, "message": "当前没有正在执行的任务"}
+    """取消工作流的全部任务（排队中 + 运行中）——保持旧 API 语义（F3：运行中可停止）。"""
+    n = await task_queue.cancel_workflow(wfid)
+    if n == 0:
+        return {"ok": True, "message": "当前没有正在执行的任务"}
+    return {"ok": True, "message": f"已请求取消 {n} 个任务"}
+
+
+# ---- S1-T1 任务队列 API（P0-1 / R-平台-1：FIFO 排队 + 逐任务取消）----
+@app.get("/api/queue")
+async def queue_snapshot():
+    """任务队列只读快照（R-平台-5：ComfyUI /queue 等价只读端点）。
+
+    返回 running + pending（含排队位置）+ 并发上限；
+    Comfy 兼容别名键 queue_running/queue_pending 同步给出（不破坏既有运行/等待键）。
+    """
+    snap = await task_queue.snapshot()
+    return {"ok": True, **snap,
+            "queue_running": snap["running"], "queue_pending": snap["pending"]}
+
+@app.get("/api/history")
+async def queue_history(limit: int = 200):
+    """任务结束历史只读端点（R-平台-5：ComfyUI /history 等价）。
+
+    返回已结束任务（成功/失败/取消）的最新 N 条（有界历史，默认 200），
+    与 GET /api/queue 状态一致（终态任务不再出现在 running/pending 中）。
+    """
+    items = await task_queue.finished_history(limit=max(1, min(int(limit), 1000)))
+    return {"ok": True, "history": items, "count": len(items)}
+
+@app.delete("/api/queue/{task_id}")
+async def cancel_queue_task(task_id: str):
+    """逐任务取消（R-平台-1）：等待中的任务直接出队，运行中的任务请求取消。"""
+    result = await task_queue.cancel_task(task_id)
+    if result is None:
+        raise HTTPException(404, "任务不存在")
+    return {"ok": True, "task_id": task_id, "status": result}
+
+
+# ---- S1-T3 标准执行协议 POST /prompt（P0-3 / R-平台-3）----
+# 接受 ComfyUI 语义纯执行图 {node_id: {class_type, inputs}} + client_id +
+# partial 目标（partial_execution_targets / partial / partial_execution.target_nodes），
+# 返回 {prompt_id, number} 排队号；/api/workflows/{id}/run 保持兼容不动。
+_prompt_wfs: Dict[str, Workflow] = {}            # prompt_id -> 瞬时工作流（不入 wfstore）
+_prompt_histories: Dict[str, Dict[str, Any]] = {}  # prompt_id -> ComfyUI 语义 history
+_prompt_seq = itertools.count(1)
+
+
+class PromptRequest(BaseModel):
+    prompt: Dict[str, Dict[str, Any]] = {}
+    client_id: str = ""
+    extra_data: Optional[Dict[str, Any]] = None
+    partial_execution_targets: Optional[List[str]] = None  # 官方字段
+    partial: Optional[List[str]] = None                    # 兼容别名
+    partial_execution: Optional[Any] = None                # 兼容 {target_nodes: [...]}
+
+
+def _prompt_partial_targets(body: PromptRequest) -> List[str]:
+    """归一化 partial 目标（三种写法取其一）。"""
+    if body.partial_execution_targets:
+        return list(body.partial_execution_targets)
+    if body.partial:
+        return list(body.partial)
+    pe = body.partial_execution
+    if isinstance(pe, dict) and isinstance(pe.get("target_nodes"), list):
+        return [str(x) for x in pe["target_nodes"]]
+    return []
+
+
+def _build_prompt_workflow(prompt: Dict[str, Dict[str, Any]],
+                           partial_targets: List[str]) -> "tuple[Optional[Workflow], Optional[dict]]":
+    """纯执行图 → 内部 Workflow（映射层，R-平台-3）。
+
+    规则：
+      - inputs 值 = [up_node_id, slot]（两元数组）→ 图链接（input_slots 记录槽位，
+        engine 按上游输出端口索引解析）；
+      - inputs 值 = 字面量 → spec.params 进 params；spec.inputs 端口进 literal_inputs
+        （无上游链接时直填）；
+      - 未知输入键 / 未注册 class_type / 链接指向不存在节点 → ComfyUI 语义错误包。
+      - partial_targets 非空 → 仅保留目标上游闭包子图（部分执行）。
+    返回 (Workflow, None) 或 (None, ComfyUI 风格错误包)。
+    """
+    import uuid as _uuid
+    node_errors: Dict[str, List[List[str]]] = {}
+    unknown_nodes: List[str] = []
+    wf = Workflow(id=_uuid.uuid4().hex[:12], name="prompt", created_at=time.time(),
+                  updated_at=time.time())
+    order: Dict[str, int] = {}
+    for i, nid in enumerate(prompt.keys()):
+        order[str(nid)] = i
+        nd = prompt[nid]
+        if not isinstance(nd, dict):
+            node_errors[str(nid)] = [["node_not_dict", "节点定义必须是对象", ""]]
+            continue
+        ct = nd.get("class_type")
+        if not isinstance(ct, str) or not ct:
+            node_errors[str(nid)] = [["class_type_missing", "缺少 class_type", ""]]
+            continue
+        try:
+            spec = get_spec(ct)
+            cls = get_class(ct)
+        except Exception:  # noqa: BLE001 —— 未注册类型 get_spec 可能抛 KeyError
+            spec = None
+            cls = None
+        if spec is None or cls is None:
+            node_errors[str(nid)] = [["class_type_not_found",
+                                      f"节点类型未注册: {ct}", ct]]
+            continue
+        g = GraphNode(id=str(nid), type_id=ct)
+        params: Dict[str, Any] = {}
+        inputs: Dict[str, str] = {}
+        slots: Dict[str, int] = {}
+        literals: Dict[str, Any] = {}
+        raw_inputs = nd.get("inputs") or {}
+        if not isinstance(raw_inputs, dict):
+            node_errors.setdefault(str(nid), []).append(["inputs_not_dict", "inputs 必须是对象", ""])
+            continue
+        pnames = {p.name for p in spec.params}
+        inames = {p.name for p in spec.inputs}
+        for k, v in raw_inputs.items():
+            if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str):
+                # 图链接 [up_node_id, output_slot]
+                up = str(v[0])
+                try:
+                    slot = int(v[1])
+                except (TypeError, ValueError):
+                    node_errors.setdefault(str(nid), []).append(
+                        ["link_slot_invalid", f"输入 {k!r} 链接槽位非法: {v[1]!r}", ""])
+                    continue
+                inputs[k] = up
+                slots[k] = slot
+                continue
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                if k in pnames:
+                    params[k] = v
+                elif k in inames:
+                    literals[k] = v
+                else:
+                    node_errors.setdefault(str(nid), []).append(
+                        ["unknown_input", f"未知输入端口: {k!r}（class_type={ct}）", ""])
+                continue
+            node_errors.setdefault(str(nid), []).append(
+                ["unsupported_input", f"不支持的输入值类型: {k!r}={v!r}", ""])
+        g.params = params
+        g.inputs = inputs
+        g.input_slots = slots
+        g.literal_inputs = literals
+        wf.nodes[str(nid)] = g
+    # 链接合法性：上游节点必须存在
+    for nid, g in wf.nodes.items():
+        for port, up in g.inputs.items():
+            if up not in wf.nodes:
+                node_errors.setdefault(str(nid), []).append(
+                    ["link_node_missing", f"链接指向不存在的节点: {up}", ""])
+    if node_errors:
+        return None, {
+            "error": {"type": "invalid_prompt",
+                      "message": "Prompt 图校验失败",
+                      "details": "; ".join(f"{nid}: {e[1]}" for nid, es in node_errors.items() for e in es)},
+            "node_errors": node_errors,
+        }
+    # partial 目标：保留目标的上游闭包子图（部分执行）
+    if partial_targets:
+        keep: Set[str] = set()
+        stack = [str(t) for t in partial_targets]
+        missing = [t for t in stack if t not in wf.nodes]
+        if missing:
+            return None, {
+                "error": {"type": "invalid_prompt",
+                          "message": f"partial 目标节点不存在: {missing}"},
+                "node_errors": {m: [["partial_target_missing", "目标节点不存在", ""]]
+                                for m in missing},
+            }
+        while stack:
+            cur = stack.pop()
+            if cur in keep:
+                continue
+            keep.add(cur)
+            g = wf.nodes[cur]
+            for up in g.inputs.values():
+                if up in wf.nodes and up not in keep:
+                    stack.append(up)
+        wf.nodes = {nid: g for nid, g in wf.nodes.items() if nid in keep}
+    return wf, None
+
+
+def _record_prompt_history(prompt_id: str, wf: Workflow, error: str = "") -> None:
+    """把瞬时 prompt 工作流的执行结果写成 ComfyUI /history/{prompt_id} 语义记录。
+
+    outputs: {node_id: {"images":[{filename,subfolder,type}], ...}} —— IMAGE 类
+    输出按 Comfy 图像输出格式登记（官方客户端 _find_output_in_history 直读）；
+    非媒体输出以 assets 摘要登记（扩展字段，兼容 Comfy 结构）。
+    status: {status_str: success|error, completed: true, messages: [...]}
+    """
+    outputs: Dict[str, Dict[str, Any]] = {}
+    for nid, node in wf.nodes.items():
+        entry: Dict[str, Any] = {}
+        images = []
+        assets = []
+        for port, aid in (node.asset_ids or {}).items():
+            asset = store.get(aid)
+            if asset is None:
+                continue
+            assets.append({"asset_id": aid, "port": port, "kind": asset.kind})
+            if asset.kind == "IMAGE" and asset.path:
+                images.append({"filename": os.path.basename(asset.path),
+                               "subfolder": "", "type": "output"})
+        if images:
+            entry["images"] = images
+        if assets:
+            entry["assets"] = assets
+        if entry:
+            outputs[nid] = entry
+    status: Dict[str, Any] = {"status_str": "error" if error else "success",
+                               "completed": True}
+    messages: List[Any] = []
+    if error:
+        messages.append(["execution_error",
+                         {"node_id": "", "node_type": "", "exception_message": error}])
+    if messages:
+        status["messages"] = messages
+    _prompt_histories[prompt_id] = {"outputs": outputs, "status": status}
+
+
+@app.post("/prompt")
+@app.post("/api/prompt")
+async def prompt_execute(body: PromptRequest):
+    """标准执行协议（R-平台-3）：ComfyUI 官方客户端直连入口。
+
+    提交 {node_id: {class_type, inputs}} 纯执行图 → 校验 → 入队 → {prompt_id, number}。
+    校验失败返回 ComfyUI 语义 200 + {"error": ..., "node_errors": {...}}
+    （官方客户端 _queue_prompt 依 'error' 键判定）。
+    """
+    if not body.prompt or not isinstance(body.prompt, dict):
+        return {"error": {"type": "invalid_prompt", "message": "prompt 不能为空"},
+                "node_errors": {}}
+    wf, err = _build_prompt_workflow(body.prompt, _prompt_partial_targets(body))
+    if err is not None:
+        return err
+    gerr = validate_graph(wf, check_required=True, skip_unknown_types=False)
+    if gerr:
+        return {"error": {"type": "invalid_prompt",
+                          "message": "工作流图校验失败",
+                          "details": "; ".join(str(x) for x in gerr)},
+                "node_errors": {}}
+    pid = uuid.uuid4().hex[:12]
+    _prompt_wfs[pid] = wf
+    task = await task_queue.enqueue(pid, mode="all")
+    snap = await task_queue.snapshot()
+    pos = task_queue.position_of(task.task_id)
+    number = pos if pos is not None else (len(snap["running"]) + len(snap["pending"]))
+    return {"prompt_id": pid, "number": number}
+
+
+@app.get("/history/{prompt_id}")
+async def prompt_history(prompt_id: str):
+    """ComfyUI /history/{prompt_id} 等价（R-平台-3 官方客户端完成判定依赖）。
+
+    返回 {prompt_id: {outputs, status}}；瞬时 prompt 任务完成写入 _prompt_histories。
+    """
+    h = _prompt_histories.get(prompt_id)
+    if h is None:
+        raise HTTPException(404, "历史不存在")
+    return {prompt_id: h}
 
 
 # ---- 资产 API ----
@@ -1095,6 +1577,74 @@ async def activate(body: ActivateRequest):
     if resp.get("sig_fail"):
         return _cloud_auth_fail(resp)
     return resp
+
+
+# ---- LLM 通道配置化（全局默认：节点显式参数 > 全局配置 > 节点中立默认）----
+@app.get("/api/settings/llm")
+async def get_llm_settings():
+    from .llm_config import get_llm_config
+    return {"ok": True, "config": get_llm_config()}
+
+
+@app.put("/api/settings/llm")
+async def put_llm_settings(request: Request, body: dict):
+    """写入全局 LLM 配置（写操作需本地令牌；api_key 只存保险箱引用名）。"""
+    tok = request.headers.get(obf.x_fw_token_header(), "")
+    if not _local_token_ok(tok):
+        return JSONResponse({"ok": False, "message": "本地授权令牌无效"}, status_code=401)
+    from .llm_config import set_llm_config
+    cfg = set_llm_config(
+        provider=str(body.get("provider") or ""),
+        base_url=str(body.get("base_url") or ""),
+        model=str(body.get("model") or ""),
+        api_key_ref=str(body.get("api_key_ref") or ""),
+    )
+    return {"ok": True, "config": cfg}
+
+
+@app.post("/api/llm/probe")
+async def llm_probe(body: dict):
+    """探测服务商可用模型（/v1/models），辅助 LLM 通道配置。"""
+    from .llm_config import resolve_global
+    base_url = str(body.get("base_url") or "").strip()
+    key_ref = str(body.get("api_key_ref") or "").strip()
+    api_key = str(body.get("api_key") or "").strip()
+    if not key_ref and not api_key:
+        g = resolve_global()
+        key_ref = g.get("api_key_ref") or ""
+        api_key = g.get("api_key") or ""
+    if key_ref and not api_key:
+        try:
+            api_key = read_secret(key_ref) or ""
+        except Exception:  # noqa: BLE001
+            api_key = ""
+    if not base_url:
+        g = resolve_global()
+        base_url = g.get("base_url") or ""
+    if not api_key:
+        return JSONResponse({"ok": False, "code": "auth",
+                             "message": "缺少 API Key（提供 api_key 或 api_key_ref）"}, status_code=400)
+    if not base_url:
+        return JSONResponse({"ok": False, "code": "invalid",
+                             "message": "缺少 base_url"}, status_code=400)
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(base_url.rstrip("/") + "/models",
+                                 headers={"Authorization": "Bearer " + api_key})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        ids = [m.get("id") for m in (data.get("data") or []) if isinstance(m, dict) and m.get("id")]
+        return {"ok": True, "models": ids, "count": len(ids), "base_url": base_url}
+    except urllib.error.HTTPError as e:
+        return JSONResponse(
+            {"ok": False, "code": "http",
+             "message": f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}"},
+            status_code=502)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "code": "network",
+                             "message": f"{type(e).__name__}: {e}"}, status_code=502)
+
 
 if DEV_ENDPOINTS:
     @app.post("/api/dev/issue-card")
@@ -1271,20 +1821,14 @@ if DEV_ENDPOINTS:
 
 @app.api_route("/api/auth/verify", methods=["GET", "POST"])
 async def verify(token: str = "", device_id: str = "", body: dict = None):
-    """订阅校验（纯云化）：响应 HMAC 验签 + nonce 防重放；云端不可达/未配置 → 拒绝。
+    """订阅校验（S1-T10 分层授权）：云端优先 + 离线授权缓存降级（degraded 显式标记）。
 
-    任何路径都不存在本地授权成功：无云端配置或云端不可达都返回明确错误。
+    本地执行引擎/基础节点不经过本门（离线可用）；verify 只影响订阅状态展示。
+    云端不可达/未配置且无有效缓存 → 明确错误（绝不静默通过）；缓存降级返回
+    degraded+offline_cache 显式标记（前端据此提示而非误登出）。
     """
     body = body or {}
-    gate = _cloud_required()
-    if gate:
-        return {"ok": False, "reason": _CLOUD_NOT_CONFIGURED, "code": "cloud_not_configured"}
-    resp = cloud_gateway.cloud_verify(token or body.get("token", ""), device_id or body.get("device_id", ""))
-    if resp is None:
-        return {"ok": False, "reason": _CLOUD_UNAVAILABLE}
-    if resp.get("sig_fail"):
-        return {"ok": False, "reason": resp.get("reason") or "云端响应校验失败", "sig_fail": True}
-    return resp
+    return authz.verify(token or body.get("token", ""), device_id or body.get("device_id", ""))
 
 
 # ---- WebSocket ----
@@ -1294,8 +1838,16 @@ async def ws_endpoint(ws: WebSocket):
     try:
         while True:
             msg = await ws.receive_text()
-            # M0：客户端心跳/订阅（保持简单）
+            # ComfyUI 客户端心跳：text "ping" → text "pong"（R-平台-5 修复：
+            # 兼容 ComfyUI 官方客户端语义；JSON {"type":"ping"} 亦回应 JSON pong）
             if msg == "ping":
+                await ws.send_text("pong")
+                continue
+            try:
+                data = json.loads(msg)
+            except (TypeError, ValueError):
+                data = None
+            if isinstance(data, dict) and data.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
     except WebSocketDisconnect:
         manager.disconnect(ws)

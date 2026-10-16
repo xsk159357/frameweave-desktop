@@ -1,7 +1,7 @@
 // 节点插件管理：已装列表 / 生命周期（禁用/启用/升级/回滚/卸载/健康检查）/ 重新扫描 / 打开目录 / 导出
 import { useEffect, useState } from 'react'
 import { X, FolderOpen, Puzzle, RefreshCw, FileCode2, Download, Power, PowerOff, RotateCcw, Trash2, Upload, Stethoscope } from 'lucide-react'
-import { api } from './api'
+import { api, nodeSpecs } from './api'
 import { useAppStore } from './store'
 
 interface PluginInfo {
@@ -46,7 +46,7 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
     try {
       const r = await fn()
       if (r && r.ok === false) { pushToast((r.message || '操作失败'), 'err'); return }
-      setSpecs(await api.specs())
+      setSpecs(await nodeSpecs())
       await refresh()
       pushToast(okMsg, 'ok')
     } catch (e: any) {
@@ -65,7 +65,7 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
       try {
         const r = await api.pluginUpdate(pkg, f)
         if (r && r.ok === false) { pushToast((r.message || '升级失败'), 'err'); return }
-        setSpecs(await api.specs()); await refresh()
+        setSpecs(await nodeSpecs()); await refresh()
         pushToast('已升级 ' + pkg + ' → v' + (r.version || ''), 'ok')
       } catch (e: any) {
         pushToast((e.message || '升级失败'), 'err'); await refresh()
@@ -91,7 +91,7 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>插件请从商城下载并安装</span>
             <button className="fw-btn fw-btn-ghost" onClick={async () => {
-              try { await api.reloadUserNodes(); setSpecs(await api.specs()); await refresh(); pushToast('节点库已重新扫描', 'ok') } catch (e: any) { pushToast('扫描失败: ' + (e.message || e), 'err') }
+              try { await api.reloadUserNodes(); setSpecs(await nodeSpecs()); await refresh(); pushToast('节点库已重新扫描', 'ok') } catch (e: any) { pushToast('扫描失败: ' + (e.message || e), 'err') }
             }}>
               <><RefreshCw size={12} /> 重新扫描</>
             </button>

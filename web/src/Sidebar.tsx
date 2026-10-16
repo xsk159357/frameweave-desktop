@@ -21,18 +21,18 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
   }, [specs, query])
 
   const catGrad: Record<string, string> = {
-    输入: 'linear-gradient(135deg,#6c8cff,#8b5cf6)',
-    语义: 'linear-gradient(135deg,#8b5cf6,#c084fc)',
-    分析: 'linear-gradient(135deg,#0ea5a4,#34d399)',
-    控制: 'linear-gradient(135deg,#f59e0b,#f97316)',
-    输出: 'linear-gradient(135deg,#f87171,#fb7185)',
+    输入: '#8f6f4d',
+    语义: '#7d6750',
+    分析: '#3f806f',
+    控制: '#a56d35',
+    输出: '#9b5d50',
   }
   const catColor: Record<string, string> = {
-    输入: '#6c8cff',
-    语义: '#a78bfa',
-    分析: '#34d399',
-    控制: '#fbbf24',
-    输出: '#f87171',
+    输入: '#8f6f4d',
+    语义: '#7d6750',
+    分析: '#3f806f',
+    控制: '#a56d35',
+    输出: '#9b5d50',
   }
   const short = (s: any) => {
     const last = String(s.type_id || '').split('/').pop() || ''

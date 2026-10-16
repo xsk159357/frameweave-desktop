@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import argparse,base64,hashlib,hmac,json,os,random,re,sqlite3,time,uuid
@@ -9,7 +9,7 @@ CARD_SECRET=os.environ.get('FRAMEWEAVE_CARD_SECRET',''); ADMIN_KEY=os.environ.ge
 VERIFY_SECRET=os.environ.get('FRAMEWEAVE_VERIFY_SECRET','fw-verify-secret-2026')  # P3/t3 ④：auth 响应 HMAC 签名密钥
 ADMIN_ALLOW_IPS=[x.strip() for x in os.environ.get('FRAMEWEAVE_ADMIN_ALLOW_IPS','').split(',') if x.strip()]
 TRIAL_DAYS=1; DB_PATH=os.environ.get('CLOUD_DB',os.path.join(os.path.dirname(os.path.abspath(__file__)),'cloud.db'))
-AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.3.4'; AUTHOR_SHARE=0.8
+AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.3.5'; AUTHOR_SHARE=0.8
 MARKET_FILE=os.path.join(os.path.dirname(os.path.abspath(DB_PATH)),'market_items.json')
 EMAIL_RE=re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}@qq\.com$',re.I)
 ADMIN_TOKEN_TTL=28800.0
@@ -43,7 +43,11 @@ def db():
  c.execute('''CREATE TABLE IF NOT EXISTS cards(id INTEGER PRIMARY KEY AUTOINCREMENT,card TEXT NOT NULL UNIQUE,plan TEXT NOT NULL,days INTEGER NOT NULL,created_at REAL NOT NULL,used_by TEXT NOT NULL DEFAULT '',used_at REAL NOT NULL DEFAULT 0,revoked INTEGER NOT NULL DEFAULT 0)''')
  c.execute('''CREATE TABLE IF NOT EXISTS market_downloads(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL,email TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT '',price INTEGER NOT NULL DEFAULT 0,paid INTEGER NOT NULL DEFAULT 0,client_version TEXT NOT NULL DEFAULT '',device_id TEXT NOT NULL DEFAULT '',ip TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL)''')
  c.execute('''CREATE TABLE IF NOT EXISTS market_installs(id INTEGER PRIMARY KEY AUTOINCREMENT,item_id TEXT NOT NULL,email TEXT NOT NULL DEFAULT '',client_version TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',created_at REAL NOT NULL)''')
+ c.execute('''CREATE TABLE IF NOT EXISTS admin_settings(k TEXT PRIMARY KEY,v TEXT NOT NULL DEFAULT '')''')
+ c.execute('''CREATE TABLE IF NOT EXISTS devices(email TEXT NOT NULL,device_id TEXT NOT NULL,first_seen REAL NOT NULL,last_seen REAL NOT NULL DEFAULT 0,kicked INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(email,device_id))''')
  try: c.execute('ALTER TABLE sessions ADD COLUMN status INTEGER NOT NULL DEFAULT 1')
+ except Exception: pass
+ try: c.execute('ALTER TABLE sessions ADD COLUMN created_ip TEXT NOT NULL DEFAULT \'\'')
  except Exception: pass
  try: c.execute('''CREATE INDEX IF NOT EXISTS idx_audit_created ON mail_audit(created_at)''')
  except Exception: pass
@@ -335,7 +339,7 @@ def admin_login(b):
  ip=b.get('ip','?') or '?'
  if ADMIN_ALLOW_IPS and ip.split(':')[0] not in ADMIN_ALLOW_IPS: return {'ok':False,'message':'IP 不在允许列表'}
  if not rate_hit('adminlogin',ip,5,900): return {'ok':False,'message':'尝试过于频繁，请 15 分钟后再试'}
- if not hmac.compare_digest(str(b.get('admin_key','')),ADMIN_KEY): return {'ok':False,'message':'管理密钥错误'}
+ if not hmac.compare_digest(str(b.get('admin_key','')),_admin_key_effective()): return {'ok':False,'message':'管理密钥错误'}
  rate_reset('adminlogin',ip)
  t=uuid.uuid4().hex[:32]; now=time.time(); c=db()
  c.execute('INSERT INTO admin_tokens(token,created_at,expires_at) VALUES(?,?,?)',(t,now,now+ADMIN_TOKEN_TTL)); c.commit(); c.close()
@@ -399,7 +403,232 @@ def admin_card_revoke(b):
  c.execute('UPDATE cards SET revoked=1 WHERE id=?',(cid,)); c.commit(); c.close()
  return {'ok':True,'id':cid}
 
-ROUTES={'/api/auth/email/send-code':lambda b: issue_code(b.get('email',''),b.get('scene','register'),b.get('ip',''),b.get('device_id','')) if valid_email(b.get('email','')) else (False,'目前仅支持 QQ 邮箱（@qq.com）'),'/api/auth/register':register,'/api/auth/login':login,'/api/auth/password/reset':reset,'/api/auth/verify':verify,'/api/auth/activate':activate,'/api/admin/login':admin_login,'/api/admin/logout':admin_logout,'/api/admin/users':admin_users,'/api/admin/user/toggle':admin_toggle,'/api/admin/user/extend':admin_extend_subscription,'/api/admin/cards':admin_cards,'/api/admin/card/revoke':admin_card_revoke,'/api/admin/audit':admin_audit,'/api/admin/issue-card':admin_issue,'/api/market/download-auth':market_download_auth,'/api/market/install-report':market_install_report,'/api/admin/market/list':admin_market_list,'/api/admin/market/upsert':admin_market_upsert}
+# ---------- 后台控制台 P0-P3（captain 2026-10） ----------
+def get_setting(k, default=''):
+ c=db()
+ try:
+  r=c.execute('SELECT v FROM admin_settings WHERE k=?',(k,)).fetchone(); return r['v'] if r else default
+ finally: c.close()
+def set_setting(k, v):
+ c=db(); c.execute('INSERT OR REPLACE INTO admin_settings(k,v) VALUES(?,?)',(k,str(v))); c.commit(); c.close()
+def _admin_key_effective():
+ k=get_setting('admin_key','')
+ return k or ADMIN_KEY
+def _adm_write(b, scene, target, ip, result='ok', reason=''):
+ try: audit(norm(target), 'admin_'+scene, ip, '', result, reason)
+ except Exception: pass
+def _adm(s):
+ if not admin_auth(s): return None
+ return s
+
+def admin_stats(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ now=time.time(); c=db()
+ total=c.execute('SELECT COUNT(*) n FROM sessions').fetchone()['n']
+ members=c.execute("SELECT COUNT(*) n FROM sessions WHERE plan='member'").fetchone()['n']
+ today_regs=c.execute('SELECT COUNT(*) n FROM sessions WHERE created_at>?',(now-86400,)).fetchone()['n']
+ weekly_regs=c.execute('SELECT COUNT(*) n FROM sessions WHERE created_at>?',(now-7*86400,)).fetchone()['n']
+ online15=c.execute('SELECT COUNT(*) n FROM sessions WHERE last_verified>?',(now-900,)).fetchone()['n']
+ online60=c.execute('SELECT COUNT(*) n FROM sessions WHERE last_verified>?',(now-3600,)).fetchone()['n']
+ disabled=c.execute('SELECT COUNT(*) n FROM sessions WHERE status=0').fetchone()['n']
+ expiring=c.execute("SELECT COUNT(*) n FROM sessions WHERE plan='member' AND expires_at>? AND expires_at<?",(now,now+7*86400)).fetchone()['n']
+ expired=c.execute("SELECT COUNT(*) n FROM sessions WHERE plan='member' AND expires_at<=?",(now,)).fetchone()['n']
+ card_total=c.execute('SELECT COUNT(*) n FROM cards').fetchone()['n']
+ card_unused=c.execute('SELECT COUNT(*) n FROM cards WHERE used_by=\'\' AND revoked=0').fetchone()['n']
+ card_today=c.execute('SELECT COUNT(*) n FROM cards WHERE created_at>?',(now-86400,)).fetchone()['n']
+ mail_ok=c.execute("SELECT COUNT(*) n FROM mail_audit WHERE result='sent' AND scene NOT LIKE 'admin_%'").fetchone()['n']
+ mail_fail=c.execute("SELECT COUNT(*) n FROM mail_audit WHERE result='failed'").fetchone()['n']
+ verifies=c.execute('SELECT COUNT(*) n FROM mail_audit WHERE scene IN (\'verify\',\'login\',\'register\',\'activate\')').fetchone()['n']
+ dl=c.execute("SELECT COUNT(*) n FROM market_downloads WHERE paid=1").fetchone()['n']
+ inst=c.execute('SELECT COUNT(*) n FROM market_installs WHERE result IN (\'ok\',\'success\',\'installed\')').fetchone()['n']
+ admins=c.execute('SELECT COUNT(*) n FROM admin_tokens').fetchone()['n']; c.close()
+ market=_load_market(); m_items=len(market); m_installs=sum(int(i.get('installs') or 0) for i in market.values())
+ return {'ok':True,'stats':{'users':total,'members':members,'today_regs':today_regs,'weekly_regs':weekly_regs,
+  'online_15m':online15,'online_60m':online60,'disabled':disabled,'expiring_7d':expiring,'expired':expired,
+  'cards_total':card_total,'cards_unused':card_unused,'cards_today':card_today,
+  'mail_ok':mail_ok,'mail_fail':mail_fail,'auth_events':verifies,
+  'paid_downloads':dl,'install_records':inst,'admin_sessions':admins,'market_items':m_items,'market_installs':m_installs,
+  'now':now,'author_share':AUTHOR_SHARE}}
+
+def admin_users_v2(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ q=str(b.get('q') or '').strip().lower()
+ try: page=max(1,int(b.get('page') or 1))
+ except Exception: page=1
+ try: per=max(1,min(200,int(b.get('per_page') or 50)))
+ except Exception: per=50
+ try: status=int(b.get('status') or -1)
+ except Exception: status=-1
+ c=db(); where=[]
+ if q: where.append('(email LIKE ? OR user_id LIKE ? OR device_id LIKE ?)')
+ if status>=0: where.append('status=?')
+ wsql=(' WHERE '+ ' AND '.join(where)) if where else ''
+ args=[]
+ if q: args += [f'%{q}%', f'%{q}%', f'%{q}%']
+ if status>=0: args.append(status)
+ total=c.execute('SELECT COUNT(*) n FROM sessions'+wsql,args).fetchone()['n']
+ rows=c.execute('SELECT email,user_id,plan,expires_at,credits,device_id,status,created_at,created_ip,last_verified,password_hash FROM sessions'+wsql+' ORDER BY created_at DESC LIMIT ? OFFSET ?',args+[per,(page-1)*per]).fetchall(); c.close()
+ now=time.time(); out=[]
+ for r in rows:
+  d=dict(r); d['hash_type']='scrypt' if str(d.get('password_hash') or '').startswith('scrypt$') else ('sha256' if d.get('password_hash') else 'none'); d.pop('password_hash',None)
+  d['expiring_soon']=bool(d.get('expires_at') and d.get('plan')=='member' and float(d['expires_at'])>now and float(d['expires_at'])-now<7*86400)
+  out.append(d)
+ return {'ok':True,'users':out,'total':total,'page':page,'per_page':per,'pages':max(1,(total+per-1)//per)}
+
+def admin_user_get(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ e=norm(b.get('email','')); s=find(e)
+ if not s: return {'ok':False,'message':'用户不存在'}
+ c=db()
+ devices=[dict(r) for r in c.execute('SELECT * FROM devices WHERE email=? ORDER BY last_seen DESC LIMIT 50',(e,))]
+ trail=[dict(r) for r in c.execute("SELECT * FROM mail_audit WHERE email=? ORDER BY id DESC LIMIT 50",(e,))]
+ used_cards=json.loads(s.get('cards_used') or '[]')
+ cards=[dict(r) for r in c.execute('SELECT * FROM cards WHERE card=?',(u,)) for u in used_cards] if used_cards else []
+ dls=[dict(r) for r in c.execute('SELECT * FROM market_downloads WHERE email=? ORDER BY id DESC LIMIT 20',(e,))]
+ c.close()
+ d=dict(s); d['hash_type']='scrypt' if str(d.get('password_hash') or '').startswith('scrypt$') else ('sha256' if d.get('password_hash') else 'none'); d.pop('password_hash',None)
+ return {'ok':True,'user':d,'devices':devices,'trail':trail,'cards':cards,'downloads':dls}
+
+def admin_user_credits(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ e=norm(b.get('email','')); s=find(e)
+ if not s: return {'ok':False,'message':'用户不存在'}
+ try: delta=int(b.get('delta',0))
+ except Exception: delta=0
+ if delta==0 or abs(delta)>100000: return {'ok':False,'message':'积分调整需在 ±100000 内且非零'}
+ if not rate_hit('admcredits',e,30,3600): return {'ok':False,'message':'操作过于频繁，请稍后再试'}
+ s['credits']=max(0,int(s.get('credits') or 0)+delta); save(s)
+ _adm_write(b,'credits',e,b.get('ip',''),'ok',f'delta={delta:+d}')
+ return {'ok':True,'email':e,'credits':s['credits'],'delta':delta}
+
+def admin_user_kick(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ e=norm(b.get('email','')); s=find(e)
+ if not s: return {'ok':False,'message':'用户不存在'}
+ c=db(); c.execute('UPDATE sessions SET device_id=\'\' WHERE email=?',(e,)); c.commit()
+ dev=dict(c.execute('SELECT * FROM devices WHERE email=? ORDER BY last_seen DESC LIMIT 1',(e,)).fetchone() or {}) if False else None
+ c.execute('UPDATE devices SET kicked=1 WHERE email=? AND kicked=0',(e,)); c.commit(); c.close()
+ _adm_write(b,'kick',e,b.get('ip',''),'ok','强制全部设备下线')
+ return {'ok':True,'email':e,'message':'已强制该账号全部设备下线（下次 verify 将触发 device_kick）'}
+
+def admin_settings_get(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ keys=('smtp','plans','card_prefix','totp_enabled','readonly_admin_key','admin_key_set','ops_base','ops_token_set','admin_allow_ips')
+ out={}
+ for k in keys:
+  if k.endswith('_set') or k=='admin_allow_ips': continue
+  out[k]=get_setting(k,'')
+ out['admin_key_set']=bool(get_setting('admin_key',''))
+ out['ops_base']=get_setting('ops_base','')
+ out['ops_token_set']=bool(get_setting('ops_token',''))
+ out['admin_allow_ips']=','.join(ADMIN_ALLOW_IPS)
+ return {'ok':True,'settings':out}
+
+def admin_settings_put(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ upd=b.get('settings',{})
+ if not isinstance(upd,dict): return {'ok':False,'message':'settings 需为对象'}
+ allow={'smtp','plans','card_prefix','totp_enabled','ops_base','ops_token','admin_allow_ips'}
+ for k,v in upd.items():
+  if k not in allow: continue
+  set_setting(k,str(v))
+ if 'ops_token' in upd and upd['ops_token']:
+  set_setting('ops_token',str(upd['ops_token']))
+ _adm_write(b,'settings',get_setting('ops_base','admin'),b.get('ip',''),'ok',','.join(sorted(upd.keys())))
+ if 'admin_allow_ips' in upd:
+  os.environ['FRAMEWEAVE_ADMIN_ALLOW_IPS']=str(upd['admin_allow_ips'])
+ return admin_settings_get(b)
+
+def admin_key_rotate(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ nk=str(b.get('new_key',''))
+ if len(nk)<8: return {'ok':False,'message':'新管理密钥至少 8 位'}
+ import hashlib as _h
+ set_setting('admin_key',nk)
+ _adm_write(b,'key_rotate','root',b.get('ip',''),'ok','管理密钥已轮换')
+ return {'ok':True,'message':'管理密钥已轮换（旧会话失效，请用新密钥重新登录）'}
+
+def admin_tokens_list(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ c=db(); rows=[dict(r) for r in c.execute('SELECT token,created_at,expires_at FROM admin_tokens ORDER BY created_at DESC LIMIT 100')]; c.close()
+ now=time.time()
+ for r in rows: r['active']=now<float(r['expires_at'])
+ return {'ok':True,'tokens':rows}
+
+def admin_token_revoke(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ t=str(b.get('token','')); c=db()
+ # 始终拒绝吊销"本次鉴权所用令牌"本身（auth_token 由 ROUTES 包装注入）
+ if t==str(b.get('auth_token','')): c.close(); return {'ok':False,'message':'不能吊销当前会话'}
+ c.execute('DELETE FROM admin_tokens WHERE token=?',(t,)); c.commit(); c.close()
+ _adm_write(b,'token_revoke','root',b.get('ip',''),'ok','吊销管理会话')
+ return {'ok':True}
+
+def admin_backup(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ c=db()
+ users=[dict(r) for r in c.execute('SELECT email,user_id,plan,expires_at,credits,device_id,status,created_at,created_ip,last_verified FROM sessions')]
+ cards=[dict(r) for r in c.execute('SELECT * FROM cards')]
+ audit_rows=[dict(r) for r in c.execute('SELECT * FROM mail_audit')]
+ settings=[dict(r) for r in c.execute('SELECT * FROM admin_settings')]
+ devices=[dict(r) for r in c.execute('SELECT * FROM devices')]
+ c.close()
+ data={'meta':{'service':'frameweave-cloud','version':VERSION,'exported_at':time.time()},'users':users,'cards':cards,'audit':audit_rows,'settings':settings,'devices':devices,'market':_load_market()}
+ return {'ok':True,'data':data}
+
+def admin_restore(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ if str(b.get('confirm',''))!='yes-i-understand': return {'ok':False,'message':'需 confirm=yes-i-understand 二次确认'}
+ d=b.get('data',{})
+ if not isinstance(d,dict) or not d.get('users') or 'cards' not in d or 'audit' not in d: return {'ok':False,'message':'备份数据结构不完整'}
+ c=db()
+ for t in ('devices','cards','mail_audit','sessions'): c.execute(f'DELETE FROM {t}')
+ for u in d['users']:
+  row=dict(u); row['password_hash']=u.get('password_hash',''); row['salt']=u.get('salt',''); row['token']=u.get('token',''); row['cards_used']=json.dumps(u.get('cards_used') or []) if not isinstance(u.get('cards_used'),str) else u.get('cards_used')
+  c.execute('INSERT OR IGNORE INTO sessions(email,password_hash,salt,user_id,token,plan,expires_at,device_id,credits,cards_used,last_verified,created_at,status,created_ip) VALUES(:email,:password_hash,:salt,:user_id,:token,:plan,:expires_at,:device_id,:credits,:cards_used,:last_verified,:created_at,:status,:created_ip)',row)
+ for card in d['cards']:
+  c.execute('INSERT OR IGNORE INTO cards(id,card,plan,days,created_at,used_by,used_at,revoked) VALUES(:id,:card,:plan,:days,:created_at,:used_by,:used_at,:revoked)',card)
+ for a in d['audit']:
+  c.execute('INSERT INTO mail_audit(email,scene,ip,device_id,result,reason,created_at) VALUES(:email,:scene,:ip,:device_id,:result,:reason,:created_at)',a)
+ for dv in d.get('devices') or []:
+  c.execute('INSERT OR IGNORE INTO devices(email,device_id,first_seen,last_seen,kicked) VALUES(:email,:device_id,:first_seen,:last_seen,:kicked)',dv)
+ for k,v in (d.get('settings') or []):
+  c.execute('INSERT OR REPLACE INTO admin_settings(k,v) VALUES(?,?)',(k,v))
+ c.commit(); c.close()
+ if 'market' in d and isinstance(d['market'],dict): _save_market(d['market'])
+ _adm_write(b,'restore','root',b.get('ip',''),'ok','数据恢复')
+ return {'ok':True,'message':'备份数据已恢复'}
+
+def admin_ops_proxy(b):
+ """运维视图：只读代理本地服务端点（GET）。ops_base+ops_token 需在设置页配置。"""
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ op=str(b.get('path','')).strip()
+ if not op.startswith('/api/'): return {'ok':False,'message':'仅允许 /api/* 路径'}
+ base=str(get_setting('ops_base','') or '').rstrip('/')
+ if not base: return {'ok':False,'message':'未配置本地服务地址（设置页 ops_base）'}
+ tok=get_setting('ops_token','')
+ import urllib.request
+ import urllib.error
+ req=urllib.request.Request(base+op,headers={'X-FW-Local-Token':tok,'Accept':'application/json'})
+ try:
+  with urllib.request.urlopen(req,timeout=15) as r:
+   body=r.read().decode('utf-8','replace')
+  try: data=json.loads(body)
+  except Exception: data={'raw':body[:4000]}
+  return {'ok':True,'status':200,'path':op,'data':data}
+ except urllib.error.HTTPError as e:
+  return {'ok':False,'message':f'本地服务 HTTP {e.code}'}
+ except Exception as e:
+  return {'ok':False,'message':f'{type(e).__name__}: {e}'}
+
+def admin_market_stats(b):
+ if not _adm(b): return {'ok':False,'message':'未授权或登录已过期'}
+ m=_load_market()
+ c=db(); dl=c.execute('SELECT COUNT(*) n FROM market_downloads').fetchone()['n']; ins=c.execute('SELECT COUNT(*) n FROM market_installs').fetchone()['n']; c.close()
+ return {'ok':True,'stats':{'items':len(m),'downloads':dl,'installs':ins,
+  'by_kind':{k:sum(1 for i in m.values() if i.get('kind')==k) for k in ('node','workflow')}}}
+
+ROUTES={'/api/auth/email/send-code':lambda b: issue_code(b.get('email',''),b.get('scene','register'),b.get('ip',''),b.get('device_id','')) if valid_email(b.get('email','')) else (False,'目前仅支持 QQ 邮箱（@qq.com）'),'/api/auth/register':register,'/api/auth/login':login,'/api/auth/password/reset':reset,'/api/auth/verify':verify,'/api/auth/activate':activate,'/api/admin/login':admin_login,'/api/admin/logout':admin_logout,'/api/admin/users':admin_users_v2,'/api/admin/user/get':admin_user_get,'/api/admin/user/toggle':admin_toggle,'/api/admin/user/extend':admin_extend_subscription,'/api/admin/user/credits':admin_user_credits,'/api/admin/user/kick':admin_user_kick,'/api/admin/cards':admin_cards,'/api/admin/card/revoke':admin_card_revoke,'/api/admin/audit':admin_audit,'/api/admin/issue-card':admin_issue,'/api/admin/stats':admin_stats,'/api/admin/settings':admin_settings_put,'/api/admin/settings/get':admin_settings_get,'/api/admin/key/rotate':admin_key_rotate,'/api/admin/tokens':admin_tokens_list,'/api/admin/token/revoke':admin_token_revoke,'/api/admin/backup':admin_backup,'/api/admin/restore':admin_restore,'/api/admin/market/list':admin_market_list,'/api/admin/market/upsert':admin_market_upsert,'/api/admin/market/stats':admin_market_stats,'/api/admin/ops':admin_ops_proxy}
 ADMIN_HTML=r'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>拾帧 FrameWeave 授权后台</title>
@@ -465,7 +694,13 @@ class H(BaseHTTPRequestHandler):
  def out(self,o,st=200):
   x=json.dumps(o,ensure_ascii=False).encode();self.send_response(st);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(x)));self.end_headers();self.wfile.write(x)
  def out_html(self):
-  x=ADMIN_HTML.encode('utf-8');self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(x)));self.end_headers();self.wfile.write(x)
+  bury=None
+  try:
+   _p=os.path.join(os.path.dirname(os.path.abspath(__file__)),'admin.html')
+   if os.path.exists(_p):
+    with open(_p,'r',encoding='utf-8') as _f: bury=_f.read()
+  except Exception: bury=None
+  x=(bury or ADMIN_HTML).encode('utf-8');self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(x)));self.end_headers();self.wfile.write(x)
  def do_GET(self):
   parsed=urlparse(self.path); path=parsed.path
   if path=='/api/health':self.out({'ok':True,'service':'frameweave-cloud','version':VERSION,'protocol_version':PROTOCOL_VERSION,'auth_revision':AUTH_REVISION,'market':'v1'})
@@ -473,7 +708,7 @@ class H(BaseHTTPRequestHandler):
    from urllib.parse import parse_qs
    qs=parse_qs(parsed.query)
    self.out(market_list({k:(v[0] if v else '') for k,v in qs.items()}))
-  elif path=='/admin' or path=='/admin/':self.out_html()
+  elif path=='/admin' or path=='/admin/' or path=='/' or path=='/index.html':self.out_html()
   else:self.out({'ok':False,'message':'Not Found'},404)
  def do_POST(self):
   f=ROUTES.get(urlparse(self.path).path)
@@ -482,6 +717,8 @@ class H(BaseHTTPRequestHandler):
    n=int(self.headers.get('Content-Length','0'))
    b=json.loads(self.rfile.read(n) or b'{}')
    b['ip']=self.client_address[0]
+   if urlparse(self.path).path.startswith('/api/admin'):
+    b['auth_token']=str(b.get('token',''))
    r=f(b)
    if isinstance(r,tuple):r={'ok':r[0],'message':r[1]}
    if urlparse(self.path).path.startswith('/api/auth') and isinstance(r,dict):sign_auth_resp(r)

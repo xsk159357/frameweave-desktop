@@ -1,7 +1,7 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useState } from 'react'
 import { RefreshCw, Store, Crown, Sparkles, CheckCircle2, AlertCircle, Info, Puzzle, Download, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
-import { api } from './api'
+import { api, nodeSpecs } from './api'
 import { useAppStore } from './store'
 import { LoginPage } from './LoginPage'
 import { WorkflowPanel } from './WorkflowPanel'
@@ -11,6 +11,7 @@ import { Logo } from './Logo'
 import { Canvas } from './Canvas'
 import { Timeline } from './Timeline'
 import { MarketPage } from './MarketPage'
+import { loadWebExtensions, initWebExtensions } from './plugins'
 
 export default function App() {
   const session = useAppStore((s) => s.session)
@@ -121,9 +122,12 @@ export default function App() {
     let alive = true
     ;(async () => {
       try {
-        // 启动加速：specs 与工作流列表并行拉取
-        const [s, list] = await Promise.all([api.specs(), api.listWorkflows()])
+        // 启动加速：specs 与工作流列表并行拉取（R-平台-4：/api/object_info 单一来源）
+        const [s, list] = await Promise.all([nodeSpecs(), api.listWorkflows()])
         if (alive) setSpecs(s)
+        // S1-T7（R-平台-7）：暴露 specs 快照并注入插件 web 扩展（画布自定义 UI 组件）
+        ;(window as any).__fwSpecs = s
+        loadWebExtensions().catch((e) => console.error('[web-ext] 初始注入失败', e))
         let wid = ''
         let wname = ''
         if (list.length > 0) {
@@ -141,6 +145,11 @@ export default function App() {
     })()
     return () => { alive = false }
   }, [session, setSpecs, setWorkflow])
+
+  // S1-T7（R-平台-7）：插件 web 扩展事件接线（fw-nodes-installed → 重载，幂等）
+  useEffect(() => {
+    initWebExtensions()
+  }, [])
 
   // 模板入口从左侧工作流管理区打开；顶部保持简洁，当前工作流由左侧列表体现。
 

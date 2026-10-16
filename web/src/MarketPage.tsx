@@ -3,7 +3,7 @@
 //       云端 item_not_found 容错重试、安装后节点库刷新（reload + /api/specs → setSpecs 广播）。
 import { useEffect, useRef, useState } from 'react'
 import { Search, X, Package, GitBranch, Download, Upload, Boxes, User, Coins, Loader2, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react'
-import { api, API_BASE, localToken } from './api'
+import { api, nodeSpecs, API_BASE, localToken } from './api'
 import { useAppStore } from './store'
 
 interface MarketItem {
@@ -229,7 +229,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
       if (!isWorkflow) {
         setStep({ label: '刷新节点库' })
         await api.reloadUserNodes()
-        try { const s = await api.specs(); setSpecs(s || []) } catch { /* ignore */ }
+        try { const s = await nodeSpecs(); setSpecs(s || []) } catch { /* ignore */ }
       }
       if (session?.token && session?.deviceId) {
         try { const v = await api.verify(session.token, session.deviceId); if (v.ok && v.credits != null) setCredits(v.credits) } catch { /* ignore */ }

@@ -159,16 +159,16 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         position: 'relative', width: 240, height: nodeH, zIndex: expanded ? 60 : (selected ? 40 : 1),
         background: 'var(--node-grad)',
         border: isFailed
-          ? '1.5px solid rgba(248,113,113,.9)'
-          : '1px solid ' + (selected ? '#8b93ff' : 'var(--border)'),
-        borderRadius: 16,
+          ? '1.5px solid var(--danger)'
+          : '1px solid ' + (selected ? 'var(--accent-strong)' : 'var(--border)'),
+        borderRadius: 'var(--radius-lg)',
         boxShadow: isFailed
-          ? '0 0 0 2px rgba(248,113,113,.3), 0 0 20px rgba(248,113,113,.28), var(--elev-2)'
+          ? '0 0 0 2px var(--danger-soft), 0 0 24px rgba(251,113,133,.25), var(--elev-2)'
           : selected
-            ? '0 0 0 3px rgba(139,147,255,.2), 0 0 26px rgba(139,147,255,.28), var(--elev-2)'
+            ? '0 0 0 2px var(--accent-soft), 0 0 28px rgba(124,140,255,.28), var(--elev-2)'
             : 'var(--card-shadow)',
         fontSize: 12, color: 'var(--text)',
-        transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',
+        transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease), transform var(--t-fast) var(--t-ease)',
         ...(isRunning ? { animation: 'fw-node-pulse 2.2s ease-in-out infinite' } : {}),
       }}
     >
@@ -178,7 +178,7 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
           width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: solid, color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 11, fontWeight: 800,
-          boxShadow: '0 2px 10px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.22)',
+          boxShadow: '0 0 14px rgba(124,140,255,.28), inset 0 1px 0 rgba(255,255,255,.22)',
         }}>{iconChar}</div>
         <span style={{
           fontWeight: 650, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden',

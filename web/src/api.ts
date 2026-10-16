@@ -1,7 +1,31 @@
 // 后端 API 客户端
-import type { NodeSpec, WfMeta, Segment } from './types'
+import type { NodeSpec, ObjectInfo, WfMeta, Segment } from './types'
+import { objectInfoToSpecs } from './types'
 
 export const API_BASE = 'http://127.0.0.1:8788'
+
+// R-平台-4（S1-T4）：节点渲染单一来源 —— 优先 /api/object_info（Comfy 等价语义，
+// 含 input_order/is_input_list/output_is_list/search_aliases/deprecated），
+// 经 objectInfoToSpecs 适配为 NodeSpec[]；/api/specs 仅作后端未升级时的回退。
+// 后端 /api/specs 本身也是从同一 object_info() 单一来源投影（同源生成）。
+export async function nodeSpecs(): Promise<NodeSpec[]> {
+  try {
+    const oi = await req<Record<string, ObjectInfo>>('/api/object_info', undefined, 15000)
+    return objectInfoToSpecs(oi || {})
+  } catch {
+    return req<NodeSpec[]>('/api/specs')
+  }
+}
+
+// S1-T7（R-平台-7）：插件 web 目录（EXTENSION_WEB_DIRS 等价）清单条目
+export interface FwWebExt {
+  pkg: string
+  type_id: string
+  version: string
+  entry: string
+  capabilities?: string[]
+  url: string   // 平台静态服务相对路径 /extensions/<pkg>/<entry>
+}
 
 // H3 修复：本地 API 鉴权令牌 —— 打包版从 preload 桥取随机值，dev 回落固定值
 export function localToken(): string {
@@ -64,6 +88,15 @@ export const api = {
     !u ? '' : (/^https?:\/\//i.test(u) ? u : API_BASE + (u.startsWith('/') ? u : '/' + u)),
 
   specs: () => req<NodeSpec[]>('/api/specs'),
+
+  /** S1-T4（R-平台-4）：/api/object_info 等价语义（Comfy 兼容全量节点 schema） */
+  objectInfo: () => req<Record<string, ObjectInfo>>('/api/object_info'),
+
+  /** S1-T7（R-平台-7）：插件 web 目录清单（画布注入自定义 UI 组件的数据源） */
+  extensions: () => req<{ extensions: FwWebExt[] }>('/api/extensions'),
+
+  /** 插件 web 资源绝对地址（脚本/样式/静态文件） */
+  extensionUrl: (relPath: string) => API_BASE + (relPath.startsWith('/') ? relPath : '/' + relPath),
 
   userNodes: () => req<{ nodes: string[]; dir: string }>('/api/user_nodes'),
 

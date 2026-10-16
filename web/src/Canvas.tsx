@@ -6,7 +6,7 @@ import {
   type Connection, type Edge,
 } from '@xyflow/react'
 import { Play, Loader2, ArrowDown, Save, RotateCcw, Square, Download, Upload, HelpCircle, X, Film, Trash2, Search, Puzzle, Map as MapIcon, Store, RefreshCw, Library, Zap, MousePointer2 } from 'lucide-react'
-import { api, connectWS } from './api'
+import { api, connectWS, nodeSpecs } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData, type NodeSpec } from './types'
 import { FlowNode } from './nodes/FlowNode'
@@ -111,7 +111,7 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
   // 节点安装后自动刷新 specs（商城/插件面板安装成功时触发 fw-nodes-installed）
   useEffect(() => {
     const h = () => {
-      api.specs().then(setSpecs).catch(() => {})
+      nodeSpecs().then(setSpecs).catch(() => {})
     }
     window.addEventListener('fw-nodes-installed', h)
     return () => window.removeEventListener('fw-nodes-installed', h)
@@ -734,6 +734,15 @@ const onAddNode = useCallback((typeId: string) => {
             </button>
           </ReactFlow>
 
+          {/* S1-T7（R-平台-7）：插件 web 目录注入宿主（EXTENSION_WEB_DIRS 等价）。
+              每个扩展在 #fw-ext-root 内获得 .fw-ext-slot 专属容器；根容器不拦截事件，
+              子组件自行开启 pointer-events。位于画布右上，低于右键菜单/参数面板浮层。 */}
+          <div id="fw-ext-root" aria-label="插件 Web 扩展容器" style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 20,
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
+            pointerEvents: 'none', maxWidth: 320,
+          }} />
+
           {/* 空态引导：本体未安装任何节点（节点来自商城/插件市场） */}
           {specs.length === 0 && (
             <div style={{
@@ -759,7 +768,7 @@ const onAddNode = useCallback((typeId: string) => {
                   <button className="fw-btn fw-btn-ghost" onClick={() => { window.dispatchEvent(new Event('fw-open-plugins')) }}>
                     <><Puzzle size={13} /> 导入节点插件</>
                   </button>
-                  <button className="fw-btn fw-btn-ghost" onClick={async () => { await api.reloadUserNodes(); setSpecs(await api.specs()); pushToast('节点库已刷新', 'ok') }}>
+                  <button className="fw-btn fw-btn-ghost" onClick={async () => { await api.reloadUserNodes(); setSpecs(await nodeSpecs()); pushToast('节点库已刷新', 'ok') }}>
                     <><RefreshCw size={13} /> 刷新节点</>
                   </button>
                 </div>

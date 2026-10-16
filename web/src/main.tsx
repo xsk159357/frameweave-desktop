@@ -2,7 +2,17 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import '@xyflow/react/dist/style.css'
 import './index.css'
+import './themes/theme-a-graphite-copper.css'
+import './themes/theme-b-paper-ink.css'
+import './themes/theme-c-slate-amber.css'
 import App from './App'
+
+// Design preview only: ?theme=graphite-copper|paper-ink|slate-amber.
+// Normal launch remains unchanged; no execution or API behavior is affected.
+const previewTheme = new URLSearchParams(window.location.search).get('theme')
+if (previewTheme && ['graphite-copper', 'paper-ink', 'slate-amber'].includes(previewTheme)) {
+  document.documentElement.dataset.fwTheme = previewTheme
+}
 
 // 全局错误捕获 → 写本地运行日志（黑匣子 debug.log）
 function fwErr(level: string, where: string, err: unknown) {

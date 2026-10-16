@@ -2,32 +2,33 @@
    拾帧 FrameWeave · 设计系统「霜幕 v1.2」
    深色优先的专业创作美学：四层底色 + 单一电感紫蓝强调 + 无玻璃铺满
    ============================================================ */
+@import './流光织机-overrides.css';
 :root {
   /* ===== 霜幕设计系统 v1.2：四层底色 + 单强调色 + 语义色 ===== */
   /* 底色四层 */
-  --bg: #0e0f14;
-  --bg-grad: linear-gradient(180deg, #0e0f14 0%, #10121a 100%);
-  --panel: #16181f;
-  --panel-2: #1b1e27;
-  --overlay: #20242f;
-  --hover: rgba(255,255,255,.045);
+  --bg: #060913;
+  --bg-grad: radial-gradient(1100px 700px at 82% -10%, rgba(124,140,255,.16), transparent 55%), radial-gradient(900px 600px at -6% 18%, rgba(34,211,238,.10), transparent 50%), linear-gradient(180deg,#04060d 0%,#0a0e1c 56%,#0d1226 100%);
+  --panel: #0e1424;
+  --panel-2: #121a2e;
+  --overlay: #18213a;
+  --hover: rgba(148,168,255,.08);
   /* 玻璃变量保留名（引用自动升级为不透明分层，消除 blur 铺满） */
-  --bg-panel: #16181f;
-  --bg-panel-2: #1b1e27;
-  --glass: #16181f;
-  --glass-strong: #20242f;
-  --glass-hover: #242934;
-  --glass-blur: none;
-  --glass-border: 1px solid rgba(255,255,255,.08);
-  --glass-inner: inset 0 1px 0 rgba(255,255,255,.05), inset 0 -1px 0 rgba(0,0,0,.25);
+  --bg-panel: #0b1120;
+  --bg-panel-2: #121a2e;
+  --glass: rgba(16,21,40,.72);
+  --glass-strong: rgba(10,15,31,.86);
+  --glass-hover: rgba(148,168,255,.12);
+  --glass-blur: blur(16px);
+  --glass-border: 1px solid rgba(148,168,255,.16);
+  --glass-inner: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -1px 0 rgba(0,0,0,.28);
   /* 强调：单一电感紫蓝 */
-  --accent: #8b93ff;
-  --accent-strong: #a2a8ff;
-  --accent-soft: rgba(139,147,255,.12);
-  --accent-grad: linear-gradient(135deg, #8b93ff 0%, #7a83f2 100%);
-  --accent2: #8b93ff;
-  --cyan: #8b93ff;
-  --brand-grad: linear-gradient(135deg, #8b93ff 0%, #7a83f2 50%, #6b7df0 100%);
+  --accent: #7c8cff;
+  --accent-strong: #a5b4ff;
+  --accent-soft: rgba(124,140,255,.16);
+  --accent-grad: linear-gradient(135deg,#7c8cff 0%,#6a5af0 52%,#22d3ee 140%);
+  --accent2: #a78bfa;
+  --cyan: #22d3ee;
+  --brand-grad: linear-gradient(90deg,#a5b4ff 0%,#22d3ee 100%);
   /* 语义色 */
   --danger: #f87171;
   --danger-soft: rgba(248,113,113,.13);
@@ -38,62 +39,62 @@
   --cached: #38bdf8;
   --cached-soft: rgba(56,189,248,.13);
   /* 文字三级 */
-  --text: #e8eaf1;
-  --text-dim: #a2a8b8;
-  --text-faint: #8a93a8;
+  --text: #eef0ff;
+  --text-dim: #a3acd8;
+  --text-faint: #6d779f;
   /* 边框 */
-  --border: rgba(255,255,255,.08);
-  --border-strong: rgba(255,255,255,.14);
-  /* 圆角三档 + 超大 */
-  --radius-sm: 9px;
-  --radius-md: 13px;
-  --radius-lg: 18px;
-  --radius-xl: 22px;
+  --border: rgba(148,168,255,.14);
+  --border-strong: rgba(148,168,255,.28);
+  /* 极光玻璃圆角 */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-pill: 999px;
   /* 阴影体系（软 + 层级 elevation 1/2/3） */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
-  --shadow-md: 0 4px 16px rgba(0,0,0,.38);
-  --shadow-lg: 0 16px 48px rgba(0,0,0,.5);
-  --card-shadow: 0 18px 44px rgba(0,0,0,.46);
-  --elev-1: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.22);
-  --elev-2: 0 4px 14px rgba(0,0,0,.32), 0 10px 30px rgba(0,0,0,.22);
-  --elev-3: 0 12px 34px rgba(0,0,0,.42), 0 24px 70px rgba(0,0,0,.34);
-  /* 卡片/节点表面渐变 */
-  --card-grad: linear-gradient(180deg, #191c26 0%, #14161f 100%);
-  --node-grad: linear-gradient(180deg, #1a1d28 0%, #151821 100%);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.28);
+  --shadow-md: 0 8px 24px rgba(0,0,0,.38);
+  --shadow-lg: 0 18px 54px rgba(0,0,0,.52), 0 0 28px rgba(76,91,200,.12);
+  --card-shadow: 0 8px 28px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.05);
+  --elev-1: 0 2px 8px rgba(0,0,0,.28), 0 0 16px rgba(76,91,200,.08);
+  --elev-2: 0 8px 24px rgba(0,0,0,.38), 0 0 22px rgba(76,91,200,.12);
+  --elev-3: 0 18px 54px rgba(0,0,0,.5), 0 0 36px rgba(76,91,200,.16);
+  /* 卡片/节点表面 */
+  --card-grad: linear-gradient(160deg, rgba(22,28,52,.9), rgba(13,17,34,.86));
+  --node-grad: linear-gradient(160deg, rgba(22,28,52,.94), rgba(13,17,34,.9));
   /* 字体栈 */
   --font-ui: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   /* 画布/节点附加（v1.3 设置-主题） */
-  --canvas-dot: #1a1d26;
-  --vignette: rgba(0,0,0,.26);
-  --handle-ring: rgba(10,14,24,.8);
-  --edge-stroke: #8b93ff;
+  --canvas-dot: rgba(148,168,255,.22);
+  --vignette: rgba(3,6,15,.42);
+  --handle-ring: #070b16;
+  --edge-stroke: #7c8cff;
   /* 动效 */
   --t-fast: .16s;
   --t-med: .24s;
-  --t-ease: cubic-bezier(.25,.1,.25,1);
+  --t-ease: cubic-bezier(.22,1,.36,1);
   /* —— 登录页（单色光斑，保品牌氛围） —— */
   --login-brand-bg:
-    radial-gradient(900px 560px at 12% 6%, rgba(139,147,255,.22) 0%, transparent 52%),
-    radial-gradient(760px 520px at 88% 20%, rgba(122,131,242,.14) 0%, transparent 55%),
-    linear-gradient(168deg, #0b0c11 0%, #10121a 60%, #14151d 100%);
+    radial-gradient(900px 560px at 12% 6%, rgba(124,140,255,.20), transparent 52%),
+    radial-gradient(760px 520px at 88% 20%, rgba(34,211,238,.12), transparent 55%),
+    linear-gradient(168deg,#04060d 0%,#0a0e1c 60%,#0d1226 100%);
   --login-text: #f0f2ff;
-  --login-text-dim: #a5b0d6;
-  --login-text-faint: #7c86a3;
-  --login-grid-line: rgba(150,170,255,.08);
-  --input-bg: #11131a;
-  --input-focus-ring: rgba(139,147,255,.25);
-  --login-card-bg: #121624;
-  --login-surface-bg: #080c1a;
+  --login-text-dim: #a3acd8;
+  --login-text-faint: #6d779f;
+  --login-grid-line: rgba(148,168,255,.12);
+  --input-bg: rgba(7,11,24,.62);
+  --input-focus-ring: rgba(124,140,255,.28);
+  --login-card-bg: rgba(16,21,40,.78);
+  --login-surface-bg: #050816;
   --login-field-border: rgba(148,168,255,.22);
-  --seg-active-shadow: 0 3px 10px rgba(139,147,255,.25);
+  --seg-active-shadow: 0 4px 18px rgba(124,140,255,.28);
   --toast-err-bg: rgba(248,113,113,.13);
   --toast-ok-bg: rgba(74,222,128,.13);
-  --hover-bg: rgba(139,147,255,.08);
-  --btn-primary-grad: linear-gradient(135deg, #8b93ff 0%, #7a83f2 100%);
-  --btn-success-grad: linear-gradient(135deg, #0ea5a4 0%, #4ade80 100%);
-  --focus-ring: 0 0 0 3px rgba(139,147,255,.25);
+  --hover-bg: rgba(124,140,255,.10);
+  --btn-primary-grad: linear-gradient(135deg,#7c8cff 0%,#6a5af0 52%,#22d3ee 140%);
+  --btn-success-grad: linear-gradient(135deg,#0ea5a4 0%,#34d399 100%);
+  --focus-ring: 0 0 0 3px rgba(124,140,255,.22), 0 0 16px rgba(124,140,255,.18);
 }
 
 /* ===== 亮色主题（v1.3 设置可切换：组件全走 var token，切换即时生效无需重启） ===== */

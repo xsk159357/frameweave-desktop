@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """云端授权网关（M19 对接位，P3/t3 授权链硬化版）。
 
 默认云端：https://shouquan.frameweave.top（韩国授权服务器 43.108.23.200，Cloudflare HTTPS 反代 127.0.0.1:8789）。
@@ -30,7 +30,7 @@ from typing import Optional
 
 from . import obf
 
-CLIENT_VERSION = "0.3.4"  # 与 desktop/package.json / server.APP_VERSION / cloud_server.VERSION 保持一致
+CLIENT_VERSION = "0.3.5"  # 与 desktop/package.json / server.APP_VERSION / cloud_server.VERSION 保持一致
 
 # urllib 默认遵循系统地址顺序；部分 VM 的 IPv6 可解析但不可出网。
 # 仅在一次请求失败后临时优先 IPv4，不修改全局 socket 配置。
@@ -38,7 +38,10 @@ _IPV4_FALLBACK_LOCK = threading.Lock()
 
 # 签名时跳过的字段（与 cloud_server.py 端一致）：仅排除签名自身字段；
 # req_nonce 必须纳入签名——否则攻击者可改 nonce 回显骗取重放放行。
-_SKIP_SIGN_FIELDS = {"signature", "sig"}
+# cloud_verified 是客户端验签通过后自加的书签字段（非云端签发内容）：纳入规范化
+# 会让"验签后加字段"破坏签名（S1-T10 离线授权缓存依赖保留 signature 再验签），
+# 因此同样跳过——它不携带任何授权信息（plan/expires_at 等仍受签名保护）。
+_SKIP_SIGN_FIELDS = {"signature", "sig", "cloud_verified"}
 # HMAC 结果截取：云端的签名要用同样的 truncate 长度（24 字节 = 48 hex）
 SIG_TRUNCATE_BYTES = 24
 # 超时分层：连接阶段短预算（秒）——连接超时/冷连接用更小的 socket 默认超时
@@ -271,7 +274,8 @@ def _checked(resp: Optional[dict], require_signature: bool = False, nonce: str =
             return {"ok": False, "reason": "云端响应重放/伪造（nonce 不匹配）", "sig_fail": True}
         if not check_response_signature(resp):
             return {"ok": False, "reason": "云端响应签名校验失败（可能被中间人篡改）", "sig_fail": True}
-        resp.pop("signature", None)
+        # S1-T10（分层授权）：保留 signature 字段不回弹——authz 离线授权缓存依赖它
+        # 复用云端 HMAC 验签体系（缓存篡改任何业务字段都会破坏签名）。
         resp["cloud_verified"] = True
         return resp
     if resp.get("signature"):
