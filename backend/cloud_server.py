@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import argparse,base64,hashlib,hmac,json,os,random,re,sqlite3,time,uuid

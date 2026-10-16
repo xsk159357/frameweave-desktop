@@ -1,4 +1,4 @@
-﻿"""FrameWeave 本地服务入口：FastAPI + WebSocket 事件推送。
+"""FrameWeave 本地服务入口：FastAPI + WebSocket 事件推送。
 
 启动: uvicorn app.server:app --port 8788
 """

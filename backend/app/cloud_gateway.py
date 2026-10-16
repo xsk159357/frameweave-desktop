@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """云端授权网关（M19 对接位，P3/t3 授权链硬化版）。
 
 默认云端：https://shouquan.frameweave.top（韩国授权服务器 43.108.23.200，Cloudflare HTTPS 反代 127.0.0.1:8789）。
