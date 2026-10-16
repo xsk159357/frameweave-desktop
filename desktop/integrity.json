@@ -1,11 +1,11 @@
 {
   "v": 1,
-  "generated_at": "2026-10-14T21:39:51.418Z",
+  "generated_at": "2026-10-16T18:45:38.995Z",
   "files": {
-    "main.cjs": "b68ce6ba1471de05a3841f06004f0571fa8fe7ce4c40238805a721fce34f658c",
-    "preload.cjs": "6300b3e883ff2825f85a43d3f90e12d14c171360ecbd1a5ccea6dd25f9f87976",
-    "web/dist/assets/index-B7RKeHpp.js": "cecef6a6c935e6b90507ccecc95fc6317a06472a133c36841729a4cebfecf66f",
-    "web/dist/assets/index-m0Qy5-ND.css": "6414553596e540da1e5564cbf184f7d85e80a0463875ee18bb8826bc84ae28a4",
-    "web/dist/index.html": "86695a1b2bfe47fac7560286ce523f0b06d72179f0b251c6e891e1051a4c0854"
+    "main.cjs": "06e65b8eacb3ddfa99cbc985b5d7f779a0f638f0c337f165ec02099e4074bd07",
+    "preload.cjs": "9a1b5c16c0c7523b00e04f87e1b329638de21a58934053489c281cd0eca1d8e8",
+    "web/dist/assets/index-bYc9wK6e.js": "3100d952dcd3edebb7c18a9c99ff1fea167d72a8f7216fc1a7c1b212f5fe93ac",
+    "web/dist/assets/index-DaONjVtX.css": "a954878281c870368eb55eb1125c67d0092128ffcff188e687034a18666014a3",
+    "web/dist/index.html": "67dd78333592986a7a9a5cfa14a3a22f88d6aebf18e1e1aec7c4c5df0fdb7e4c"
   }
 }
