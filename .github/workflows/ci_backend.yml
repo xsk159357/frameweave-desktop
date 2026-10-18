@@ -3,6 +3,13 @@
 #
 # 触发：push、pull_request、schedule（每日回归）、workflow_dispatch。
 # 依赖：FrameWeave/checkout + frameweave-plugins/checkout（插件仓库与此并列）。
+#
+# 2026-10-19 修复（全量审阅 P1-5 / P1-7）：
+#   * 依赖统一走 backend/requirements-dev.txt（此前 CI 手工 pip install websockets，
+#     与 requirements.txt 漂移，本地 `pip install -r requirements.txt` 后 ws 用例全红）；
+#   * health job 补 setup-python + 依赖安装（此前裸 python 跑 pytest 必失败）；
+#   * 移除上传 workspace 级 classify.json 的步骤（该文件不在本仓库内，恒为空跑）；
+#   * 增加「测试后 backend 不得新增 fw_* 目录」的硬断言（conftest 已固定 TMPDIR）。
 name: Backend CI / S1-T9
 on:
   push:
@@ -12,6 +19,9 @@ on:
     - cron: "0 8 * * *"
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -19,6 +29,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Checkout frameweave-plugins (S1-T9)
         uses: actions/checkout@v4
         with:
@@ -27,44 +42,46 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || 'main' }}
       - name: Set FRAMEWEAVE_PLUGINS_DIR
         run: echo "FRAMEWEAVE_PLUGINS_DIR=$(pwd)/frameweave-plugins/packages" >> $GITHUB_ENV
-      - name: Install backend deps
+      - name: Install backend deps (requirements-dev)
         run: |
-          cd backend
-          python -m venv .venv
-          .venv/bin/python -m pip install -r requirements.txt --quiet
-          .venv/bin/python -m pip install pytest httpx websockets --quiet
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
       - name: Run pytest (R-平台-9)
         run: |
           cd backend
-          .venv/bin/python -m pytest -q --junitxml=pytest_results.xml
-      - name: Run CI gate
+          python -m pytest -q --junitxml=pytest_results.xml
+      - name: Scan plaintext secrets (凭据纪律)
+        run: python scripts/scan_plaintext_secrets.py --root .
+      - name: Run CI gate (scan / signatures / sdk)
         run: |
           cd backend
-          .venv/bin/python tests/ci_gate.py
-      - name: Health governance (R-工程-1)
+          python tests/ci_gate.py --skip-pytest
+      - name: Assert no test artifacts leaked into source tree
         run: |
           cd backend
-          .venv/bin/python -m pytest -q tests/test_health_governance.py --tb=no
-      - name: Archive evidence (R-工程-1)
-        run: |
-          cd backend
-          echo "pytest exit: $?" >> $GITHUB_ENV
-          echo "backend fw_* dirs (待提权): $(find . -maxdepth 1 -name 'fw_*' -type d | wc -l)" >> $GITHUB_ENV
-          echo "cloud.db: $(ls -lh cloud.db 2>/dev/null | awk '{print $5}') (应为空=已移出)" >> $GITHUB_ENV
-          echo "pyarmor.bug.log: $(ls -lh pyarmor.bug.log 2>/dev/null | awk '{print $5}') (应为空=已移出)" >> $GITHUB_ENV
+          leaked=$(find . -maxdepth 1 -name 'fw_*' -type d | wc -l)
+          echo "backend fw_* dirs after run: $leaked (expected 0)"
+          test "$leaked" -eq 0
+          test ! -e cloud.db
+          test ! -e pyarmor.bug.log
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: t9-ci-results
-          path: |
-            backend/pytest_results.xml
+          path: backend/pytest_results.xml
           retention-days: 30
           if-no-files-found: warn
+
   health:
     runs-on: ubuntu-latest
     needs: [test]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Checkout frameweave-plugins
         uses: actions/checkout@v4
         with:
@@ -73,13 +90,16 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || 'main' }}
       - name: Set FRAMEWEAVE_PLUGINS_DIR
         run: echo "FRAMEWEAVE_PLUGINS_DIR=$(pwd)/frameweave-plugins/packages" >> $GITHUB_ENV
+      - name: Install backend deps (requirements-dev)
+        run: python -m pip install -r backend/requirements-dev.txt
       - name: Run health governance
         run: |
           cd backend
-          .venv/bin/python -m pytest -q tests/test_health_governance.py --tb=no
+          python -m pytest -q tests/test_health_governance.py --tb=short --junitxml=health_results.xml
       - name: Upload health manifest
         uses: actions/upload-artifact@v4
         with:
           name: health-manifest
-          path: classify.json
+          path: backend/health_results.xml
           retention-days: 30
+          if-no-files-found: warn

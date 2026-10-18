@@ -6,7 +6,12 @@ import { writeFileSync } from 'node:fs'
 
 const BASE = 'http://localhost:5180'
 const CLOUD = 'http://127.0.0.1:9789'
-const ADMIN_KEY = 'test-admin-key'
+// 2026-10-19：管理密钥改为环境变量（原文件含明文，已按凭据纪律清理并轮换）。
+const ADMIN_KEY = process.env.FW_ADMIN_KEY || ''
+if (!ADMIN_KEY) {
+  console.error('[e2e] 缺少 FW_ADMIN_KEY 环境变量（明文密钥不再入库）')
+  process.exit(2)
+}
 const results = []
 const out = []
 const LINE = (s) => { out.push(s); console.log(s); }
