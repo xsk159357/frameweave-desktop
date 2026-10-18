@@ -1,4 +1,4 @@
-﻿// 预加载脚本（P2 最小化）：仅暴露渲染层必需桥，保持 contextIsolation + 无 nodeIntegration
+// 预加载脚本（P2 最小化）：仅暴露渲染层必需桥，保持 contextIsolation + 无 nodeIntegration
 // 沙箱模式（webPreferences.sandbox=true）下可用的 API 受限：electron(contextBridge/ipcRenderer)、
 // process.argv 等少量属性；本地 API 令牌经 additionalArguments(--fw-local-token=...) 传入，
 // 不依赖 process.env（沙箱中不可用），也不落 localStorage。
@@ -16,7 +16,7 @@ const token = readLocalToken()
 
 contextBridge.exposeInMainWorld('frameweave', {
   backendPort: 8788,
-  version: '0.3.5',
+  version: '0.3.11',
   localToken: token,
   // 运行日志（黑匣子）：渲染进程写 debug.log
   log: (level, msg) => ipcRenderer.send('fw-log', { level, msg }),

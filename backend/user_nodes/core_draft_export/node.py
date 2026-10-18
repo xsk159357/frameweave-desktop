@@ -175,6 +175,8 @@ class DraftExportNode(NodeBase):
                 PortSpec(name="timeline", type=PortType.TIMELINE, label="时间线", required=False),
                 PortSpec(name="layout", type=PortType.JSON, label="混音布局", required=False),
                 PortSpec(name="bgm", type=PortType.AUDIO, label="背景音乐", required=False),
+                PortSpec(name="flower", type=PortType.JSON, label="花字(可选)", required=False,
+                         description="core/flower_text_analyze 输出：{opening_flower_texts, flower_texts}；写入剪映草稿文本轨"),
             ],
             outputs=[
                 PortSpec(name="draft", type=PortType.JSON, label="剪映草稿信息"),
@@ -206,8 +208,11 @@ class DraftExportNode(NodeBase):
                 PortSpec(name="fps", type=PortType.INT, label="工程帧率", default=30, widget="number"),
                 PortSpec(name="output_dir", type=PortType.STRING, label="输出目录",
                          default="", widget="text", description="留空输出到资产目录"),
+                PortSpec(name="cover_original_subtitle", type=PortType.BOOL, label="遮盖原字幕",
+                         default=False, widget="toggle",
+                         description="在原字幕区域叠黑条遮盖（TK 用；新字幕在黑条上层渲染）"),
             ],
-            version="1.1.0",
+            version="1.3.0",
         )
 
     async def run(self, ctx, inputs, params) -> Dict[str, Any]:
@@ -231,6 +236,7 @@ class DraftExportNode(NodeBase):
         timeline_asset = inputs.get("timeline")
         layout_asset = inputs.get("layout")
         bgm = inputs.get("bgm")
+        flower_asset = inputs.get("flower")
 
         fmt = str(params.get("format", "jianying") or "jianying")
         draft_name = str(params.get("draft_name", "FrameWeave_导出")) or "FrameWeave_导出"
@@ -308,6 +314,10 @@ class DraftExportNode(NodeBase):
         )
         model.entries = entries
 
+        # ---- G10 遮盖原字幕：在原字幕区域叠黑条（整段覆盖底部字幕区） ----
+        cover_original_subtitle = bool(params.get("cover_original_subtitle", False))
+        model.cover_original_subtitle = cover_original_subtitle
+
         # ---- B7 混音布局（互斥静音 volume 关键帧） ----
         if layout_asset is not None:
             layout_data = store.read_json(layout_asset.id)
@@ -359,6 +369,34 @@ class DraftExportNode(NodeBase):
                             "text": row["text"],
                         })
         model.subtitles = subtitles
+
+        # ---- G3：花字（flower_text_analyze 输出 → 文本轨） ----
+        flower_items: List[Dict[str, Any]] = []
+        if flower_asset is not None:
+            fdata = store.read_json(flower_asset.id)
+            if isinstance(fdata, dict):
+                _flower_src = (fdata.get("flower_texts") or []) + (fdata.get("opening_flower_texts") or [])
+            elif isinstance(fdata, list):
+                _flower_src = fdata
+            else:
+                _flower_src = []
+            sub_by_id = {str(s.get("index")): s for s in subtitles}
+            for it in _flower_src:
+                if not isinstance(it, dict):
+                    continue
+                text = str(it.get("display_text") or it.get("text") or "").strip()
+                if not text:
+                    continue
+                rid = str(it.get("row_id") or "")
+                base = sub_by_id.get(rid)
+                st = _num(it.get("start"), _num(base.get("start") if base else None, 0.0))
+                en = _num(it.get("end"), _num(base.get("end") if base else None, st + 1.0))
+                if en <= st:
+                    en = st + 0.8
+                flower_items.append({"start": round(st, 3), "end": round(en, 3),
+                                     "text": text[:20]})
+            flower_items.sort(key=lambda x: x["start"])
+        model.flower_items = flower_items
 
         # ---- 落盘 ----
         if progress:
@@ -428,6 +466,7 @@ class DraftExportNode(NodeBase):
             "status": "ok",
             "flower_text_library_count": len(flower_library),
             "flower_text_library": flower_library,
+            "flower_items": len(model.flower_items),
             "draft_name": draft_name,
             "export_target": export_target,
             "canvas": canvas,

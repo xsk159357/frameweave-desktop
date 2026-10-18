@@ -73,3 +73,12 @@ backend/fw_*/
 # ===== 本机工具目录 / 团队中间产物 =====
 Python/
 .agent-teams-read/
+
+# ===== 发布期测试/临时产物（t30 补充，不入库） =====
+.taste-skill/
+backend/.t_cloud_admin/
+backend/pytest-of-Administrator/
+backend/admin.html
+web/designs/
+web/profile_e2e_t3*.mjs
+web/t1_verify_baseline.mjs

@@ -1,9 +1,9 @@
-# Update FrameWeave cloud authorization server
+﻿# Update FrameWeave cloud authorization server
 # Usage: pwsh scripts/update-cloud-auth.ps1 [-CheckOnly] [-Server 43.108.23.200]
 # Credentials (never stored in this repo):
-#   1) env FW_SERVER_PASSWORD   (recommended for one-off; Korea alias: FW_KOREA_PASSWORD)
-#   2) file $HOME\.frameweave\server.env   (local machine secret, key FW_SERVER_PASSWORD)
-#   3) SSH key $HOME\.ssh\frameweave_auth  (preferred, no password needed)
+#  1) env FW_SERVER_PASSWORD   (recommended for one-off; Korea alias: FW_KOREA_PASSWORD)
+#  2) file $HOME\.frameweave\server.env   (local machine secret, key FW_SERVER_PASSWORD)
+#  3) SSH key $HOME\.ssh\frameweave_auth  (preferred, no password needed)
 param(
   [string]$Server = "43.108.23.200",
   [int]$Port = 22,
@@ -37,7 +37,7 @@ Write-Host "[update] host=$Server port=$Port user=$User auth=" $(if ($useKey) { 
 
 # build embedded python (credentials pass via env only, never via repo file)
 $py = @'
-import json, os, sys, time, urllib.request
+import json, os, sys, time, urllib.request, hashlib
 import paramiko
 host = os.environ["FW_SERVER_HOST"]; port = int(os.environ["FW_SERVER_PORT"])
 user = os.environ["FW_SERVER_USER"]; cloud = os.environ["FW_CLOUD_DIR"]
@@ -56,6 +56,11 @@ def run(cmd, t=60):
     i, o, e = c.exec_command(cmd, timeout=t)
     out = o.read().decode(errors="replace"); err = e.read().decode(errors="replace")
     return out, err
+def sha256_file(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""): h.update(chunk)
+    return h.hexdigest()
 # remote backup of current server source
 ts = time.strftime("%Y%m%d%H%M%S")
 out, err = run("mkdir -p %s/backups/%s && cp -a %s/cloud_server.py %s/backups/%s/ 2>/dev/null; echo BACKUP_OK" % (cloud, ts, cloud, cloud, ts))
@@ -69,6 +74,15 @@ if not check_only:
         sftp.put(admin_local, cloud + "/admin.html"); print("[upload] admin.html ->", cloud)
         st = sftp.stat(cloud + "/admin.html"); print("[admin] remote size", st.st_size)
     sftp.close()
+    # t3：上传后远端 sha256 完整性校验，防半包/截断上传（sha256 不匹配即中止，不重启服务）
+    for name, remote in [("cloud_server.py", cloud + "/cloud_server.py")] + ([("admin.html", cloud + "/admin.html")] if admin_local else []):
+        lo = local if name == "cloud_server.py" else admin_local
+        ls = sha256_file(lo)
+        out, err = run("sha256sum %s | cut -d' ' -f1" % remote)
+        rs = (out or "").strip()
+        if rs != ls:
+            print("[verify] FAIL %s local=%s remote=%s" % (name, ls, rs)); c.close(); sys.exit(2)
+        print("[verify] sha256 OK %s (%s)" % (name, ls[:12]))
 out, err = run("python3 -m py_compile %s/cloud_server.py && echo COMPILE_OK" % cloud)
 print(out.strip()); 
 if "COMPILE_OK" not in out: Fail(err or out)
@@ -94,6 +108,9 @@ $env:FW_ADMIN_HTML=$(if ($admResolved) { $admResolved } else { "" })
 $env:FW_SSH_KEY = if ($useKey) { $keyPath } else { "" }
 $env:FW_CHECK_ONLY=$(if ($CheckOnly) { "1" } else { "0" })
 if ($useKey) { $env:FW_SERVER_PASSWORD="" } else { $env:FW_SERVER_PASSWORD=$pw }
-$py | python -
+# t3：python runner 优先 venv（0.3.5 教训：本机可能无裸 python）；无则报错退出
+$pyRunner = if (Get-Command python -ErrorAction SilentlyContinue) { (Get-Command python).Source } else { Join-Path $PSScriptRoot "..\backend\.venv\Scripts\python.exe" }
+if (-not (Test-Path -LiteralPath $pyRunner)) { Fail "python runner not found: $pyRunner（安装 backend/.venv 或把 python 加入 PATH）" }
+$py | & $pyRunner -
 if ($LASTEXITCODE -ne 0) { Fail "python runner exited $LASTEXITCODE" }
 Write-Host "[update] done: $Service on $Server"

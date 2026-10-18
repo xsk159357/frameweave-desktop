@@ -25,7 +25,9 @@ function Get-NewestBackendSource {
     (Join-Path $rootDir 'app'),
     (Join-Path $rootDir 'main.py'),
     (Join-Path $rootDir 'requirements.txt'),
-    (Join-Path $rootDir 'packaging\frameweave-backend.spec')
+    (Join-Path $rootDir 'packaging\frameweave-backend.spec'),
+    (Join-Path $rootDir 'packaging\build_seed.py'),
+    (Join-Path $rootDir 'user_nodes')
   )
   $latest = Get-Date '1970-01-01'
   foreach ($p in $paths) {
@@ -69,6 +71,20 @@ if ($Skip) {
     $c = $LASTEXITCODE
     if ($c -ne 0) { throw "pyarmor gen main 失败 (exit=$c)" }
     $ErrorActionPreference = $saved
+  } finally { Pop-Location }
+
+  # t6（M7 供应链缺口根治）：构建内置基础节点种子树（build_seed.py，PyInstaller
+  # spec 的 datas 引用 packaging/build/builtin_basics → 产物 _internal/builtin_basics/）。
+  # 种子树逐包官方锚验签，任一包验签失败即中止（不绕过签名）。
+  Write-Host '[backend] t6: 生成内置基础节点种子（build_seed.py）'
+  Push-Location (Join-Path $root 'backend')
+  try {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $python packaging/build_seed.py 2>&1 | Out-Host
+    $c = $LASTEXITCODE
+    $ErrorActionPreference = $saved
+    if ($c -ne 0) { throw "build_seed.py 失败 (exit=$c)" }
   } finally { Pop-Location }
 
   Push-Location (Join-Path $root 'backend/packaging')

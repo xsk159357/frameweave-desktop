@@ -327,10 +327,18 @@ app.whenReady().then(async () => {
 
 // ---- 自动更新（electron-updater） ----
 let updateInProgress = false
+// 检查流程进行中（重试/切源期间）：electron-updater 的 error 事件在每次失败都会触发，
+// 若直接上报会让 UI 在「重试中」反复闪烁；此标志在 checkForUpdatesWithFallback /
+// silentStartupCheck 全程置位，期间 error 事件只记日志，最终结果由流程末尾统一上报。
+let updateCheckActive = false
 
-// 官方更新镜像（大陆可达直链；GitHub 检查失败时自动回退，用户无感）
+// 更新源：镜像优先（大陆可达直链）→ GitHub 兜底，用户无感切换。
 // 镜像源需同步发布 GitHub release 产物（latest.yml + exe + blockmap），见 docs/s17-auth-network-optimization.md
 const UPDATE_MIRROR_URL = process.env.FRAMEWEAVE_MIRROR_URL || 'https://shouquan.frameweave.top/update'
+const UPDATE_GITHUB_FEED = { provider: 'github', owner: 'xsk159357', repo: 'frameweave-desktop' }
+const UPDATE_RETRIES = 2              // 每个更新源最多重试次数（0 = 仅首次）
+const UPDATE_ATTEMPT_TIMEOUT_MS = 25000  // 单次检查超时（electron-updater 无内置超时，防 UI 卡在「检查中…」）
+const UPDATE_BACKOFF_MS = 800         // 指数退避基数（0.8s → 1.6s）
 
 function sendUpdateStatus(type, message, version = '') {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -341,11 +349,12 @@ function sendUpdateStatus(type, message, version = '') {
 function friendlyUpdateError(err) {
   const raw = String(err && err.message || err || '')
   const lower = raw.toLowerCase()
-  if (lower.includes('app-update.yml') || lower.includes('cannot parse releases feed')) {
-    return '更新源暂时不可用，请稍后重试'
-  }
-  if (lower.includes('timed_out') || lower.includes('timeout') || lower.includes('enotfound') || lower.includes('network')) {
+  // 网络类错误（复用 isNetworkError 全量覆盖：超时/DNS/连接/代理/undici/断网）
+  if (isNetworkError(err)) {
     return '网络暂时不可用，请检查网络后重试'
+  }
+  if (lower.includes('app-update.yml') || lower.includes('cannot parse releases feed') || lower.includes('latest.yml') || lower.includes('404')) {
+    return '更新源暂时不可用，请稍后重试'
   }
   if (lower.includes('403') || lower.includes('401')) {
     return '更新源访问被拒绝，请稍后重试'
@@ -353,41 +362,119 @@ function friendlyUpdateError(err) {
   return '更新检查失败，请稍后重试'
 }
 
-// 网络类失败判定（用于触发镜像回退；业务性错误如 4xx/无更新不触发）
+// 网络类失败判定（用于触发镜像/GitHub 切换与重试；业务性错误如 4xx/无更新不触发）。
+// 覆盖 Node/undici/Chromium 常见网络错误码与描述：
+//   超时：ETIMEDOUT / ESOCKETTIMEDOUT / undici UND_ERR_*_TIMEOUT / "timed out"
+//   DNS：ENOTFOUND / EAI_AGAIN / getaddrinfo
+//   连接：ECONNREFUSED / ECONNRESET / ECONNABORTED / EHOSTUNREACH / ENETUNREACH /
+//         ENETDOWN / EPIPE / socket hang up
+//   代理/断网：tunnel / proxy / network / internet / ERR_NETWORK_* / ERR_INTERNET_*
 function isNetworkError(err) {
   const raw = String(err && err.message || err || '').toLowerCase()
-  return /timed_?out|timeout|enotfound|network|econnreset|socket|fetch failed|getaddrinfo|eai_again|und_|err_.*net/i.test(raw)
+  return /timed_?\s?out|timeout|enotfound|eai_again|econnrefused|econnreset|econnaborted|ehostunreach|enetunreach|enetdown|epipe|network|internet|socket|fetch failed|getaddrinfo|und_|tunnel|proxy|hang up|err_.*net/i.test(raw)
 }
 
-// 检查更新：GitHub（默认源）失败时自动回退官方镜像源重试一次
+// 源级失败判定：更新源本身不可用（latest.yml 缺失/解析失败/404/证书异常）——
+// 这类错误重试同一源无意义，应直接切换兜底源（GitHub）。
+function isSourceError(err) {
+  const raw = String(err && err.message || err || '').toLowerCase()
+  return /app-update\.yml|cannot parse|latest\.yml|404|not found|certificate|self.signed|unable to verify|unknown url type/i.test(raw)
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// 单次 checkForUpdates 带超时：electron-updater 未暴露内置超时，网络黑洞会让
+// checkForUpdates 长时间悬挂 → UI 卡死在「检查中…」；超时按网络类失败处理（触发重试/切源）。
+function checkOnce() {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error('更新检查超时 (timed out)'))
+    }, UPDATE_ATTEMPT_TIMEOUT_MS)
+    autoUpdater.checkForUpdates().then(
+      (r) => { if (settled) return; settled = true; clearTimeout(timer); resolve(r) },
+      (e) => { if (settled) return; settled = true; clearTimeout(timer); reject(e) }
+    )
+  })
+}
+
+// 检查更新：镜像源优先，网络类失败按指数退避重试（UPDATE_RETRIES 次）后切换 GitHub 兜底；
+// 源级失败（latest.yml 缺失/404/证书）直接切换兜底源；业务错误（4xx/无更新解析失败）直接结束。
 async function checkForUpdatesWithFallback() {
   if (!app.isPackaged) {
     sendUpdateStatus('info', '开发模式暂不检查更新')
     return
   }
-  sendUpdateStatus('info', '正在检查更新…')
   const explicitFeed = process.env.FRAMEWEAVE_UPDATE_URL
+  // 显式指定更新源时只查该源（禁用镜像/GitHub 切换）；否则镜像优先 → GitHub 兜底
+  const feeds = explicitFeed
+    ? [{ name: '自定义源', set: () => autoUpdater.setFeedURL({ provider: 'generic', url: explicitFeed }) }]
+    : [
+        { name: '镜像源', set: () => autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL }) },
+        { name: 'GitHub', set: () => autoUpdater.setFeedURL(UPDATE_GITHUB_FEED) },
+      ]
+  let lastErr = null
+  let giveUp = false
+  updateCheckActive = true
   try {
-    await autoUpdater.checkForUpdates()
-    // 成功（含 update-available / update-not-available 事件由监听器处理）
-  } catch (e) {
-    const msg = e && e.message || String(e)
-    fwLog('[updater] check 失败:', msg)
-    // 未显式指定更新源 + 网络类失败 → 回退镜像源重试一次
-    if (!explicitFeed && isNetworkError(e)) {
-      fwLog('[updater] 网络失败，回退镜像源:', UPDATE_MIRROR_URL)
-      try {
-        autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL })
-        await autoUpdater.checkForUpdates()
-        sendUpdateStatus('info', '正在检查更新…（镜像源）')
-        return
-      } catch (e2) {
-        fwLog('[updater] 镜像源也失败:', e2 && e2.message || String(e2))
-        sendUpdateStatus('error', friendlyUpdateError(e2))
-        return
+    for (const feed of feeds) {
+      if (giveUp) break
+      feed.set()
+      for (let attempt = 0; attempt <= UPDATE_RETRIES; attempt++) {
+        try {
+          if (attempt > 0) {
+            sendUpdateStatus('info', '正在检查更新…（' + feed.name + ' 重试 ' + attempt + '）')
+            await sleep(UPDATE_BACKOFF_MS * Math.pow(2, attempt - 1))
+          } else {
+            sendUpdateStatus('info', '正在检查更新…')
+          }
+          await checkOnce()
+          return  // 检查流程完成（update-available / update-not-available 由事件监听器处理）
+        } catch (e) {
+          lastErr = e
+          const net = isNetworkError(e)
+          const src = !net && isSourceError(e)
+          fwLog('[updater] ' + feed.name + ' 第 ' + (attempt + 1) + ' 次失败:', e && e.message || String(e), 'network=', net, 'source=', src)
+          if (!net && !src) { giveUp = true; break }   // 业务错误：不重试不切源
+          if (src || attempt >= UPDATE_RETRIES) break  // 源级错误切源 / 网络重试耗尽切源
+        }
       }
     }
-    sendUpdateStatus('error', friendlyUpdateError(e))
+    sendUpdateStatus('error', friendlyUpdateError(lastErr))
+  } finally {
+    updateCheckActive = false
+  }
+}
+
+// 启动静默检查：镜像 → GitHub，网络/源级失败切换；全程不主动发 UI 状态
+// （available/not-available 由事件监听器上报，渲染层对后台检查不弹窗打扰）。
+async function silentStartupCheck() {
+  const explicitFeed = process.env.FRAMEWEAVE_UPDATE_URL
+  const feeds = explicitFeed
+    ? [() => autoUpdater.setFeedURL({ provider: 'generic', url: explicitFeed })]
+    : [
+        () => autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL }),
+        () => autoUpdater.setFeedURL(UPDATE_GITHUB_FEED),
+      ]
+  updateCheckActive = true
+  try {
+    for (const setFeed of feeds) {
+      setFeed()
+      for (let attempt = 0; attempt <= UPDATE_RETRIES; attempt++) {
+        if (attempt > 0) await sleep(UPDATE_BACKOFF_MS * Math.pow(2, attempt - 1))
+        try {
+          await checkOnce()
+          return
+        } catch (e) {
+          if (!isNetworkError(e) && !isSourceError(e)) return
+          fwLog('[updater] 启动检查 ' + feed.name + ' 第 ' + (attempt + 1) + ' 次失败:', e && e.message || String(e))
+        }
+      }
+    }
+  } finally {
+    updateCheckActive = false
   }
 }
 
@@ -414,14 +501,21 @@ function setupAutoUpdate() {
     console.log('[updater] 开发模式跳过自动更新')
     return
   }
-  // 更新源：默认使用打包时写入的 app-update.yml（build.publish = github provider）；
-  // 显式设置 FRAMEWEAVE_UPDATE_URL 时覆盖为 generic（联调/企业部署用，且禁用镜像回退）
+  // 更新源：默认镜像优先（无论 app-update.yml 内置哪个源，本会话固定指向官方镜像，
+  // GitHub 在镜像网络/源失败时兜底——大陆用户 GitHub CDN 超时是常见现象）；
+  // FRAMEWEAVE_UPDATE_URL 显式覆盖时只查该源（联调/企业部署用，且禁用镜像/GitHub 切换）
   const feedUrl = process.env.FRAMEWEAVE_UPDATE_URL
   if (feedUrl) {
     autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl })
     console.log('[updater] 使用覆盖更新源:', feedUrl)
   } else {
-    console.log('[updater] 使用打包配置更新源 (github provider)，失败自动回退镜像:', UPDATE_MIRROR_URL)
+    try {
+      autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL })
+      console.log('[updater] 使用镜像源（默认），失败自动回退 GitHub')
+    } catch (e) {
+      fwLog('[updater] 默认镜像源设置失败:', e && e.message || String(e))
+      console.log('[updater] 镜像源设置失败，使用打包内置源（app-update.yml）')
+    }
   }
 
   autoUpdater.autoDownload = false      // 用户确认后下载
@@ -451,35 +545,24 @@ function setupAutoUpdate() {
   })
 
   autoUpdater.on('error', (err) => {
-    updateInProgress = false
     const msg = err && err.message || String(err)
     console.error('[updater] 更新失败:', msg)
     fwLog('[updater] 更新失败:', msg)
+    if (updateCheckActive && !updateInProgress) {
+      // 检查流程重试/切源中：每次失败都会触发本事件，最终结果由
+      // checkForUpdatesWithFallback / silentStartupCheck 末尾统一上报，避免 UI 抖动。
+      // （下载阶段错误 updateInProgress=true，不受抑制，必须及时上报复位）
+      return
+    }
+    updateInProgress = false
     sendUpdateStatus('error', friendlyUpdateError(err))
   })
 
-  // 启动 5 秒后检查（无网/更新源不通时静默失败，不再产生 unhandledRejection；
-  // GitHub 失败自动回退镜像源，同样静默——不打断启动体验）
+  // 启动 5 秒后检查（无网/更新源不通时静默失败，不产生 unhandledRejection、
+  // 不打断启动体验；镜像优先，失败自动回退 GitHub）
   setTimeout(() => {
     if (!app.isPackaged) return
-    try {
-      autoUpdater.checkForUpdates().catch(async (e) => {
-        const msg = e && e.message || String(e)
-        fwLog('[updater] 启动检查失败:', msg)
-        // 网络类失败 → 静默回退镜像源再查一次
-        if (!process.env.FRAMEWEAVE_UPDATE_URL && isNetworkError(e)) {
-          fwLog('[updater] 启动检查回退镜像源:', UPDATE_MIRROR_URL)
-          try {
-            autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_MIRROR_URL })
-            await autoUpdater.checkForUpdates()
-          } catch (e2) {
-            fwLog('[updater] 镜像源启动检查也失败:', e2 && e2.message || String(e2))
-          }
-        }
-      })
-    } catch (e) {
-      fwLog('[updater] 启动检查异常:', e && e.message || String(e))
-    }
+    silentStartupCheck().catch((e) => fwLog('[updater] 启动检查异常:', e && e.message || String(e)))
   }, 5000)
 }
 

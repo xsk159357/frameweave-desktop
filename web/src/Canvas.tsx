@@ -12,6 +12,7 @@ import { canConnect, type FlowNodeData, type NodeSpec } from './types'
 import { FlowNode } from './nodes/FlowNode'
 import { ParamPanel } from './ParamPanel'
 import { ResultPanel } from './ResultPanel'
+import { MissingNodesModal, openMarketForTypeIds } from './WorkflowModals'
 
 const portDot = (t: string) => (({ VIDEO: '#4f8ef7', IMAGE: '#7c8cf8', AUDIO: '#34d399', SUBTITLE: '#fbbf24', SEGMENTS: '#a78bfa', TIMELINE: '#f472b6', SCRIPT: '#f87171', ANY: '#8b93a9' } as Record<string, string>)[t] || 'var(--accent)')
 
@@ -30,6 +31,10 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
   const setRunning = useAppStore((s) => s.setRunning)
   const lastError = useAppStore((s) => s.lastError)
   const setLastError = useAppStore((s) => s.setLastError)
+  const runErrors = useAppStore((s) => s.runErrors)
+  const setRunErrors = useAppStore((s) => s.setRunErrors)
+  const runInfo = useAppStore((s) => s.runInfo)
+  const setRunInfo = useAppStore((s) => s.setRunInfo)
   const selectedNodeId = useAppStore((s) => s.selectedNodeId)
   const setSelectedNodeId = useAppStore((s) => s.setSelectedNodeId)
   const setTimelineNodeId = useAppStore((s) => s.setTimelineNodeId)
@@ -50,6 +55,9 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
   const [saving, setSaving] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [batchNodeId, setBatchNodeId] = useState<string | null>(null)
+  const [comfyResult, setComfyResult] = useState<{ ok: boolean; message: string; nodes?: number; edges?: number; errors?: any[] } | null>(null)
+  // t10（D-03）：运行前缺失节点拦截弹层（含「去商城安装 / 仍然继续」）
+  const [missingModal, setMissingModal] = useState<{ typeIds: string[]; onContinue?: () => void } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId?: string; nodeTitle?: string; edgeId?: string } | null>(null)
   const [confirm, setConfirm] = useState<{ kind: 'nodes'; ids: string[] } | null>(null)
   const [showHelp, setShowHelp] = useState(false)
@@ -75,6 +83,9 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
   // ---- 撤销 / 重做（D3） ----
   const historyRef = useRef<{ nodes: any[]; edges: Edge[] }[]>([])
   const futureRef = useRef<{ nodes: any[]; edges: Edge[] }[]>([])
+  // t3：本地画布编辑序号 —— 工作流加载窗口内（getWorkflow 未返回）用户已添加
+  // 节点时跳过服务端覆盖，杜绝「新建工作流后添加的首个节点被异步加载清掉」。
+  const editSeqRef = useRef(0)
   const pushHistory = useCallback(() => {
     historyRef.current.push({ nodes, edges })
     if (historyRef.current.length > 40) historyRef.current.shift()
@@ -151,12 +162,13 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
     const spec = specs.find((s) => s.type_id === typeId)
     if (!spec) return
     pushHistory()
+    editSeqRef.current++
     nodeSeq++
     const id = 'n' + nodeSeq + '_' + Date.now().toString(36)
     const data: FlowNodeData = {
       type_id: typeId, title: spec.title, category: spec.category,
       params: Object.fromEntries(spec.params.map(p => [p.name, p.default ?? ''])),
-      status: 'pending', progress: 0, asset_ids: {}, inputs: {}, outputs: {}, spec,
+      status: 'pending', progress: 0, asset_ids: {}, inputs: {}, outputs: {}, forceInputs: {}, spec,
     }
     setNodes((nds) => [...nds, { id, type: 'flow', position: { x, y }, data }])
   }, [specs, pushHistory, setNodes])
@@ -309,6 +321,7 @@ const onAddNode = useCallback((typeId: string) => {
     const tPort = sp?.inputs?.find((p: any) => canConnect(connMenu.srcType as any, p.type as any))
     if (!sp || !tPort) return
     pushHistory()
+    editSeqRef.current++
     nodeSeq++
     const id = 'n' + nodeSeq + '_' + Date.now().toString(36)
     const data: FlowNodeData = {
@@ -358,7 +371,7 @@ const onAddNode = useCallback((typeId: string) => {
   const save = useCallback(async () => {
     setSaving(true)
     try {
-      const nds = nodes.map((n) => ({ id: n.id, type: n.data.type_id, x: n.position.x, y: n.position.y, params: n.data.params }))
+      const nds = nodes.map((n) => ({ id: n.id, type: n.data.type_id, x: n.position.x, y: n.position.y, params: n.data.params, force_inputs: n.data.forceInputs || {} }))
       const eds = edges.map((e) => ({ source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle }))
       await api.saveWorkflow(workflowId, nds, eds)
       savedRef.current = true
@@ -368,21 +381,47 @@ const onAddNode = useCallback((typeId: string) => {
   }, [nodes, edges, workflowId, pushToast, setDirty])
 
   // 运行
-  const run = useCallback(async (mode: string, nodeIds?: string[]) => {
+  const doRun = useCallback(async (mode: string, nodeIds?: string[]) => {
     setRunning(true)
     setLastError('')
+    setRunErrors(null)
+    setShowResults(false)
+    setRunInfo({ startedAt: Date.now(), mode })
     try {
-      const nds = nodes.map((n) => ({ id: n.id, type: n.data.type_id, x: n.position.x, y: n.position.y, params: n.data.params }))
+      const nds = nodes.map((n) => ({ id: n.id, type: n.data.type_id, x: n.position.x, y: n.position.y, params: n.data.params, force_inputs: n.data.forceInputs || {} }))
       const eds = edges.map((e) => ({ source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle }))
       await api.saveWorkflow(workflowId, nds, eds)
       await api.runWorkflow(workflowId, mode, nodeIds || [])
       setDirty(false)
     } catch (e: any) {
       console.error('运行失败', e)
-      setLastError(String(e.message || e)); setRunning(false)
-      pushToast('运行失败: ' + String(e.message || e), 'err')
+      // D-05：后端结构化 errors（node→port→reason）完整保留给错误卡片，不再压平成 toast
+      const errs = Array.isArray(e?.errors) && e.errors.length > 0 ? e.errors : null
+      setRunErrors(errs)
+      setLastError(String(e.message || e))
+      const curInfo = useAppStore.getState().runInfo
+      setRunInfo(curInfo ? { ...curInfo, endedAt: Date.now() } : curInfo)
+      setShowResults(true)
+      setRunning(false)
+      if (!errs) pushToast('运行失败: ' + String(e.message || e), 'err')
     }
-  }, [nodes, edges, workflowId, setRunning, setLastError, pushToast, setDirty])
+  }, [nodes, edges, workflowId, setRunning, setLastError, setRunErrors, setRunInfo, pushToast, setDirty])
+
+  // D-03：运行前主动图校验 —— 先列出缺失节点，弹「去商城安装」引导，而不是等运行后
+  // 收到 graph_invalid/node_type_unknown 才给通用错误。
+  const run = useCallback((mode: string, nodeIds?: string[]) => {
+    const missing = Array.from(new Set(
+      nodes
+        .filter((n) => !specs.some((s) => s.type_id === n.data.type_id))
+        .map((n) => String(n.data.type_id))
+        .filter(Boolean),
+    ))
+    if (missing.length > 0) {
+      setMissingModal({ typeIds: missing, onContinue: () => void doRun(mode, nodeIds) })
+      return
+    }
+    void doRun(mode, nodeIds)
+  }, [nodes, specs, doRun, setMissingModal])
 
   // ---- 取消运行（F3） ----
   const cancelRun = useCallback(async () => {
@@ -394,22 +433,43 @@ const onAddNode = useCallback((typeId: string) => {
 
   // 重试单个节点
   const retryNode = useCallback(async (nodeId: string) => {
-    setRunning(true); setLastError('')
+    setRunning(true); setLastError(''); setRunErrors(null)
+    setRunInfo({ startedAt: Date.now(), mode: 'selection' })
     try { await api.runWorkflow(workflowId, 'selection', [nodeId]) }
     catch (e: any) { console.error('重试失败', e); setLastError(String(e.message || e)); setRunning(false) }
-  }, [workflowId, setRunning, setLastError])
+  }, [workflowId, setRunning, setLastError, setRunErrors, setRunInfo])
   // 重置节点状态
   const resetNode = useCallback(async (nodeId: string) => {
     try { await api.resetNode(workflowId, nodeId, true); pushToast('节点状态已重置', 'info') }
     catch (e: any) { console.error('重置失败', e); setLastError(String(e.message || e)); pushToast('重置失败: ' + (e.message || e), 'err') }
   }, [workflowId, setLastError, pushToast])
 
-  // 打开已有工作流
+  // 打开已有工作流（t1 缺陷 D：切换到另一个工作流时先立即清空画布/节点选择/结果
+  // 面板/撤销栈与剪贴板，杜绝旧工作流节点连线残留；加载失败不再静默保留旧内容——
+  // 404 视为新建未保存的空工作流（空画布属正常），其余失败 toast 提示）
+  const lastWorkflowRef = useRef<string>('')
   useEffect(() => {
     if (!workflowId) return
     let alive = true
+    const switching = lastWorkflowRef.current !== workflowId
+    if (switching) {
+      lastWorkflowRef.current = workflowId
+      setNodes([]); setEdges([])
+      setSelectedNodeId(null)
+      setBatchNodeId(null); setShowResults(false)
+      historyRef.current = []; futureRef.current = []
+      copyRef.current = null
+      setDirty(false)
+    }
+    // t3 修复：specs 不再作为本效果依赖 —— 规格变化不再触发工作流整拉/整体覆盖
+    // 画布（旧行为会在 fw-nodes-installed 自续环中把新建工作流刚添加的节点清掉）。
+    // 规格就绪/更新改由下方 specPatch 效果就地补齐。
+    const seqAtStart = editSeqRef.current
     api.getWorkflow(workflowId).then((wf: any) => {
       if (!alive) return
+      // 初始化竞态防护：加载窗口内用户已添加节点（新建工作流场景）→ 本地优先，
+      // 跳过服务端覆盖，保证「新建后立即添加节点」不丢失。
+      if (seqAtStart !== editSeqRef.current) return
       const savedNodes = wf.nodes || []
       const savedEdges = wf.edges || []
       const missingPorts = (node: any, direction: 'inputs' | 'outputs') => {
@@ -432,7 +492,7 @@ const onAddNode = useCallback((typeId: string) => {
             params: n.params || {}, last_params: n.last_params || {},
             run_history: n.run_history || [],
             status: n.status || 'pending', error: n.error || '', progress: n.progress || 0,
-            asset_ids: n.asset_ids || {}, inputs: n.inputs || {}, outputs: n.outputs || {}, spec: fallbackSpec,
+            asset_ids: n.asset_ids || {}, inputs: n.inputs || {}, outputs: n.outputs || {}, forceInputs: n.force_inputs || n.forceInputs || {}, spec: fallbackSpec,
           } as FlowNodeData,
         }
       })
@@ -443,10 +503,33 @@ const onAddNode = useCallback((typeId: string) => {
       }))
       setNodes(nds); setEdges(eds)
       if (wf.name) useAppStore.getState().setWorkflow(workflowId, wf.name)
-    }).catch(() => { /* 新工作流为空 */ })
+    }).catch((e: any) => {
+      if (!alive) return
+      if (seqAtStart !== editSeqRef.current) return
+      setNodes([]); setEdges([])
+      if (!(e?.status === 404)) pushToast('工作流加载失败: ' + String(e?.message || e), 'err')
+    })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowId, specs])
+  }, [workflowId])
+
+  // t3：specs 就绪/更新后，在现有节点上就地补齐 spec/title/category（含加载时
+  // specs 未就绪的兜底节点），并清除「未安装」标记 —— 不重拉工作流、不覆盖
+  // 任何本地编辑（与上效果解耦，保留 commit 17e2bd2 的“等待规格后重绘”语义）。
+  useEffect(() => {
+    if (specs.length === 0) return
+    setNodes((nds) => nds.map((n) => {
+      const sp = specs.find((s) => s.type_id === n.data.type_id)
+      if (!sp) return n
+      const d = n.data
+      if (d.spec && d.spec.type_id === sp.type_id && d.title === sp.title && d.category === sp.category) return n
+      return {
+        ...n,
+        className: d.spec && d.spec.type_id === sp.type_id ? n.className : undefined,
+        data: { ...d, title: sp.title, category: sp.category, spec: sp },
+      }
+    }))
+  }, [specs, setNodes])
 
   // ---- 复制 / 粘贴（D2） ----
   const copySelection = useCallback(() => {
@@ -462,6 +545,7 @@ const onAddNode = useCallback((typeId: string) => {
     const src = copyRef.current
     if (!src || !src.nodes.length) return
     pushHistory()
+    editSeqRef.current++
     const idMap = new Map<string, string>()
     const now = Date.now().toString(36)
     const newNodes = src.nodes.map(n => {
@@ -489,7 +573,7 @@ const onAddNode = useCallback((typeId: string) => {
     const doc = {
       app: 'FrameWeave', format: 1, exportedAt: new Date().toISOString(),
       workflowId, workflowName: useAppStore.getState().workflowName,
-      nodes: nodes.map(n => ({ id: n.id, type: n.data.type_id, x: Math.round(n.position.x), y: Math.round(n.position.y), params: n.data.params })),
+      nodes: nodes.map(n => ({ id: n.id, type: n.data.type_id, x: Math.round(n.position.x), y: Math.round(n.position.y), params: n.data.params, force_inputs: n.data.forceInputs || {} })),
       edges: edges.map(e => ({ source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle })),
     }
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })
@@ -502,9 +586,66 @@ const onAddNode = useCallback((typeId: string) => {
 
   const importWorkflow = useCallback(async (file: File) => {
     try {
+      // D-02（P0）：非 JSON 文件给可读提示，而不是把 MP4 当工作流 JSON 解析后抛
+      // "Unexpected token" —— 文件选择器/拖入的媒体、文本等一律在此拦截。
+      const fname = file?.name || ''
+      if (!/\.(json|fwflow)(\.json)?$/i.test(fname)) {
+        pushToast('这不是工作流文件（仅支持 .json / .fwflow）：' + (fname || '未知文件'), 'err')
+        return
+      }
       const text = await file.text()
-      const doc = JSON.parse(text)
-      if (!Array.isArray(doc.nodes)) throw new Error('无效的工作流文件（缺少 nodes）')
+      let doc: any
+      try {
+        doc = JSON.parse(text)
+      } catch {
+        pushToast('导入失败：不是有效的工作流文件（JSON 解析失败，文件可能损坏或并非 FrameWeave 导出）', 'err')
+        return
+      }
+      // D-04：ComfyUI workflow JSON 不能走 FW nodes/edges 旧路径（会静默丢 links/widgets_values）。
+      // 特征优先级：prompt class_type（API prompt）、nodes class_type、last_node_id/links/widgets_values。
+      const comfyNodes = Array.isArray(doc?.nodes) ? doc.nodes : []
+      const isComfy = !!doc?.prompt
+        || comfyNodes.some((n: any) => n && (n.class_type || n.inputs))
+        || doc?.last_node_id != null || Array.isArray(doc?.links)
+        || comfyNodes.some((n: any) => Array.isArray(n?.widgets_values))
+      if (isComfy) {
+        setComfyResult({ ok: false, message: '检测到 ComfyUI 格式，正在转换…' })
+        try {
+          const converted: any = await api.fromComfy(doc)
+          const wf = converted?.workflow || converted
+          const convertedNodes = Array.isArray(wf?.nodes) ? wf.nodes : []
+          const convertedEdges = Array.isArray(wf?.edges) ? wf.edges : []
+          if (!convertedNodes.length && !converted?.ok) throw new Error(converted?.message || '转换结果为空')
+          const idMap = new Map<string, string>()
+          const now = Date.now().toString(36)
+          const nds = convertedNodes.map((n: any) => {
+            const nid = 'n' + (++nodeSeq) + '_' + now + Math.floor(Math.random() * 1e4).toString()
+            idMap.set(String(n.id), nid)
+            const typeId = String(n.type || n.type_id || n.class_type || '')
+            const spec = specs.find((s) => s.type_id === typeId)
+            return { id: nid, type: 'flow', position: { x: n.x ?? 120 + Math.random() * 60, y: n.y ?? 120 + Math.random() * 60 }, data: {
+              type_id: typeId, title: spec?.title || typeId, category: spec?.category || '',
+              params: n.params || {}, last_params: {}, run_history: [], status: 'pending', error: '', progress: 0,
+              asset_ids: {}, inputs: n.inputs || {}, outputs: n.outputs || {}, spec,
+            } as FlowNodeData }
+          })
+          const eds = convertedEdges.map((ed: any) => ({
+            id: 'e_' + Math.random().toString(36).slice(2, 10),
+            source: idMap.get(String(ed.source)) || ed.source, target: idMap.get(String(ed.target)) || ed.target,
+            sourceHandle: ed.sourceHandle || ed.source_slot, targetHandle: ed.targetHandle || ed.target_slot,
+            style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 }, labelStyle: { fontSize: 10, fill: '#6b779f' },
+          }))
+          if (!nds.length) throw new Error('转换未生成任何节点')
+          pushHistory(); editSeqRef.current++; setNodes(nds); setEdges(eds); setDirty(true)
+          const errors = Array.isArray(converted?.errors) ? converted.errors : []
+          setComfyResult({ ok: true, message: `检测到 ComfyUI 格式，已转换 ${nds.length} 个节点、${eds.length} 条连线${errors.length ? `，另有 ${errors.length} 项未映射` : ''}`, nodes: nds.length, edges: eds.length, errors })
+        } catch (e: any) {
+          const errors = Array.isArray(e?.errors) ? e.errors : []
+          setComfyResult({ ok: false, message: 'ComfyUI 工作流转换失败：' + String(e?.message || e), errors })
+        }
+        return
+      }
+      if (!Array.isArray(doc.nodes)) throw new Error('不支持的工作流格式：缺少 nodes；若来自 ComfyUI，请确认导出的是 workflow JSON')
       const idMap = new Map<string, string>()
       const now = Date.now().toString(36)
       const nds = doc.nodes.map((n: any) => {
@@ -516,7 +657,7 @@ const onAddNode = useCallback((typeId: string) => {
           data: {
             type_id: n.type, title: spec?.title || n.type, category: spec?.category || '',
             params: n.params || {}, last_params: {}, run_history: [], status: 'pending', error: '', progress: 0,
-            asset_ids: {}, inputs: {}, outputs: {}, spec,
+            asset_ids: {}, inputs: {}, outputs: {}, forceInputs: {}, spec,
           } as FlowNodeData,
         }
       })
@@ -528,18 +669,20 @@ const onAddNode = useCallback((typeId: string) => {
         style: { stroke: 'var(--edge-stroke)', strokeWidth: 2.2 }, labelStyle: { fontSize: 10, fill: '#6b779f' },
       }))
       pushHistory()
+      editSeqRef.current++
       setNodes(nds); setEdges(eds)
       setDirty(true)
       pushToast('已导入 ' + nds.length + ' 个节点（保存后生效）', 'ok')
     } catch (e: any) { pushToast('导入失败: ' + (e.message || e), 'err') }
   }, [specs, pushHistory, setNodes, setEdges, setDirty, pushToast])
 
-  // 执行结束自动展示批量结果
+  // 执行结束自动展示结果卡（t10/D-13：每次运行结束都显示，不限于批量节点）
   const prevRunning = useRef(false)
   useEffect(() => {
     if (prevRunning.current && !running) {
       const bn = nodes.find((n) => n.data.type_id === 'core/batch_render')
-      if (bn) { setBatchNodeId(bn.id); setShowResults(true) }
+      if (bn) setBatchNodeId(bn.id)
+      setShowResults(true)
     }
     prevRunning.current = running
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -670,7 +813,7 @@ const onAddNode = useCallback((typeId: string) => {
         <button style={iconBtn} title="导入工作流 (JSON)" onClick={() => fileInput.current?.click()}><Upload size={14} /></button>
         <button style={iconBtn} title="导出工作流 (JSON)" onClick={exportWorkflow}><Download size={14} /></button>
         <button style={iconBtn} title="快捷键 (?)" onClick={() => setShowHelp(v => !v)}><HelpCircle size={14} /></button>
-        <input ref={fileInput} type="file" accept=".json,.fwflow.json,.fwflow" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importWorkflow(f); e.target.value = '' }} />
+        <input data-testid="workflow-json-input" ref={fileInput} type="file" accept=".json,.fwflow.json,.fwflow" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importWorkflow(f); e.target.value = '' }} />
       </div>
 
       {/* ===== 画布 + 浮层参数面板 ===== */}
@@ -678,6 +821,14 @@ const onAddNode = useCallback((typeId: string) => {
         <div
           ref={flowWrapper} style={{ flex: 1, position: 'relative', background: 'var(--bg-grad)', backgroundAttachment: 'fixed' }}
           onDragOver={onDragOver} onDrop={onDrop}
+          // D-15：真实鼠标 dblclick 的舞台兜底；NodeSearchMenu 也有 document capture，
+          // 这里直接调用其公开入口，避免 ReactFlow pane/背景元素吞掉事件。
+          onDoubleClick={(e) => {
+            const t = e.target as HTMLElement
+            if (t.closest('.react-flow__node, .react-flow__controls, .react-flow__panel, .fw-pro-search, .fw-param-drawer')) return
+            e.preventDefault()
+            ;(window as any).__fwOpenNodeSearch?.(e.clientX, e.clientY)
+          }}
         >
           {nodes.length === 0 && specs.length > 0 && (
             <div className="fw-empty-canvas" aria-label="空工作流引导">
@@ -952,17 +1103,21 @@ const onAddNode = useCallback((typeId: string) => {
           <div className="fw-library-footer">拖拽或点击添加到画布 · 也可右键画布空白</div>
         </div>
 
-        {/* 浮层参数面板（A1：不挤画布，滑入动画） */}
+        {/* 浮层参数面板（A1：不挤画布，滑入动画）
+            t1 缺陷 C：key=selectedNodeId 强制切换节点时整块重挂载 —— 内容、内部
+            preview 等局部状态、滑入动画都随所选节点重置，杜绝详情不随节点切换 */}
         {selectedNodeId && (() => {
           const n = nodes.find((x) => x.id === selectedNodeId)
           const spec = specs.find((s) => s.type_id === n?.data?.type_id)
           return (
-            <div className="fw-param-drawer">
+            <div className="fw-param-drawer" key={selectedNodeId}>
               <ParamPanel
                 nodeId={selectedNodeId}
                 spec={spec}
                 params={n?.data?.params || {}}
                 run_history={n?.data?.run_history || []}
+                forceInputs={n?.data?.forceInputs || {}}
+                onForceInputChange={(id, name, enabled) => { pushHistory(); setNodes((nds) => nds.map((x) => x.id === id ? { ...x, data: { ...x.data, forceInputs: { ...(x.data.forceInputs || {}), [name]: enabled } } } : x)); setDirty(true) }}
                 onUpdate={updateParams}
                 onClose={() => setSelectedNodeId(null)}
               />
@@ -982,10 +1137,20 @@ const onAddNode = useCallback((typeId: string) => {
           }}
           onMouseLeave={() => setMenu(null)}
         >
-          {menu.nodeId ? (
+          {menu.nodeId ? (() => {
+            const mnode = nodes.find((n) => n.id === menu.nodeId)
+            const isMissing = !!menu.nodeId && !specs.some((s) => s.type_id === mnode?.data?.type_id)
+            return (
             <>
               <div style={{ padding: '4px 12px', fontSize: 11, color: 'var(--text-faint)' }}>{menu.nodeTitle || menu.nodeId}</div>
               <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+              {isMissing && (
+                <>
+                  <div style={{ padding: '4px 12px', fontSize: 11, color: '#e0a800' }}>该节点类型未安装</div>
+                  {menuItem(<Store size={13} />, '去商城安装', '安装后自动生效', () => { const tid = mnode?.data?.type_id; setMenu(null); if (tid) openMarketForTypeIds([tid]) })}
+                  <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+                </>
+              )}
               {menuItem(<Play size={13} />, '单独运行', '仅重跑此节点', () => { setMenu(null); run('selection', [menu.nodeId!]) })}
               {menuItem(<ArrowDown size={13} />, '运行下游', '从该节点向后', () => { setMenu(null); run('downstream', [menu.nodeId!]) })}
               {menuItem(<Film size={13} />, '查看时间线', '', () => { setMenu(null); setTimelineNodeId(menu.nodeId!) })}
@@ -993,7 +1158,8 @@ const onAddNode = useCallback((typeId: string) => {
               <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
               {menuItem(<Trash2 size={13} />, '删除节点', 'Delete', () => { setMenu(null); setConfirm({ kind: 'nodes', ids: [menu.nodeId!] }) })}
             </>
-          ) : menu.edgeId ? (
+            )
+          }) : menu.edgeId ? (
             <>
               <div style={{ padding: '4px 12px', fontSize: 11, color: 'var(--text-faint)' }}>连线</div>
               <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
@@ -1035,8 +1201,31 @@ const onAddNode = useCallback((typeId: string) => {
         </div>
       )}
 
-      {showResults && batchNodeId && (
+      {showResults && (
         <ResultPanel workflowId={workflowId} batchNodeId={batchNodeId} onRetry={retryNode} onClose={() => setShowResults(false)} />
+      )}
+
+      {comfyResult && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'rgba(6,8,16,.62)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setComfyResult(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: '92vw', maxHeight: '78vh', overflow: 'auto', borderRadius: 16, padding: '18px 20px', background: 'var(--glass-strong)', border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{comfyResult.ok ? 'ComfyUI 工作流转换完成' : 'ComfyUI 工作流转换提示'}</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.6, color: comfyResult.ok ? 'var(--success)' : 'var(--danger)', marginBottom: 10 }}>{comfyResult.message}</div>
+            {comfyResult.ok && <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 10 }}>节点：{comfyResult.nodes} · 连线：{comfyResult.edges}（已映射参数与连接）</div>}
+            {comfyResult.errors && comfyResult.errors.length > 0 && <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>{comfyResult.errors.map((x: any, i: number) => <div key={i} style={{ fontSize: 11.5, color: 'var(--danger)', padding: '4px 0' }}>• {x.node_id || x.node || '节点'}{x.handle ? `.${x.handle}` : ''}：{x.message || x.reason || String(x)}</div>)}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}><button className="fw-btn fw-btn-primary" onClick={() => setComfyResult(null)}>知道了</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* t10（D-03）：运行前缺失节点拦截（去商城安装 / 仍然继续） */}
+      {missingModal && (
+        <MissingNodesModal
+          title="画布包含未安装的节点"
+          note="点击「仍然继续」将跳过依赖检查直接运行（未安装节点会失败）。"
+          typeIds={missingModal.typeIds}
+          onContinue={missingModal.onContinue ? () => { const cb = missingModal.onContinue!; setMissingModal(null); cb() } : undefined}
+          onClose={() => setMissingModal(null)}
+        />
       )}
     </div>
   )

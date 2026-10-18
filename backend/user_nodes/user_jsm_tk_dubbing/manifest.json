@@ -4,8 +4,8 @@
   "type_id": "user/jsm_tk_dubbing",
   "title": "TK 出海配音流水线",
   "category": "用户节点",
-  "description": "一键链：ASR→洗稿/翻译→间隙合并→OST 穿插→TTS→剪映草稿（离线 Whisper+edge TTS 可用）",
-  "version": "1.0.0",
+  "description": "一键链：ASR→洗稿/翻译→间隙合并→OST 穿插→TTS→剪映草稿（离线 Whisper+edge TTS 可用）；支持说话人区分与遮盖原字幕（G10）",
+  "version": "1.1.0",
   "kind": "python",
   "runtime": "python",
   "entrypoint": "node.py",
@@ -162,6 +162,36 @@
       "description": ""
     },
     {
+      "name": "enable_diarization",
+      "type": "BOOL",
+      "label": "说话人区分",
+      "required": true,
+      "default": false,
+      "widget": "toggle",
+      "options": [],
+      "description": "透传 core/asr：sherpa-onnx 说话人区分（TK 多说话人片源）"
+    },
+    {
+      "name": "diarization_model_dir",
+      "type": "STRING",
+      "label": "Diarization 模型目录",
+      "required": false,
+      "default": "",
+      "widget": "text",
+      "options": [],
+      "description": "sherpa-onnx 说话人区分模型目录；留空自动探测"
+    },
+    {
+      "name": "cover_original_subtitle",
+      "type": "BOOL",
+      "label": "遮盖原字幕",
+      "required": true,
+      "default": false,
+      "widget": "toggle",
+      "options": [],
+      "description": "草稿生成时在原字幕区域叠黑条遮盖（避免与新翻译字幕重叠）"
+    },
+    {
       "name": "mode",
       "type": "STRING",
       "label": "文本模式",
@@ -224,7 +254,7 @@
       "type": "STRING",
       "label": "文本模型",
       "required": true,
-      "default": "gpt-4o-mini",
+      "default": "",
       "widget": "text",
       "options": [],
       "description": ""
@@ -450,7 +480,7 @@
   "signature": {
     "alg": "ed25519",
     "key_id": "a8998646b062c170",
-    "value": "LGWMCrRRrsWykDcsdXDNd8ywQ0W5ySxizXEWV6tvx69PMS8pDJ7wfnnxAZozNfyS6qH7Zhb5zrgZ9WA5XxiDBg==",
+    "value": "H+3WO8N3JoBK2ql7SJ9kIQwkCZtslz4UmjY2pqGSmXCONnnSdeiHCzypymWET6Ms3VEK2k0Y/2y96xrMsrUHAg==",
     "over": "manifest"
   }
 }

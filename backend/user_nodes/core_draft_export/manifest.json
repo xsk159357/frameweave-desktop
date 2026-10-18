@@ -4,8 +4,8 @@
   "type_id": "core/draft_export",
   "title": "剪映草稿导出",
   "category": "输出",
-  "description": "生成剪映草稿目录（完整 27 键结构）+ Premiere XML/EDL/FCPXML + SRT；字幕样式、画幅、导出目标可选；支持 B7 混音布局（互斥静音 ±50ms 斜坡）。",
-  "version": "1.2.0",
+  "description": "生成剪映草稿目录（完整 27 键结构）+ Premiere XML/EDL/FCPXML + SRT；字幕样式、画幅、导出目标可选；支持 B7 混音布局（互斥静音 ±50ms 斜坡）与花字写入（G3）。",
+  "version": "1.3.0",
   "kind": "python",
   "runtime": "python",
   "entrypoint": "node.py",
@@ -80,6 +80,16 @@
       "widget": "text",
       "options": [],
       "description": "循环铺满的 BGM 轨"
+    },
+    {
+      "name": "flower",
+      "type": "JSON",
+      "label": "花字(可选)",
+      "required": false,
+      "default": null,
+      "widget": "text",
+      "options": [],
+      "description": "core/flower_text_analyze 输出：{opening_flower_texts, flower_texts}；写入剪映草稿文本轨"
     }
   ],
   "outputs": [
@@ -271,6 +281,16 @@
       "widget": "text",
       "options": [],
       "description": "留空输出到资产目录"
+    },
+    {
+      "name": "cover_original_subtitle",
+      "type": "BOOL",
+      "label": "遮盖原字幕",
+      "required": true,
+      "default": false,
+      "widget": "toggle",
+      "options": [],
+      "description": "在原字幕区域叠黑条遮盖（TK 用；新字幕在黑条上层渲染）"
     }
   ],
   "permission": {
@@ -290,7 +310,7 @@
   "signature": {
     "alg": "ed25519",
     "key_id": "a8998646b062c170",
-    "value": "M6sPlR2kXU7sxAAG4FL9y+rT0GitVkFUKJ0kt143ChNZP7Bm4X97Ts/2jfofDu2zN2+fgOV/oPdcebR9voOFAA==",
+    "value": "G0VDegQV9romum+oPUd3/OM8+mRZF52WZgDvx3hxohqiZFWZZzgXrT39/ODB2auYIH48laaWJi7JJkFfIH64AA==",
     "over": "manifest"
   }
 }

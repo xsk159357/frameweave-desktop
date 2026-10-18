@@ -115,7 +115,15 @@ class WorkflowStore:
         if not os.path.exists(p):
             return None
         with open(p, "r", encoding="utf-8") as f:
-            return Workflow.from_dict(json.load(f))
+            wf = Workflow.from_dict(json.load(f))
+        # t7：跨名边 input_slots 运行期自动派生（加载链统一派生，幂等；
+        # 未知类型/无法推导跳过，运行期同名回落兜底——现状不变）。
+        try:
+            from . import slots  # noqa: PLC0415 —— 延迟导入防模块环
+            slots.derive_input_slots(wf)
+        except Exception:  # noqa: BLE001 —— 派生失败不阻断读取
+            pass
+        return wf
 
     def list(self) -> List[Workflow]:
         out = []

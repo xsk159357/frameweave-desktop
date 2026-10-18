@@ -1,14 +1,15 @@
 ﻿# upload-release-korea.ps1 — 上传 release/<version>/ 三件套到韩国授权服务器更新源 shouquan.frameweave.top/update
 # 用法:
-#   pwsh scripts/upload-release-korea.ps1 -Version 0.3.2            # 上传 + 容器内确认 + 公网验证
-#   pwsh scripts/upload-release-korea.ps1 -Version 0.3.2 -CheckOnly # 仅连通/目录核对，不上传
-# 凭据（优先级）: env FW_KOREA_PASSWORD > server.env 键 FW_KOREA_PASSWORD > server.env 键 FW_SERVER_PASSWORD(旧) > .tmp/kr_fix_upload.py(遗留提取)
-#   ——韩国服务器密码与旧日本中转 server.env 的 FW_SERVER_PASSWORD 不同，建议迁移 SSH 密钥 ~/.ssh/frameweave_auth
+#  pwsh scripts/upload-release-korea.ps1 -Version 0.3.2            # 上传 + 容器内确认 + 公网验证
+#  pwsh scripts/upload-release-korea.ps1 -Version 0.3.2 -CheckOnly # 仅连通/目录核对，不上传
+# 凭据（优先级）: env FW_KOREA_PASSWORD > server.env 键 FW_KOREA_PASSWORD > server.env 键 FW_SERVER_PASSWORD(旧) > -AllowLegacyFallback 时 .tmp/kr_fix_upload.py(遗留提取)
+#  ——韩国服务器密码与旧日本中转 server.env 的 FW_SERVER_PASSWORD 不同；明文口令落盘的遗留回退默认禁用，建议迁移 SSH 密钥 ~/.ssh/frameweave_auth
 param(
   [Parameter(Mandatory=$true)][string]$Version,
   [string]$Server = "43.108.23.200",
   [string]$SiteRoot = "/opt/1panel/www/sites/shouquan.frameweave.top/update",
-  [switch]$CheckOnly
+  [switch]$CheckOnly,
+  [switch]$AllowLegacyFallback   # t3：显式允许读取 .tmp/kr_fix_upload.py 遗留明文口令（默认禁用）
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -29,18 +30,18 @@ if (-not $pw -and (Test-Path -LiteralPath $envFile)) {
     if ($line) { $pw = $line.Substring($key.Length + 1).Trim(); if ($pw) { break } }
   }
 }
-if (-not $pw) {
+if (-not $pw -and $AllowLegacyFallback) {
   $hist = Join-Path (Join-Path $root ".tmp") "kr_fix_upload.py"
   if (Test-Path $hist) {
     $src = Get-Content $hist -Raw
     $m = [regex]::Match($src, "c\.connect\('([^']+)'[^)]*password='([^']*)'")
-    if ($m.Success) { $Server = $m.Groups[1].Value; $pw = $m.Groups[2].Value; Write-Host "[upload-kr] ⚠ 回退 .tmp/kr_fix_upload.py 遗留凭据（建议迁移 SSH 密钥）" }
+    if ($m.Success) { $Server = $m.Groups[1].Value; $pw = $m.Groups[2].Value; Write-Host "[upload-kr] ⚠ 已显式启用 -AllowLegacyFallback 读取 .tmp 遗留明文口令（高危：请尽快迁移 SSH 密钥并轮换口令）" }
   }
 }
-if (-not $pw) { throw "未找到韩国服务器凭据：设 env FW_KOREA_PASSWORD 或 server.env 对应键" }
+if (-not $pw) { throw "未找到韩国服务器凭据：设 env FW_KOREA_PASSWORD 或 server.env 对应键；.tmp 明文口令回退已默认禁用（-AllowLegacyFallback 可临时启用），建议迁移 SSH 密钥并轮换口令" }
 
 $py = @'
-import sys, io, os, json
+import sys, io, os, json, hashlib
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 import paramiko
 host = os.environ["KR_HOST"]; site = os.environ["KR_SITE"]; ver = os.environ["KR_VERSION"]
@@ -65,6 +66,15 @@ else:
                 print("  MISSING %s" % local); continue
             sftp.put(local, remote); st = sftp.stat(remote)
             print("  %s -> %s (%d B)" % (name, remote, st.st_size))
+            # t3：sha256 完整性核对，防半包/截断上传
+            h = hashlib.sha256()
+            with open(local, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""): h.update(chunk)
+            lo = h.hexdigest()
+            ro = run("sha256sum %s | cut -d' ' -f1" % remote)
+            if ro != lo:
+                print("  [verify] FAIL %s local=%s remote=%s" % (name, lo, ro)); c.close(); sys.exit(2)
+            print("  [verify] sha256 OK %s (%s)" % (name, lo[:12]))
     finally:
         sftp.close()
     print("=== 容器内确认 ===")

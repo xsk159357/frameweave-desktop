@@ -1,6 +1,6 @@
 {
   "name": "frameweave-desktop",
-  "version": "0.3.5",
+  "version": "0.3.11",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
@@ -31,6 +31,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis"
       ],
@@ -43,6 +44,12 @@
       "createStartMenuShortcut": true,
       "shortcutName": "拾帧 FrameWeave",
       "perMachine": false,
+      "installerIcon": "build/installerIcon.ico",
+      "uninstallerIcon": "build/uninstallerIcon.ico",
+      "installerHeaderIcon": "build/installerHeaderIcon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
       "include": "nsis-fixes.nsh"
     },
     "npmRebuild": false,
@@ -57,6 +64,10 @@
       }
     ],
     "publish": [
+      {
+        "provider": "generic",
+        "url": "https://shouquan.frameweave.top/update"
+      },
       {
         "provider": "github",
         "owner": "xsk159357",

@@ -1,10 +1,26 @@
 // 商城页（M18 / t5）：浏览 / 搜索 / 筛选 / 下载安装（进度 + SHA-256 校验 + 错误码 + 重试）/ 回报 / 发布 / 作者页
 // t5 完善：流式下载进度、SHA-256 校验展示、安装状态（XHR 上传进度）、服务端错误码展示、
 //       云端 item_not_found 容错重试、安装后节点库刷新（reload + /api/specs → setSpecs 广播）。
-import { useEffect, useRef, useState } from 'react'
+// t2 完善：搜索输入防抖（300ms）、筛选结果前端缓存（切换 kind/搜索即时响应，不再每次打云端）、
+//       下载 60s 无数据看门狗 + 整体重试一次（用户网络不稳时给明确错误而非悬挂）、
+//       条目卡片 memo 化（切换过滤/安装进度时避免整页重渲染）。
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X, Package, GitBranch, Download, Upload, Boxes, User, Coins, Loader2, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react'
 import { api, nodeSpecs, API_BASE, localToken } from './api'
 import { useAppStore } from './store'
+import { CATEGORY_ORDER, categoryNormal } from './types'
+
+type MarketOpenDetail = { typeIds?: string[]; kind?: string; cat?: string }
+
+// App 在事件到达时才 setShowMarket，MarketPage 可能尚未挂载；暂存最近一次跳转，
+// 组件挂载后消费，保证 D-03「点击去商城」不会丢失 typeIds。
+let pendingMarketOpen: MarketOpenDetail | null = null
+if (typeof window !== 'undefined' && !(window as any).__fwMarketPendingListener) {
+  ;(window as any).__fwMarketPendingListener = true
+  window.addEventListener('fw-open-market', (ev) => {
+    pendingMarketOpen = (ev as CustomEvent<MarketOpenDetail>).detail || {}
+  })
+}
 
 interface MarketItem {
   id: string
@@ -36,6 +52,9 @@ const CODE_TEXT: Record<string, string> = {
   insufficient_credits: '积分不足',
   cloud_unavailable: '无法连接云端授权服务器，请联网后重试',
   cloud_not_configured: '需要云端授权：云端授权服务器未配置，请检查网络后重试',
+  cloud_http_404: '云端接口不存在（云端服务可能未同步最新版本，请稍后重试）',
+  cloud_http_500: '云端服务器内部错误，请稍后重试',
+  cloud_http_502: '云端网关错误，请稍后重试',
   no_download_url: '服务端未返回下载地址',
   download_empty: '下载内容为空',
   size_mismatch: '文件大小与声明不符',
@@ -68,13 +87,144 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 interface InstallStep { label: string; pct?: number; sha?: string }
 
+// 构造带错误码的异常（前端统一 codeText 文案 + 按 code 重试）
+function fail(code: string, message: string) {
+  const e: any = new Error(message)
+  e.code = code
+  return e
+}
+
+// 条目卡片（memo 化）：仅当本卡 props（条目/已装态/安装态/忙碌态）变化才重渲染，
+// 切换 kind/搜索、其他条目安装进度更新时不再整页重渲染。
+// t11（D-18）：卡片首屏只保留用途/依赖徽章/安装状态/CTA；SHA-256/体积/最低版本等
+// 技术校验信息折叠进「详情」（toggleExpand）；依赖徽章由 tags/描述关键词推导。
+const MarketCard = memo(function MarketCard({ item, installed, installing, step, busy, onInstall, onAuthor }: {
+  item: MarketItem
+  installed: boolean
+  installing: boolean
+  step: InstallStep | null
+  busy: boolean
+  onInstall: (id: string) => void
+  onAuthor: (a: string) => void
+}) {
+  const [detail, setDetail] = useState(false)
+  const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)', WebkitBackdropFilter: 'var(--glass-blur)' }
+
+  // D-18：依赖徽章（ffmpeg / 模型 / API Key / GPU / 网络 / 剪映等，从 tags+描述关键词推导）
+  const deps: { label: string; tone: 'warn' | 'accent' | 'ok' }[] = []
+  const hay = ((item.tags || []).join(' ') + ' ' + (item.description || '')).toLowerCase()
+  if (/ffmpeg|编码|解码|转码/.test(hay)) deps.push({ label: 'FFmpeg', tone: 'warn' })
+  if (/模型|whisper|asr|tts|checkpoint|权重/.test(hay)) deps.push({ label: '模型文件', tone: 'warn' })
+  if (/api|key|密钥|token|联网|cloud/.test(hay)) deps.push({ label: 'API Key', tone: 'warn' })
+  if (/gpu|cuda|显卡/.test(hay)) deps.push({ label: 'GPU', tone: 'accent' })
+  if (/剪映|premiere|prxml|draft/.test(hay)) deps.push({ label: '剪映/Premiere', tone: 'ok' })
+
+  return (
+    <div style={{ ...frame, borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {item.kind === 'node' ? <Package size={15} color={'#9fb4ff'} /> : <GitBranch size={15} color="var(--success)" />}
+        <b style={{ fontSize: 13.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title}>{item.title}</b>
+        {item.official && <span style={{ fontSize: 10.5, color: '#b8860b', border: '1px solid #e8d48b', borderRadius: 999, padding: '0 6px', background: '#fff8e1', flexShrink: 0 }}>官方</span>}
+        {item.price > 0
+          ? <span style={{ fontSize: 11.5, color: '#e0a800', fontWeight: 600, flexShrink: 0 }}><Coins size={11} style={{ verticalAlign: -1 }} /> {item.price}</span>
+          : <span style={{ fontSize: 11.5, color: 'var(--success)', flexShrink: 0 }}>免费</span>}
+      </div>
+      {/* 首屏：用途（两行截断） */}
+      <div style={{
+        fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 34,
+      }}>{item.description || '（无描述）'}</div>
+      {/* 首屏：依赖徽章（安装前须知） */}
+      {deps.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {deps.map((d) => (
+            <span key={d.label} title={'安装前需准备：' + d.label}
+              style={{
+                fontSize: 9.5, fontWeight: 700, padding: '1px 7px', borderRadius: 999,
+                color: d.tone === 'warn' ? 'var(--gold)' : d.tone === 'accent' ? 'var(--accent-strong)' : 'var(--success)',
+                background: d.tone === 'warn' ? 'rgba(245,165,36,.13)' : d.tone === 'accent' ? 'var(--accent-soft)' : 'var(--success-soft)',
+                border: '1px solid ' + (d.tone === 'warn' ? 'rgba(245,165,36,.4)' : d.tone === 'accent' ? 'var(--border)' : 'var(--border)'),
+              }}>{d.label}</span>
+          ))}
+        </div>
+      )}
+      {/* 首屏：安装状态 + CTA */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: 'var(--text-faint)' }}>
+        <button onClick={() => onAuthor(item.author)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center', gap: 3, fontSize: 10.5, padding: 0 }}><User size={11} /> {item.author}</button>
+        {item.kind === 'node' && installed && <span style={{ color: 'var(--success)' }}><CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> 已安装</span>}
+        <span style={{ flex: 1 }} />
+        {/* D-18：技术校验信息折叠到详情 */}
+        <button onClick={() => setDetail((v) => !v)}
+          style={{ border: 'none', background: 'transparent', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 3, padding: 0 }}>
+          {detail ? '收起详情' : '详情'} {detail ? <ChevronUpIcon size={10} /> : <ChevronDownIcon size={10} />}
+        </button>
+        {item.kind === 'workflow' && (
+          <button onClick={() => onInstall(item.id)} disabled={busy}
+            title="下载并导入工作流"
+            style={{ padding: '4px 11px', borderRadius: 8, cursor: busy ? 'default' : 'pointer', fontSize: 11.5, border: 'none', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--success-soft)', color: 'var(--success)' }}>
+            <Download size={12} /> 下载并导入
+          </button>
+        )}
+        {item.kind === 'node' && (
+          <button onClick={() => onInstall(item.id)} disabled={busy || installed}
+            title={installed ? '该节点已安装' : (item.type_id ? '下载并安装 ' + item.type_id : '下载并安装')}
+            style={{
+              padding: '4px 11px', borderRadius: 8, cursor: busy || installed ? 'default' : 'pointer', fontSize: 11.5,
+              border: 'none', display: 'flex', alignItems: 'center', gap: 4,
+              background: installed ? 'var(--success-soft)' : 'var(--accent-soft)',
+              color: installed ? 'var(--success)' : 'var(--accent-strong)',
+            }}>
+            {installing ? (
+              <><Loader2 size={12} className="fw-spin" /> {step ? step.label : '安装中'}{step && step.pct != null ? ` ${step.pct}%` : ''}</>
+            ) : installed ? (
+              <><CheckCircle2 size={12} /> 已安装</>
+            ) : (
+              <><Download size={12} /> 下载并安装</>
+            )}
+          </button>
+        )}
+      </div>
+      {/* 折叠区：技术校验信息（SHA-256 / 体积 / 最低版本 / 下载安装统计） */}
+      {detail && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 7, marginTop: 2, animation: 'fw-pop-in .15s var(--t-ease) both' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: 10, color: 'var(--text-faint)' }}>
+            {item.sha256 && <span title={'SHA-256: ' + item.sha256} style={{ fontFamily: 'var(--font-mono)' }}><ShieldCheck size={10} style={{ verticalAlign: -1 }} /> SHA-256 {item.sha256.slice(0, 16)}…</span>}
+            {item.size ? <span>{fmtSize(item.size)}</span> : null}
+            {item.min_client_version ? <span style={{ color: '#e0a800' }}>需 v{item.min_client_version}+</span> : null}
+            {item.type_id ? <span style={{ fontFamily: 'var(--font-mono)' }}>{item.type_id}</span> : null}
+            <span>↓ {item.downloads}</span>
+            {typeof item.installs === 'number' && <span>✓ {item.installs}</span>}
+            {item.version ? <span>v{item.version}</span> : null}
+          </div>
+          {item.tags && item.tags.length > 0 && (
+            <div style={{ marginTop: 5, display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 9.5, color: 'var(--text-faint)' }}>
+              {item.tags.map((t) => <span key={t} className="fw-badge" style={{ background: 'var(--bg-panel-2)' }}>#{t}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+      {installing && step && step.pct != null && (
+        <div style={{ height: 4, borderRadius: 999, background: 'var(--bg-panel-2)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: step.pct + '%', background: 'linear-gradient(90deg,#7c8cff,#54d6a0)', transition: 'width .25s ease' }} />
+        </div>
+      )}
+    </div>
+  )
+})
+const ChevronUpIcon = ({ size = 10 }: { size?: number }) => <span style={{ display: 'inline-flex' }}>⌃</span>
+const ChevronDownIcon = ({ size = 10 }: { size?: number }) => <span style={{ display: 'inline-flex' }}>⌄</span>
+
 export function MarketPage({ onClose }: { onClose: () => void }) {
   const session = useAppStore((s) => s.session)
   const specs = useAppStore((s) => s.specs)
   const setSpecs = useAppStore((s) => s.setSpecs)
   const pushToast = useAppStore((s) => s.pushToast)
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState('')                    // 搜索框即时输入值
+  const [debouncedQ, setDebouncedQ] = useState('')  // 防抖后的查询条件（300ms 停顿后生效）
   const [kind, setKind] = useState('')
+  const [cat, setCat] = useState('')                 // D-17：同分类筛选（与节点库 manifest 顺序一致）
+  // t16（D-03）：外部缺失节点跳转的精确 type_id 过滤（不依赖商城全文搜索是否索引 type_id）
+  const [targetTypeIds, setTargetTypeIds] = useState<string[]>([])
   const [items, setItems] = useState<MarketItem[]>([])
   const [author, setAuthor] = useState('')           // 作者页过滤
   const [showPublish, setShowPublish] = useState(false)
@@ -87,51 +237,194 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
   const [installedSet, setInstalledSet] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const loadSeq = useRef(0)
+  const listCache = useRef<Map<string, MarketItem[]>>(new Map())  // 筛选结果前端缓存：(q|kind) → 云端条目
+
+  // D-17：分类选项 = 已安装节点规格分类（CATEGORY_ORDER 顺序）∪ 条目关键词可识别分类
+  const catOptions = useMemo(() => {
+    const fromSpecs = new Set(specs.map((s) => categoryNormal(s.category)))
+    const fromItems = new Set<string>()
+    for (const it of items) {
+      const c = categoryOfItem(it)
+      if (c) fromItems.add(c)
+    }
+    const all = new Set([...fromSpecs, ...fromItems])
+    return [...all].sort((a, b) => {
+      const ia = CATEGORY_ORDER.indexOf(a)
+      const ib = CATEGORY_ORDER.indexOf(b)
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
+  }, [specs, items])
+
+  // 条目分类：已安装节点按 type_id 查规格；未安装按 tags/标题/描述关键词识别
+  function categoryOfItem(it: MarketItem): string {
+    if (it.kind === 'node' && it.type_id) {
+      const s = specs.find((x) => x.type_id === it.type_id)
+      if (s) return categoryNormal(s.category)
+    }
+    const hay = ((it.tags || []).join(' ') + ' ' + it.title + ' ' + (it.description || '')).toLowerCase()
+    for (const c of CATEGORY_ORDER) {
+      const kws: Record<string, string[]> = {
+        输入: ['导入', '加载', '输入', 'load', 'ingest', '素材导入'],
+        分析: ['分析', '检测', '识别', '解析', 'analy', 'detect', 'scene'],
+        语义: ['语义', '理解', '意图', 'semantic', '嵌入', 'embedding'],
+        音频: ['音频', '语音', '音轨', 'audio', 'voice'],
+        剪辑: ['剪辑', '拼接', '合成', '编辑', 'edit', 'concat', 'mix'],
+        输出: ['输出', '导出', '渲染', 'export', 'render', '字幕输出'],
+        控制: ['控制', '流程', '条件', 'control', 'branch', 'if'],
+        用户节点: ['用户', '自定义', 'user', 'custom'],
+      }
+      if ((kws[c] || []).some((k) => hay.includes(k))) return c
+    }
+    return ''
+  }
 
   // 已安装集合 = 服务端 /api/specs 的 type_id；安装成功 setSpecs 后自动联动（节点库刷新）
   useEffect(() => { setInstalledSet(new Set(specs.map((s) => s.type_id))) }, [specs])
 
-  const load = async (manual = false) => {
+  // t16（D-03/D-06）：跨面板事件契约
+  // - fw-open-market.detail = { typeIds?: string[], kind?: string, cat?: string }
+  //   缺失节点 modal/右键点击后由 App 打开商城；这里精确过滤 type_id，并支持重复触发更新。
+  // - fw-workflow-imported.detail = { tpl_id|workflowId, name, node_count }。
+  //   WorkflowPanel 已注册同一事件并负责「立即打开/创建副本」modal；商城收到后关闭自己，避免 modal 被商城遮挡。
+  useEffect(() => {
+    const applyMarketOpen = (d: MarketOpenDetail) => {
+      const ids = Array.isArray(d.typeIds) ? d.typeIds.filter(Boolean).map(String) : []
+      setTargetTypeIds(ids)
+      setQ('')
+      if (d.kind != null) setKind(String(d.kind))
+      if (d.cat != null) setCat(String(d.cat))
+    }
+    if (pendingMarketOpen) {
+      applyMarketOpen(pendingMarketOpen)
+      pendingMarketOpen = null
+    }
+    const onOpenMarket = (ev: Event) => {
+      applyMarketOpen((ev as CustomEvent<MarketOpenDetail>).detail || {})
+    }
+    const onWorkflowImported = (ev: Event) => {
+      const d = (ev as CustomEvent<{ tpl_id?: string; workflowId?: string; name?: string }>).detail || {}
+      if (d.tpl_id || d.workflowId) onClose()
+    }
+    window.addEventListener('fw-open-market', onOpenMarket)
+    window.addEventListener('fw-workflow-imported', onWorkflowImported)
+    return () => {
+      window.removeEventListener('fw-open-market', onOpenMarket)
+      window.removeEventListener('fw-workflow-imported', onWorkflowImported)
+    }
+  }, [onClose])
+
+  // 搜索输入防抖：停顿 300ms 后才更新查询条件（避免每次按键都请求后端+云端）
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 300)
+    return () => clearTimeout(t)
+  }, [q])
+
+  const load = async (manual = false, opts: { useCache?: boolean } = {}) => {
     const seq = ++loadSeq.current
     if (manual) setRefreshing(true)
+    const key = debouncedQ + '|' + kind
     try {
-      const r = await api.marketItems(q, kind, '')
+      // 筛选结果前端缓存：同一 (搜索, kind) 组合直接复用，切换过滤即时响应
+      if (opts.useCache !== false) {
+        const hit = listCache.current.get(key)
+        if (hit) {
+          setItems(hit.filter((i: MarketItem) => !author || i.author === author))
+          setErr('')
+          return
+        }
+      }
+      const r = await api.marketItems(debouncedQ, kind, '')
       if (seq !== loadSeq.current) return
-      setItems((r.items || []).filter((i: MarketItem) => !author || i.author === author))
+      const list = r.items || []
+      listCache.current.set(key, list)
+      setItems(list.filter((i: MarketItem) => !author || i.author === author))
       setErr('')
     } catch (e: any) {
+      // 后台加载/轮询失败静默（保留旧列表），手动刷新才给明确错误
       if (manual) setErr(e.message || '加载失败，请点击刷新重试')
     } finally {
       if (manual) setRefreshing(false)
     }
   }
 
+  // 筛选变化（防抖后查询/类型/作者）触发加载：优先命中前端缓存；
+  // 每 25s 轮询走网络刷新（不命中缓存），页面可见性恢复时也刷新一次。
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null
     const stop = () => { if (timer) { clearInterval(timer); timer = null } }
-    const start = () => { stop(); if (document.visibilityState === 'visible') timer = setInterval(() => { void load(false) }, 25000) }
-    void load(false)
+    const start = () => { stop(); if (document.visibilityState === 'visible') timer = setInterval(() => { void load(false, { useCache: false }) }, 25000) }
+    void load(false, { useCache: true })
     start()
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') { void load(false); start() } else stop()
+      if (document.visibilityState === 'visible') { void load(false, { useCache: true }); start() } else stop()
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
-  }, [q, kind, author])
+  }, [debouncedQ, kind, author])
+
+  // 稳定回调（供 memo 卡片使用）：install/setAuthor 经 ref 取最新闭包，props 引用不变
+  const installRef = useRef<(id: string) => void>(() => {})
+  installRef.current = (id: string) => { void install(id) }
+  const onInstall = useCallback((id: string) => { installRef.current(id) }, [])
+  const authorRef = useRef<(a: string) => void>(() => {})
+  authorRef.current = (a: string) => setAuthor(a)
+  const onAuthor = useCallback((a: string) => { authorRef.current(a) }, [])
 
   const report = async (id: string, result: 'ok' | 'failed', error = '') => {
     try { await api.marketInstallReport(id, session?.token || '', __APP_VERSION__, result, error) } catch { /* 旧服务兼容 */ }
+  }
+
+  // 直链插件包下载：60s 无数据看门狗（网络黑洞中断给明确 timeout 错误而非悬挂），
+  // 网络/超时类失败返回带 code 的异常，由调用方整体重试一次。
+  const downloadPackage = async (url: string, headers: Record<string, string>, declared: number, onStep: (recv: number, len: number) => void): Promise<{ parts: BlobPart[]; received: number }> => {
+    const ctrl = new AbortController()
+    let inactivity: ReturnType<typeof setTimeout> | null = null
+    const arm = () => {
+      if (inactivity) clearTimeout(inactivity)
+      inactivity = setTimeout(() => ctrl.abort(), 60000)
+    }
+    arm()
+    try {
+      const resp = await fetch(url, { headers, signal: ctrl.signal })
+      if (!resp.ok) throw fail('download_http_' + resp.status, '下载失败: HTTP ' + resp.status)
+      const len = declared || Number(resp.headers.get('content-length') || 0) || 0
+      const reader = resp.body ? resp.body.getReader() : null
+      const parts: BlobPart[] = []
+      let received = 0
+      if (reader) {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          arm()  // 有数据到达 → 重置看门狗
+          parts.push(value)
+          received += value.byteLength
+          if (len) onStep(received, len)
+          if (declared && received > declared) throw fail('size_mismatch', '下载文件超过声明大小')
+        }
+      } else {
+        const buf = await resp.arrayBuffer()
+        parts.push(buf)
+        received = buf.byteLength
+      }
+      if (declared && received !== declared) throw fail('size_mismatch', `文件大小校验失败：收到 ${received}B，声明 ${declared}B`)
+      if (received === 0) throw fail('download_empty', '下载内容为空')
+      return { parts, received }
+    } catch (e: any) {
+      if (e && e.name === 'AbortError') throw fail('timeout', '下载中断（超过 60 秒无数据），请检查网络后重试')
+      if (e && (e.code === 'network' || e.code === 'timeout')) throw e
+      if (e instanceof TypeError || /fetch|network|failed|terminated/i.test(String(e.message || e))) {
+        throw fail('network', '下载连接失败：' + (e.message || '网络异常'))
+      }
+      throw e
+    } finally {
+      if (inactivity) clearTimeout(inactivity)
+    }
   }
 
   const install = async (id: string) => {
     setBusy(true); setErr(''); setMsg('')
     setActiveId(id)
     let reportId = id
-    const fail = (code: string, message: string) => {
-      const e: any = new Error(message)
-      e.code = code
-      return e
-    }
     try {
       // ---- 1. 下载授权（云端 item_not_found → 刷新列表重试一次；瞬时网络/超时 → 延时重试一次） ----
       let auth: any = null
@@ -144,7 +437,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
           if (auth.code === 'item_not_found' && attempt === 0) {
             // 云端条目未同步（迁移期）：刷新列表后再试一次
             setStep({ label: '云端条目未同步，刷新列表后重试' })
-            try { await load() } catch { /* ignore */ }
+            try { await load(false, { useCache: false }) } catch { /* ignore */ }
             if (!items.some((i) => i.id === id)) {
               throw fail(auth.code || 'item_not_found', auth.message || '条目不存在')
             }
@@ -165,36 +458,33 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
       // 相对 stub_path（云端直链/相对路径）与绝对直链统一解析
       const url = api.resolveUrl(dl.url || dl.stub_path || '')
       if (!url) throw fail('no_download_url', '下载授权未返回下载地址')
+      const declared = Number(dl.size || 0) || 0
 
-      // ---- 2. 流式下载 + 进度 ----
+      // ---- 2. 流式下载 + 进度（网络不稳：60s 无数据看门狗 + 整体重试一次） ----
       setStep({ label: '正在下载插件', pct: 0 })
       // 直链（/api/export、/api/market/*/file）受本地授权令牌保护：
       // 仅对本地 API 地址附加 X-FW-Local-Token；GitHub Release 等外域直链不加（防 CORS 预检失败）。
       const downloadHeaders: Record<string, string> = {}
       if (url.startsWith(API_BASE)) downloadHeaders['X-FW-Local-Token'] = localToken()
-      const resp = await fetch(url, { headers: downloadHeaders })
-      if (!resp.ok) throw fail('download_http_' + resp.status, '下载失败: HTTP ' + resp.status)
-      const declared = Number(dl.size || 0) || 0
-      const len = declared || Number(resp.headers.get('content-length') || 0) || 0
-      const reader = resp.body ? resp.body.getReader() : null
-      const parts: BlobPart[] = []
+      let parts: BlobPart[] = []
       let received = 0
-      if (reader) {
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
-          parts.push(value)
-          received += value.byteLength
-          if (len) setStep({ label: `正在下载插件 ${fmtSize(received)} / ${fmtSize(len)}`, pct: Math.min(99, Math.round((received / len) * 100)) })
-          if (declared && received > declared) throw fail('size_mismatch', '下载文件超过声明大小')
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          if (attempt > 0) setStep({ label: '下载连接异常，正在重试下载…', pct: 0 })
+          const dlRes = await downloadPackage(url, downloadHeaders, declared, (recv, len) => {
+            setStep({ label: `正在下载插件 ${fmtSize(recv)} / ${fmtSize(len)}`, pct: Math.min(99, Math.round((recv / len) * 100)) })
+          })
+          parts = dlRes.parts
+          received = dlRes.received
+          break
+        } catch (e: any) {
+          if (attempt === 0 && (e.code === 'network' || e.code === 'timeout')) {
+            await delay(1000)
+            continue
+          }
+          throw e
         }
-      } else {
-        const buf = await resp.arrayBuffer()
-        parts.push(buf)
-        received = buf.byteLength
       }
-      if (declared && received !== declared) throw fail('size_mismatch', `文件大小校验失败：收到 ${received}B，声明 ${declared}B`)
-      if (received === 0) throw fail('download_empty', '下载内容为空')
 
       // ---- 3. SHA-256 校验（服务端未给 sha256 时跳过并注明） ----
       const blob = new Blob(parts)
@@ -214,6 +504,11 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         setStep({ label: '正在导入工作流', pct: 0 })
         const imported = await api.importWorkflowZip(file)
         if (!imported.ok) throw fail('workflow_import_failed', imported.message || '工作流导入失败')
+        // t16（D-06）：交给 WorkflowPanel 的 ImportedWorkflowModal 统一处理立即打开/创建副本，
+        // 商城自身监听该事件并关闭，避免重复 toast 与弹层遮挡。
+        window.dispatchEvent(new CustomEvent('fw-workflow-imported', {
+          detail: { tpl_id: imported.tpl_id, workflowId: imported.tpl_id, name: imported.name, node_count: imported.node_count },
+        }))
         setStep({ label: '工作流已导入', pct: 100 })
       } else {
         setStep({ label: '正在安装节点', pct: 0 })
@@ -237,7 +532,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
       const successText = isWorkflow ? '工作流已导入，可从左侧模板入口创建' : '节点安装成功，节点已可用'
       setMsg(successText)
       pushToast(successText, 'ok')
-      load()
+      load(false, { useCache: false })
     } catch (e: any) {
       const code = e.code || ''
       const message = e.message || '安装失败'
@@ -258,13 +553,22 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         download_url: form.download_url,
         tags: form.tags.split(/[,，\s]+/).filter(Boolean),
       })
-      if (r.ok) { setMsg('发布成功'); setShowPublish(false); await load(true) }
+      if (r.ok) { setMsg('发布成功'); setShowPublish(false); await load(true, { useCache: false }) }
       else setErr(r.message || '发布失败')
     } catch (e: any) { setErr(e.message || '发布失败') }
     finally { setBusy(false) }
   }
 
   const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)',  WebkitBackdropFilter: 'var(--glass-blur)' }
+
+  // D-17：分类过滤后的可见条目（空态区分「无条目」与「该分类无条目」）
+  const visibleItems = items.filter((it) => {
+    if (targetTypeIds.length > 0) {
+      return targetTypeIds.includes(String(it.type_id || '')) || targetTypeIds.some((id) =>
+        String(it.title || '').toLowerCase().includes(id.toLowerCase()) || String(it.description || '').toLowerCase().includes(id.toLowerCase()))
+    }
+    return !cat || categoryOfItem(it) === cat
+  })
 
   const stepText = step
     ? step.label + (step.pct != null ? ` ${step.pct}%` : '') + ((step as any).sha ? `（${(step as any).sha}…）` : '')
@@ -285,9 +589,9 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* 工具栏 */}
-        <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid ' + ('var(--border)') }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + ('var(--border)'), borderRadius: 9, padding: '7px 11px', background: 'var(--input-bg)' }}>
-            <button onClick={() => void load(true)} disabled={refreshing} title="刷新商城" style={{ padding: 3, border: 'none', background: 'transparent', color: 'var(--text-faint)', cursor: refreshing ? 'default' : 'pointer' }}><RefreshCw size={15} className={refreshing ? 'fw-spin' : ''} /></button>
+        <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid ' + ('var(--border)'), flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + ('var(--border)'), borderRadius: 9, padding: '7px 11px', background: 'var(--input-bg)', minWidth: 200 }}>
+            <button onClick={() => void load(true, { useCache: false })} disabled={refreshing} title="刷新商城" style={{ padding: 3, border: 'none', background: 'transparent', color: 'var(--text-faint)', cursor: refreshing ? 'default' : 'pointer' }}><RefreshCw size={15} className={refreshing ? 'fw-spin' : ''} /></button>
             <Search size={15} color="var(--text-faint)" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索节点 / 工作流 / 作者…" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'inherit' }} />
           </div>
@@ -296,6 +600,17 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
               {k === '' ? '全部' : k === 'node' ? '节点' : '工作流'}
             </button>
           ))}
+          {/* D-17：同分类筛选（与节点库 manifest 分类顺序一致） */}
+          {catOptions.length > 0 && (
+            <select value={cat} onChange={(e) => setCat(e.target.value)} title="按分类筛选（与节点库一致）"
+              style={{ padding: '6px 10px', borderRadius: 9, fontSize: 12, border: '1px solid ' + (cat ? '#3a4a7a' : 'var(--border)'), background: cat ? 'var(--accent-soft)' : 'transparent', color: cat ? 'var(--accent-strong)' : 'var(--text-faint)', cursor: 'pointer', outline: 'none' }}>
+              <option value="">全部分类</option>
+              {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+          {cat && (
+            <button onClick={() => setCat('')} style={{ fontSize: 12, color: '#d06a4f', cursor: 'pointer', border: 'none', background: 'transparent' }}>× 分类:{cat}</button>
+          )}
           {author && (
             <button onClick={() => setAuthor('')} style={{ fontSize: 12, color: '#d06a4f', cursor: 'pointer', border: 'none', background: 'transparent' }}>× 作者:{author}</button>
           )}
@@ -317,71 +632,26 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* 列表 */}
+        {/* 列表（D-18：紧凑自适应网格；D-17：分类客户端过滤） */}
         <div style={{ flex: 1, overflow: 'auto', padding: 14 }}>
-          {items.length === 0 && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-faint)', fontSize: 13 }}>暂无条目</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {items.map((it) => {
-              const installing = activeId === it.id && !!step
-              const installed = !!it.type_id && installedSet.has(it.type_id)
-              return (
-                <div key={it.id} style={{ ...frame, borderRadius: 10, padding: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {it.kind === 'node' ? <Package size={16} color={'#9fb4ff'} /> : <GitBranch size={16} color="var(--success)" />}
-                    <b style={{ fontSize: 14, flex: 1 }}>{it.title}</b>
-                    {it.official && <span style={{ fontSize: 11, color: '#b8860b', border: '1px solid #e8d48b', borderRadius: 999, padding: '1px 7px', background: '#fff8e1' }}>官方</span>}
-                    {it.price > 0
-                      ? <span style={{ fontSize: 12, color: '#e0a800', fontWeight: 600 }}><Coins size={12} style={{ verticalAlign: -1 }} /> {it.price}</span>
-                      : <span style={{ fontSize: 12, color: 'var(--success)' }}>免费</span>}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-faint)', minHeight: 30 }}>{it.description}</div>
-                  {/* 校验元信息展示（SHA-256 短摘要 / 包大小 / 最低版本 / 已安装） */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: 'var(--text-faint)', flexWrap: 'wrap' }}>
-                    {it.sha256 && <span title={'SHA-256: ' + it.sha256} style={{ fontFamily: 'var(--font-mono)' }}><ShieldCheck size={10} style={{ verticalAlign: -1 }} /> SHA-256 {it.sha256.slice(0, 12)}…</span>}
-                    {it.size ? <span>{fmtSize(it.size)}</span> : null}
-                    {it.min_client_version ? <span style={{ color: '#e0a800' }}>需 v{it.min_client_version}+</span> : null}
-                    {it.kind === 'workflow' && <span style={{ color: 'var(--success)', marginLeft: 'auto' }}>工作流</span>}
-                    {installed && it.kind === 'node' && <span style={{ color: 'var(--success)', marginLeft: 'auto' }}><CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> 已安装</span>}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--text-faint)' }}>
-                    <button onClick={() => setAuthor(it.author)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}><User size={12} /> {it.author}</button>
-                    <span>↓ {it.downloads}</span>
-                    {typeof it.installs === 'number' && <span>✓ {it.installs}</span>}
-                    <div style={{ flex: 1 }} />
-                    {it.kind === 'workflow' && (
-                      <button onClick={() => install(it.id)} disabled={busy}
-                        title="下载并导入工作流"
-                        style={{ padding: '4px 12px', borderRadius: 8, cursor: busy ? 'default' : 'pointer', fontSize: 12, border: 'none', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--success-soft)', color: 'var(--success)' }}>
-                        <Download size={13} /> 下载并导入
-                      </button>
-                    )}
-                    {it.kind === 'node' && (
-                      <button onClick={() => install(it.id)} disabled={busy || installed}
-                        title={installed ? '该节点已安装' : (it.type_id ? '下载并安装 ' + it.type_id : '下载并安装')}
-                        style={{
-                          padding: '4px 12px', borderRadius: 8, cursor: busy || installed ? 'default' : 'pointer', fontSize: 12,
-                          border: 'none', display: 'flex', alignItems: 'center', gap: 4,
-                          background: installed ? 'var(--success-soft)' : 'var(--accent-soft)',
-                          color: installed ? 'var(--success)' : 'var(--accent-strong)',
-                        }}>
-                        {installing ? (
-                          <><Loader2 size={13} className="fw-spin" /> {step ? step.label : '安装中'}{step && step.pct != null ? ` ${step.pct}%` : ''}</>
-                        ) : installed ? (
-                          <><CheckCircle2 size={13} /> 已安装</>
-                        ) : (
-                          <><Download size={13} /> 下载并安装</>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                  {installing && step && step.pct != null && (
-                    <div style={{ height: 4, borderRadius: 999, background: 'var(--bg-panel-2)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: step.pct + '%', background: 'linear-gradient(90deg,#7c8cff,#54d6a0)', transition: 'width .25s ease' }} />
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+          {visibleItems.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-faint)', fontSize: 13 }}>
+              {items.length === 0 ? '暂无条目' : (cat ? '该分类下暂无条目' : '无匹配条目')}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+            {visibleItems.map((it) => (
+              <MarketCard
+                key={it.id}
+                item={it}
+                installed={!!it.type_id && installedSet.has(it.type_id)}
+                installing={activeId === it.id && !!step}
+                step={activeId === it.id ? step : null}
+                busy={busy}
+                onInstall={onInstall}
+                onAuthor={onAuthor}
+              />
+            ))}
           </div>
         </div>
 

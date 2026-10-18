@@ -1,7 +1,11 @@
 // 左侧节点面板：搜索 + 分类 + 收藏（v3 霓虹行式）
+// t11：D-16 统一搜索（title+type_id+description+search_aliases）、
+//      D-17 分类顺序/颜色与 manifest 共享常量（音频/剪辑/用户节点补独立颜色与图标）、
+//      D-19 默认只显示中文名与用途，技术 id 放 tooltip/详情
 import { useMemo, useState, type ReactNode } from 'react'
 import { Star, Puzzle, Zap } from 'lucide-react'
 import { useAppStore } from './store'
+import { CATEGORY_ORDER, CATEGORY_COLORS, categoryNormal, categoryColor, specMatchesQuery } from './types'
 
 export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) {
   const specs = useAppStore((s) => s.specs)
@@ -13,28 +17,26 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
   const categories = useMemo(() => {
     const map = new Map<string, typeof specs>()
     for (const s of specs) {
-      if (query && !s.title.includes(query) && !s.type_id.includes(query) && !s.description.includes(query)) continue
-      if (!map.has(s.category)) map.set(s.category, [])
-      map.get(s.category)!.push(s)
+      if (query && !specMatchesQuery(s, query)) continue
+      const cat = categoryNormal(s.category)
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(s)
     }
-    return [...map.entries()]
+    // D-17：与 manifest 一致的共享顺序；不在清单中的分类追加到末尾（保持稳定序）
+    return [...map.entries()].sort((a, b) => {
+      const ia = CATEGORY_ORDER.indexOf(a[0])
+      const ib = CATEGORY_ORDER.indexOf(b[0])
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
   }, [specs, query])
 
-  const catGrad: Record<string, string> = {
-    输入: '#8f6f4d',
-    语义: '#7d6750',
-    分析: '#3f806f',
-    控制: '#a56d35',
-    输出: '#9b5d50',
-  }
-  const catColor: Record<string, string> = {
-    输入: '#8f6f4d',
-    语义: '#7d6750',
-    分析: '#3f806f',
-    控制: '#a56d35',
-    输出: '#9b5d50',
-  }
-  const short = (s: any) => {
+  const catColor = CATEGORY_COLORS
+  // D-17：音频/剪辑/用户节点补独立图标（♪ 音频 / ✂ 剪辑；其余取类型首字母）
+  const glyph = (s: any) => {
+    const cat = categoryNormal(s.category)
+    if (cat === '音频') return '♪'
+    if (cat === '剪辑') return '✂'
+    if (cat === '用户节点') return '◈'
     const last = String(s.type_id || '').split('/').pop() || ''
     const ch = last.replace(/[^a-zA-Z0-9]/g, '')[0]
     return ch ? ch.toUpperCase() : (s.title || '?').slice(0, 1)
@@ -52,7 +54,9 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
       draggable
       onDragStart={(e) => { e.dataTransfer.setData('application/fw-node', s.type_id); e.dataTransfer.effectAllowed = 'copy' }}
       onClick={() => onAddNode(s.type_id)}
-      title={s.description || s.title}
+      // D-19：技术 id 放 tooltip/详情，默认行内只显示中文名与用途
+      title={'类型: ' + s.type_id + '\n' + (s.description || s.title)}
+      data-type-id={s.type_id}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
         padding: '8px 10px', marginBottom: 2, borderRadius: 12,
@@ -73,11 +77,11 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
     >
       <div style={{
         width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-        background: catGrad[s.category] || 'var(--accent-grad)', color: '#fff',
+        background: categoryColor(s.category), color: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 13.5, fontWeight: 700,
         boxShadow: '0 2px 10px rgba(70,90,200,.35), inset 0 1px 0 rgba(255,255,255,.3)',
-      }}>{short(s)}</div>
+      }}>{glyph(s)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
           <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
@@ -94,8 +98,13 @@ export function Sidebar({ onAddNode }: { onAddNode: (typeId: string) => void }) 
             title={favs.includes(s.type_id) ? '取消收藏' : '收藏'}
           ><Star size={13} fill={favs.includes(s.type_id) ? '#fbbf24' : 'none'} color={favs.includes(s.type_id) ? '#fbbf24' : 'var(--text-faint)'} /></button>
         </div>
-        <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 1, fontFamily: 'Consolas, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.type_id}</span>
+        {/* D-19：用途行（描述）代替技术 id；id 在 tooltip */}
+        <div style={{
+          fontSize: 10.5, color: 'var(--text-faint)', marginTop: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.description || s.title}</span>
           {s.gpu_required && (
             <span title="需要 GPU" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 8, fontWeight: 700, color: '#ffd47e', background: 'rgba(245,165,36,.14)', border: '1px solid rgba(245,165,36,.35)', borderRadius: 999, padding: '0 5px' }}><Zap size={7} />GPU</span>
           )}

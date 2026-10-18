@@ -174,13 +174,18 @@ def download_model(model_key: str, target_dir: str, prefer: str = "modelscope") 
 
     # 尝试主源 -> 备用源
     sources = []
-    if prefer == "modelscope":
-        sources.append(("ModelScope", _ms_url(info["repo"], file)))
-        if info.get("fallback_repo"):
-            sources.append(("HuggingFace", _hf_url(info["fallback_repo"], file)))
-    else:
-        sources.append(("HuggingFace", _hf_url(info["fallback_repo"] or info["repo"], file)))
-        sources.append(("ModelScope", _ms_url(info["repo"], file)))
+    # 占位/直链源（t23 R2-02 fixture：registry 条目可声明 url 直链，如本地 http.server
+    # 承载的临时小模型，供离线/验收环境实测下载事务；生产 registry 无 url 字段不受影响）
+    if info.get("url"):
+        sources.append(("Fixture", str(info["url"])))
+    if info.get("repo"):
+        if prefer == "modelscope":
+            sources.append(("ModelScope", _ms_url(info["repo"], file)))
+            if info.get("fallback_repo"):
+                sources.append(("HuggingFace", _hf_url(info["fallback_repo"], file)))
+        else:
+            sources.append(("HuggingFace", _hf_url(info["fallback_repo"] or info["repo"], file)))
+            sources.append(("ModelScope", _ms_url(info["repo"], file)))
 
     expected = str(info.get("sha256") or "").strip().lower()
     last_err = None

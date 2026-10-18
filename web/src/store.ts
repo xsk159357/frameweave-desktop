@@ -1,6 +1,7 @@
 // Zustand 画布状态存储（v4：+toast 系统 / 时间线 / 未保存标志）
 import { create } from 'zustand'
 import type { FlowNodeData, NodeSpec, NodeStatus } from './types'
+import type { RunErrorItem } from './api'
 
 interface SessionInfo {
   token: string
@@ -9,6 +10,19 @@ interface SessionInfo {
   plan?: string      // trial | member
   credits?: number   // 积分
   deviceId?: string  // 本机设备标识
+}
+
+// 云端 expires_at 为 Unix 秒（epoch seconds）；历史会话可能存过秒。
+// 统一归一化为毫秒（>1e12 视为已是 ms，幂等），供 UI/过期判断一致使用。
+export function expiryMs(v?: number): number | undefined {
+  if (v == null || Number.isNaN(v)) return undefined
+  return v > 1e12 ? v : v * 1000
+}
+
+// 节点库变化签名：type_id@version 排序连接串（顺序无关、幂等）——
+// 供 setSpecs 判定“真实变化”，避免同内容重复写入触发 fw-nodes-installed 自续环。
+function specsSignature(specs: NodeSpec[]): string {
+  return specs.map((s) => s.type_id + '@' + (s.version || '')).sort().join('|')
 }
 
 export interface ToastItem { id: number; msg: string; kind: 'ok' | 'err' | 'info' }
@@ -32,6 +46,12 @@ interface AppState {
   setRunning: (r: boolean) => void
   lastError: string
   setLastError: (m: string) => void
+
+  // t10（D-05/D-13）：一次运行的结构化诊断与耗时（ResultPanel/ErrorPanel 消费）
+  runErrors: RunErrorItem[] | null
+  setRunErrors: (e: RunErrorItem[] | null) => void
+  runInfo: { startedAt?: number; endedAt?: number; mode?: string } | null
+  setRunInfo: (r: { startedAt?: number; endedAt?: number; mode?: string } | null) => void
 
   nodeStatus: Record<string, NodeStatus>
   nodeError: Record<string, string>
@@ -95,8 +115,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   specs: [],
   setSpecs: (specs) => {
+    // 仅当节点库「真实变化」才 set + 广播 fw-nodes-installed（t3 根因修复）：
+    // 画布监听该事件后会 nodeSpecs()→setSpecs，若无条件广播会形成
+    // set → 广播 → 拉取 → set 的自续环；规格数组身份每轮变化又触发工作流
+    // 整体重拉取（旧 Canvas useEffect 依赖 specs），把新建工作流中刚添加的
+    // 节点清掉。签名按 type_id@version 排序，顺序无关，幂等。
+    const prev = get().specs
+    if (specsSignature(specs) === specsSignature(prev)) return
     set({ specs })
-    // 节点库变化后广播（画布/侧栏/右键菜单联动刷新）
     try { window.dispatchEvent(new Event('fw-nodes-installed')) } catch { /* 浏览器环境忽略 */ }
   },
 
@@ -108,6 +134,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setRunning: (r) => set({ running: r }),
   lastError: '',
   setLastError: (m) => set({ lastError: m }),
+  runErrors: null,
+  setRunErrors: (e) => set({ runErrors: e }),
+  runInfo: null,
+  setRunInfo: (r) => set({ runInfo: r }),
 
   nodeStatus: {},
   nodeError: {},
@@ -121,9 +151,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         nodeError: ev.error !== undefined ? { ...s.nodeError, [ev.node_id]: ev.error } : s.nodeError,
         nodeProgress: ev.progress !== undefined ? { ...s.nodeProgress, [ev.node_id]: ev.progress } : s.nodeProgress,
         nodeAssets: ev.asset_ids ? { ...s.nodeAssets, [ev.node_id]: ev.asset_ids } : s.nodeAssets,
+        runInfo: ev.status === 'running' && !s.runInfo?.startedAt
+          ? { startedAt: Date.now(), mode: s.runInfo?.mode }
+          : s.runInfo,
       }))
     } else if (t === 'execution_done') {
-      set({ running: false })
+      set((s) => ({ running: false, runInfo: s.runInfo ? { ...s.runInfo, endedAt: Date.now() } : null }))
     } else if (t === 'graph_error') {
       set({ running: false, lastError: ev.message || '执行出错' })
     }

@@ -65,6 +65,9 @@ class GraphNode:
     inputs: Dict[str, str] = field(default_factory=dict)   # 端口名 -> 上游节点id
     outputs: Dict[str, str] = field(default_factory=dict)  # 端口名 -> 下游节点id
     error: str = ""
+    # D-05（t9）：节点失败的结构化明细（worker 运行错误 traceback 等；用户可读
+    # 主文案在 error 字段，detail 仅作排障折叠展示，默认空串）。
+    error_detail: str = ""
     progress: float = 0.0
     cache_key: str = ""
     asset_ids: Dict[str, str] = field(default_factory=dict)  # 端口名 -> asset id
@@ -87,6 +90,7 @@ class GraphNode:
             "params": self.params, "status": self.status.value,
             "inputs": self.inputs, "outputs": self.outputs,
             "error": self.error, "progress": self.progress,
+            "error_detail": self.error_detail,
             "cache_key": self.cache_key, "asset_ids": self.asset_ids,
             "last_params": self.last_params,
             "run_history": self.run_history,
@@ -141,6 +145,7 @@ class Workflow:
                 inputs=nd.get("inputs", {}), outputs=nd.get("outputs", {}),
                 status=NodeStatus(nd.get("status", "pending")),
                 error=nd.get("error", ""), progress=nd.get("progress", 0.0),
+                error_detail=nd.get("error_detail", ""),
                 cache_key=nd.get("cache_key", ""),
                 asset_ids=nd.get("asset_ids", {}),
                 last_params=nd.get("last_params", {}),
@@ -526,7 +531,15 @@ class Engine:
                       run_mode: str = "all") -> Workflow:
         """执行工作流（P2：循环逻辑在 Executor SPI，可注入第三方实现替换）。
         run_mode: all | upstream (运行到选中节点) | selection | downstream
+
+        t7：执行前兜底派生跨名边 input_slots（保存/加载链之外的直达路径——
+        如瞬时 /prompt 工作流——同样受益；幂等，未知类型跳过，同名回落不变）。
         """
+        try:
+            from . import slots  # noqa: PLC0415
+            slots.derive_input_slots(wf)
+        except Exception:  # noqa: BLE001 —— 派生失败不阻断执行
+            pass
         return await self.executor.execute(self, wf, run_node_ids=run_node_ids, run_mode=run_mode)
 
     def _collect_inputs(self, wf: Workflow, node: GraphNode) -> Dict[str, Any]:

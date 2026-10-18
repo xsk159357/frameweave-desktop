@@ -49,6 +49,10 @@ def _default_user_nodes_dir() -> str:
 _USER_NODES_DIR = os.environ.get("FRAMEWEAVE_USER_NODES") or _default_user_nodes_dir()
 USER_NODES_DIR = _USER_NODES_DIR
 
+# t6（M7 供应链缺口根治）：随包内置基础节点种子目录名
+# （PyInstaller datas 目标 = _internal/builtin_basics；server 首启 seed 读取）
+BUILTIN_SEED_DIR = "builtin_basics"
+
 # 安装/扫描保留目录：.staging（事务临时区）、.backup、_vendor、.git 等不参与加载
 _RESERVED_DIRS = (".staging", ".backup", "_vendor", ".git")
 
@@ -57,6 +61,103 @@ def set_user_nodes_dir(path: str) -> None:
     """设置用户节点目录（server 启动时调用：打包版 = 用户数据目录，可写且升级保留）。"""
     global USER_NODES_DIR
     USER_NODES_DIR = path
+
+
+def _user_nodes_has_packages(node_dir: str) -> bool:
+    """用户节点目录是否已含任何可加载节点包（存在 manifest.json 的包目录）。
+
+    保留目录（.staging/.backup/_vendor/.git）与点目录不计入，与 scan() 同口径。
+    """
+    if not os.path.isdir(node_dir):
+        return False
+    for entry in sorted(os.listdir(node_dir)):
+        if entry.startswith(".") or entry in _RESERVED_DIRS:
+            continue
+        if os.path.isfile(os.path.join(node_dir, entry, "manifest.json")):
+            return True
+    return False
+
+
+def seed_builtin_basics() -> int:
+    """首启 seed（t6 + D-22 扩展）：用户节点目录无任何已安装节点包时，从内置种子
+    目录复制 24 个官方 core 基础节点到用户节点目录，供离线 fresh install / dev
+    空环境直接可用。
+
+    种子源（按运行模式）：
+      - 打包版（sys.frozen）：sys._MEIPASS/builtin_basics（PyInstaller datas）；
+      - 源码 dev（FRAMEWEAVE_SEED_BASICS=1 显式开关）：仓库内
+        backend/packaging/build/builtin_basics（build_seed.py 生成的种子树）。
+
+    约束（不绕过签名、不覆盖/不重复）：
+      - 每个种子包先过 manifest v2 强校验（G1-G10，与 scan 同门），再以官方公钥锚
+        （fw_official_pubkey.json）验 manifest 签名（signature.key_id == 锚 key_id
+        且 ed25519 验签有效）；失败包不复制（打印日志，scan 亦按现有目录加载）。
+      - 用户节点目录已含任何已安装节点包 → 整体跳过（不覆盖/不重复；应用升级时
+        既有用户目录优先，新版本种子不覆盖既有节点）。
+      - 源码模式默认不执行（开发态 backend/user_nodes 已含基础节点）；设置
+        FRAMEWEAVE_SEED_BASICS=1 后，dev 空 user_nodes 与打包版行为一致（D-22）。
+
+    返回本次复制的包数。
+    """
+    frozen = bool(getattr(sys, "frozen", False))
+    if not frozen and os.environ.get("FRAMEWEAVE_SEED_BASICS", "") != "1":
+        return 0
+    if frozen:
+        seed_root = os.path.join(getattr(sys, "_MEIPASS", ""), BUILTIN_SEED_DIR)
+    else:
+        # D-22：dev 开关下使用仓库内 build_seed.py 生成的种子树
+        seed_root = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "packaging", "build", BUILTIN_SEED_DIR)
+    if not os.path.isdir(seed_root):
+        print(f"[seed] 内置基础节点种子目录缺失，跳过: {seed_root}")
+        return 0
+    node_dir = USER_NODES_DIR
+    if _user_nodes_has_packages(node_dir):
+        print("[seed] 用户节点目录已存在已安装节点，跳过内置种子（不覆盖/不重复）")
+        return 0
+    from . import signatures as _sg
+    anchor = _sg.load_official_anchor() or {}
+    anchor_b64 = str(anchor.get("public_key") or "")
+    anchor_kid = str(anchor.get("key_id") or "")
+    if not anchor_b64 or not anchor_kid:
+        print("[seed] 官方公钥锚缺失，无法验签，跳过内置种子")
+        return 0
+    os.makedirs(node_dir, exist_ok=True)
+    copied = 0
+    for name in sorted(os.listdir(seed_root)):
+        if name.startswith(".") or name in _RESERVED_DIRS:
+            continue
+        src = os.path.join(seed_root, name)
+        mpath = os.path.join(src, "manifest.json")
+        if not os.path.isdir(src) or not os.path.isfile(mpath):
+            continue  # seed_manifest.json 等非包文件不参与
+        try:
+            with open(mpath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            result = manifest_v2.validate_manifest(data)  # G1-G10 结构门（scan 同门）
+            norm = result.manifest
+            sig = data.get("signature") if isinstance(data.get("signature"), dict) else {}
+            type_id = str(norm.get("type_id") or "")
+            # 不绕过签名：core/ 前缀 + 官方锚 key_id + ed25519 验签通过才复制
+            if not (type_id.startswith("core/")
+                    and sig.get("key_id") == anchor_kid
+                    and _sg.verify_manifest_signature_b64(data, anchor_b64)):
+                print(f"[seed] 内置种子验签失败，跳过包: {name}")
+                continue
+            dest = os.path.join(node_dir, name)
+            if os.path.exists(dest):
+                print(f"[seed] 目标目录已存在（不覆盖）: {name}")
+                continue
+            shutil.copytree(src, dest)
+            for w in result.warnings:
+                print(f"[seed] {name}: {w}")
+            copied += 1
+            print(f"[seed] 已内置基础节点: {name} ({type_id} v{norm.get('version')})")
+        except Exception as e:  # noqa: BLE001
+            print(f"[seed] 内置种子包加载失败 {name}: {e}")
+    return copied
+
 
 _decl: Dict[str, Type[NodeBase]] = {}
 _plugin_modules: Dict[str, Any] = {}

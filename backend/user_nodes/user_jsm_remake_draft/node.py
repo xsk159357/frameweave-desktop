@@ -166,8 +166,11 @@ class RemakeDraftNode(NodeBase):
                          default="精选复刻", required=False, widget="text"),
                 PortSpec(name="output_dir", type=PortType.STRING, label="输出目录",
                          default="", required=False, widget="text"),
+                PortSpec(name="write_suspect_list", type=PortType.BOOL, label="写存疑清单",
+                         default=True, widget="toggle",
+                         description="G14：把低置信匹配段写入草稿目录 存疑清单.txt（解说猫语义）"),
             ],
-            version="1.0.0",
+            version="1.1.0",
         )
 
     async def run(self, ctx: Dict[str, Any], inputs: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Any]:
@@ -289,6 +292,26 @@ class RemakeDraftNode(NodeBase):
 
         draft_dir = write_remake_draft(m)
 
+        # ---------- G14：存疑清单.txt（低置信匹配段落盘，解说猫语义） ----------
+        suspect_path = ""
+        if bool(params.get("write_suspect_list", True)):
+            suspect_rows = [mm for mm in matches if mm.get("suspect")]
+            if suspect_rows:
+                try:
+                    suspect_path = os.path.join(draft_dir, "存疑清单.txt")
+                    lines = ["低置信匹配段存疑清单（user/jsm_remake_draft）", ""]
+                    for mm in suspect_rows:
+                        lines.append(
+                            f"解说 {mm.get('commentary_start', 0):.2f}-{mm.get('commentary_end', 0):.2f}s → "
+                            f"原片 {mm.get('ref_start', 0):.2f}-{mm.get('ref_end', 0):.2f}s "
+                            f"(similarity={mm.get('similarity')}, strategy={mm.get('strategy', '')})")
+                    with open(suspect_path, "w", encoding="utf-8") as f:
+                        f.write("\n".join(lines) + "\n")
+                except OSError as e:
+                    warnings = list(validation.get("warnings") or [])
+                    warnings.append(f"存疑清单写入失败: {e}")
+                    suspect_path = ""
+
         # ---------- 校验（剪映结构） ----------
         content_path = os.path.join(draft_dir, "draft_content.json")
         validation: Dict[str, Any] = {"ok": True, "errors": [], "warnings": []}
@@ -333,6 +356,8 @@ class RemakeDraftNode(NodeBase):
             "draft_name": draft_name,
             "draft_dir": draft_dir,
             "mode": mode,
+            "suspect_list_path": suspect_path,
+            "suspect_count": sum(1 for mm in matches if mm.get("suspect")),
             "canvas": canvas,
             "tracks": [{"type": t.get("type"), "name": t.get("name", ""),
                         "segments": len(t.get("segments") or [])} for t in tracks],

@@ -4,6 +4,30 @@ import { objectInfoToSpecs } from './types'
 
 export const API_BASE = 'http://127.0.0.1:8788'
 
+// ---- D-05（t10）：图校验/运行错误结构化条目（与 backend/app/graph_validator.py 对齐） ----
+export interface RunErrorItem {
+  code?: string
+  message?: string
+  node_id?: string
+  handle?: string
+  type_id?: string
+  edge_index?: number
+  source?: string
+  target?: string
+  source_type?: string
+  target_type?: string
+  [k: string]: unknown
+}
+
+/** 运行错误上的扩展字段（req 抛错时挂载：code/errors/detail，供错误卡片消费） */
+export interface ApiErrorLike {
+  code?: string
+  status?: number
+  errors?: RunErrorItem[]
+  detail?: string
+  [k: string]: unknown
+}
+
 // R-平台-4（S1-T4）：节点渲染单一来源 —— 优先 /api/object_info（Comfy 等价语义，
 // 含 input_order/is_input_list/output_is_list/search_aliases/deprecated），
 // 经 objectInfoToSpecs 适配为 NodeSpec[]；/api/specs 仅作后端未升级时的回退。
@@ -48,16 +72,33 @@ async function req<T>(path: string, init?: RequestInit, timeoutMs = 8000): Promi
   if (!resp.ok) {
     let msg = resp.statusText
     let code = ''
-    try { const j = await resp.json(); msg = j.detail || j.message || msg; code = j.code || '' } catch { /* ignore */ }
+    let errors: RunErrorItem[] | undefined
+    try {
+      const j = await resp.json()
+      msg = j.detail || j.message || msg
+      code = j.code || ''
+      if (Array.isArray(j.errors)) errors = j.errors
+    } catch { /* ignore */ }
     const e: any = new Error(msg)
     e.code = code
     e.status = resp.status
+    e.errors = errors          // D-05：保留结构化图校验错误（node→port→reason）
+    e.detail = msg
     throw e
   }
   return resp.json() as Promise<T>
   } catch (e: any) {
-    if (e?.name === 'AbortError') throw new Error('请求超时：云端授权服务暂时无响应，请检查网络后重试')
-    if (e instanceof TypeError && /fetch|network|failed/i.test(String(e.message || e))) throw new Error('无法连接本地服务，请稍后重试')
+    // 给超时/网络类错误打上 code，供调用方（商城安装重试、登录等）按类型重试或给出明确提示
+    if (e?.name === 'AbortError') {
+      const err: any = new Error('请求超时，请检查网络后重试')
+      err.code = 'timeout'
+      throw err
+    }
+    if (e instanceof TypeError && /fetch|network|failed/i.test(String(e.message || e))) {
+      const err: any = new Error('无法连接本地服务，请稍后重试')
+      err.code = 'network'
+      throw err
+    }
     throw e
   } finally { clearTimeout(timer) }
 }
@@ -70,10 +111,17 @@ async function reqMulti<T>(path: string, fd: FormData, timeoutMs = 20000): Promi
     if (!resp.ok) {
       let msg = resp.statusText
       let code = ''
-      try { const j = await resp.json(); msg = j.detail || j.message || msg; code = j.code || '' } catch { /* ignore */ }
+      let errors: RunErrorItem[] | undefined
+      try {
+        const j = await resp.json()
+        msg = j.detail || j.message || msg
+        code = j.code || ''
+        if (Array.isArray(j.errors)) errors = j.errors
+      } catch { /* ignore */ }
       const e: any = new Error(msg)
       e.code = code
       e.status = resp.status
+      e.errors = errors
       throw e
     }
     return resp.json() as Promise<T>
@@ -195,6 +243,12 @@ export const api = {
       method: 'POST',
     }),
 
+  /** D-04：ComfyUI GUI workflow 转 FrameWeave 图（t17 路由） */
+  fromComfy: (doc: Record<string, unknown>) =>
+    req<Record<string, any>>('/api/workflows/from-comfy', {
+      method: 'POST', body: JSON.stringify(doc),
+    }),
+
   getWorkflow: (id: string) => req<Record<string, unknown>>('/api/workflows/' + id),
   updatePipelineStage: (id: string, stage: string, checkpoint: Record<string, unknown> = {}) =>
     req<{ok: boolean; workflow_id: string; stage: string; stage_index: number; stages: string[]; checkpoint: Record<string, unknown>}>('/api/workflows/' + encodeURIComponent(id) + '/pipeline-stage', { method: 'PATCH', body: JSON.stringify({ stage, checkpoint }) }),
@@ -219,6 +273,17 @@ export const api = {
     }),
 
   asset: (aid: string) => req<{id:string;kind:string;content?:unknown}>('/api/assets/' + aid + '/content'),
+
+  /** 资产完整元数据（含 path/size/meta —— D-13 结果卡输出目录/导出中心用） */
+  assetMeta: (aid: string) => req<{id:string;kind:string;path?:string;size?:number;meta?:Record<string,unknown>;created_at?:number;node_id?:string}>('/api/assets/' + aid),
+
+  /** D-02（t10）：素材登记——把文件选择器选中的媒体文件上传后端收录进素材库，
+   *  返回本地绝对路径（path 可直接回填 load_video.path 等 FILE 类参数）。 */
+  ingestAsset: (file: File, timeoutMs = 120000) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return reqMulti<{ok: boolean; asset_id: string; kind: string; path: string; name: string; size?: number; message?: string}>('/api/assets/ingest', fd, timeoutMs)
+  },
 
   login: (email: string, password: string, deviceId: string) =>
     req<{ok:boolean;session?:{token:string;email:string;expires_at:number;plan?:string;credits?:number;device_id?:string};device_kick?:{message:string};message?:string}>('/api/auth/login', {
@@ -258,7 +323,7 @@ export const api = {
   marketDownloadAuth: (id: string, token: string, clientVersion: string) =>
     req<{ok:boolean;status?:string;code?:string;message?:string;item_id?:string;title?:string;version?:string;kind?:string;type_id?:string;price?:number;download?:{filename?:string;size?:number;sha256?:string;url:string;stub_path?:string};direct?:boolean}>('/api/market/items/' + encodeURIComponent(id) + '/download-auth', {
       method: 'POST', body: JSON.stringify({ item_id: id, token, client_version: clientVersion }),
-    }, 20000),  // t5：云端授权可能跨机房/迁移期重试，给足 20s
+    }, 40000),  // t5+：云端授权可能跨机房/迁移期重试，后端 3 次 attempt（末次 ≥15s）最坏约 35s，给足 40s
 
   marketInstallReport: (id: string, token: string, clientVersion: string, result: 'ok' | 'failed', error = '') =>
     req<{ok:boolean;recorded?:boolean}>('/api/market/items/' + encodeURIComponent(id) + '/install-report', {

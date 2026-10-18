@@ -154,6 +154,52 @@ class LocalAssetStore(StoreAdapter):
             removed += 1
         return removed
 
+    # ---- t11（D-10 素材中心）：列表 / 重命名（供 GET /api/assets、PATCH /api/assets/{aid} 复用） ----
+    def list_all(self) -> List[Dict[str, Any]]:
+        """枚举全部资产元数据（按创建时间倒序）。单个损坏元数据跳过不中断。"""
+        out: List[Dict[str, Any]] = []
+        for fname in os.listdir(self.meta_dir):
+            if not fname.endswith(".json"):
+                continue
+            aid = fname[:-5]
+            self._cache.pop(aid, None)  # 强制重读，避免陈旧缓存
+            asset = self.get(aid)
+            if asset is not None:
+                out.append(asset.to_dict())
+        out.sort(key=lambda a: float(a.get("created_at") or 0.0), reverse=True)
+        return out
+
+    def rename(self, aid: str, new_name: str) -> Asset:
+        """重命名资产磁盘文件（仅改主干名，未带扩展名时保留原扩展名；内容指纹不变）。
+
+        安全约束：只允许 basename（剥离目录分隔符/路径穿越），空名拒绝，目标已存在拒绝。
+        """
+        asset = self.get(aid)
+        if asset is None:
+            raise KeyError(aid)
+        if not asset.path or not os.path.exists(asset.path):
+            raise ValueError("该资产无本地文件，无法重命名")
+        safe = os.path.basename(str(new_name or "")).strip()
+        if not safe:
+            raise ValueError("名称不能为空")
+        if safe in (".", ".."):
+            raise ValueError("名称非法")
+        ext = os.path.splitext(asset.path)[1]
+        if not os.path.splitext(safe)[1]:
+            safe += ext
+        new_path = os.path.join(os.path.dirname(asset.path), safe)
+        if os.path.abspath(new_path) == os.path.abspath(asset.path):
+            return asset
+        if os.path.exists(new_path):
+            raise ValueError("已存在同名文件")
+        os.rename(asset.path, new_path)
+        asset.path = new_path
+        asset.size = int(os.path.getsize(new_path) or 0)
+        with open(self._meta_path(aid), "w", encoding="utf-8") as f:
+            json.dump(asset.to_dict(), f, ensure_ascii=False, default=str)
+        self._cache[aid] = asset
+        return asset
+
 
 # 旧名别名：engine/server/nodes 既有 import（from .assets import AssetStore）继续可用
 AssetStore = LocalAssetStore

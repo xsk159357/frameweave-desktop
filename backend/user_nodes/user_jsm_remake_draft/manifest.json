@@ -4,8 +4,8 @@
   "type_id": "user/jsm_remake_draft",
   "title": "精选复刻草稿",
   "category": "输出",
-  "description": "D4 精选复刻：消费 S2-T1 匹配表 → 生成可导入剪映的精选复刻草稿（第 4 模式）。compare=左右分屏（原解说/复刻后 黄字#ffde00+黑描边 LABEL），remake_only=原片满铺按解说节奏拼贴；commentary wav 真实时长音频轨（R7 不复发：duration>0）。",
-  "version": "1.0.0",
+  "description": "D4 精选复刻：消费 S2-T1 匹配表 → 生成可导入剪映的精选复刻草稿（第 4 模式）。compare=左右分屏（原解说/复刻后 黄字#ffde00+黑描边 LABEL），remake_only=原片满铺按解说节奏拼贴；commentary wav 真实时长音频轨（R7 不复发：duration>0）；write_suspect_list 落盘存疑清单.txt（G14）。",
+  "version": "1.1.0",
   "kind": "python",
   "runtime": "python",
   "entrypoint": "node.py",
@@ -137,6 +137,16 @@
       "widget": "text",
       "options": [],
       "description": "草稿父目录（空=workdir/drafts）"
+    },
+    {
+      "name": "write_suspect_list",
+      "type": "BOOL",
+      "label": "写存疑清单",
+      "required": true,
+      "default": true,
+      "widget": "toggle",
+      "options": [],
+      "description": "G14：把低置信匹配段写入草稿目录 存疑清单.txt（解说猫语义）"
     }
   ],
   "permission": {
@@ -164,7 +174,7 @@
   "signature": {
     "alg": "ed25519",
     "key_id": "a8998646b062c170",
-    "value": "9D641HQOYA3rLYlroftGS6qI6h726LE9sevWh7MFgnJIU/vyZtpDpsGFroh4sHv5YuPdGc/YpidXKPpTVnJ/Bg==",
+    "value": "AWunGwz+4n6pl3w4jV4E5ZocamwlnXEQYgDwdedUDB/GjOL7bRrGDsKP7Hd0MwgRH6fqAIIQbY4iyVpnVVa4Bg==",
     "over": "manifest"
   }
 }

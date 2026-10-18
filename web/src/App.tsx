@@ -1,17 +1,20 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
-import { useEffect, useState } from 'react'
-import { RefreshCw, Store, Crown, Sparkles, CheckCircle2, AlertCircle, Info, Puzzle, Download, Settings as SettingsIcon, UserCircle, CreditCard, Monitor, LogOut } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { RefreshCw, Store, Crown, CheckCircle2, AlertCircle, Info, Puzzle, Download, Settings as SettingsIcon, UserCircle } from 'lucide-react'
 import { api, nodeSpecs } from './api'
-import { useAppStore } from './store'
+import { useAppStore, expiryMs } from './store'
 import { LoginPage } from './LoginPage'
 import { WorkflowPanel } from './WorkflowPanel'
 import { PluginPanel } from './PluginPanel'
 import { SettingsPanel } from './SettingsPanel'
+import { ProfileModal } from './ProfileModal'
 import { Logo } from './Logo'
 import { Canvas } from './Canvas'
 import { Timeline } from './Timeline'
 import { MarketPage } from './MarketPage'
 import { loadWebExtensions, initWebExtensions } from './plugins'
+// t11（frontend-pro）：专业面板宿主（队列/素材/模型/断点续跑/双击搜索/首登引导）—— 一行挂载，最小 diff
+import { ProHub } from './panels/ProHub'
 
 export default function App() {
   const session = useAppStore((s) => s.session)
@@ -34,8 +37,7 @@ export default function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [updateState, setUpdateState] = useState<{ mode: 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'latest'; version?: string; message?: string; progress?: number } | null>(null)
   const [showProfile, setShowProfile] = useState(false)
-  const [profileCard, setProfileCard] = useState('')
-  const [subscriptionExpired, setSubscriptionExpired] = useState(() => !!session?.expiresAt && session.expiresAt <= Date.now())
+  const [subscriptionExpired, setSubscriptionExpired] = useState(() => !!session?.expiresAt && expiryMs(session.expiresAt)! <= Date.now())
 
   // 主题：亮/暗即时生效（CSS 变量覆盖集，无需重启）
   const settings = useAppStore((s) => s.settings)
@@ -46,12 +48,22 @@ export default function App() {
   }, [settings.theme])
 
   // 自动更新状态统一进入更新面板，不再使用原生丑陋弹窗。
+  // userCheckRef：用户主动点击「更新」（与启动静默检查区分）；
+  // updateOpenRef：更新面板当前是否打开。后台检查的结果（检查中/已是最新/失败）
+  // 在面板未打开时不弹窗打扰，只有发现新版本/已下载完成才提示；一旦面板打开
+  // 或用户主动触发，后续所有状态（含重试/切源中间态、下载失败）都实时跟进。
+  const userCheckRef = useRef(false)
+  const updateOpenRef = useRef(false)
   useEffect(() => {
     const onStatus = (s: any) => {
       const type = s?.type === 'error' ? 'error' : s?.type === 'ok' ? 'latest' : s?.type === 'downloaded' ? 'downloaded' : 'checking'
+      // 后台自动检查（启动静默检查）且面板未打开：不打扰用户
+      if (!userCheckRef.current && !updateOpenRef.current && (type === 'checking' || type === 'latest' || type === 'error')) return
+      if (type === 'downloaded' || type === 'latest' || type === 'error') userCheckRef.current = false
+      updateOpenRef.current = true
       setUpdateState((prev) => ({ mode: type, version: s?.version || prev?.version, message: s?.message }))
     }
-    const onAvailable = (v: string) => setUpdateState({ mode: 'available', version: v, message: '新版本已准备好下载' })
+    const onAvailable = (v: string) => { userCheckRef.current = false; updateOpenRef.current = true; setUpdateState({ mode: 'available', version: v, message: '新版本已准备好下载' }) }
     const onProgress = (p: number) => setUpdateState((prev) => ({ mode: 'downloading', version: prev?.version, progress: p, message: '正在下载更新' }))
     try {
       const w = (window as any).frameweave
@@ -62,10 +74,12 @@ export default function App() {
   }, [])
 
   const triggerUpdateCheck = () => {
+    userCheckRef.current = true
+    updateOpenRef.current = true
     setUpdateState({ mode: 'checking', message: '正在检查更新…' })
     try { (window as any).frameweave?.checkForUpdate() } catch { setUpdateState({ mode: 'error', message: '当前环境不支持自动更新' }) }
   }
-  const closeUpdate = () => setUpdateState(null)
+  const closeUpdate = () => { userCheckRef.current = false; updateOpenRef.current = false; setUpdateState(null) }
 
 
   // 画布右键菜单「导入节点插件」事件
@@ -165,9 +179,9 @@ export default function App() {
         if (!alive) return
         if (v.ok) {
           if (v.plan && v.plan !== session.plan) {
-            useAppStore.getState().setSession({ ...session, plan: v.plan, credits: v.credits ?? session.credits, expiresAt: v.expires_at ?? session.expiresAt })
+            useAppStore.getState().setSession({ ...session, plan: v.plan, credits: v.credits ?? session.credits, expiresAt: expiryMs(v.expires_at) ?? session.expiresAt })
           }
-          const expired = !!v.expires_at && v.expires_at * 1000 <= Date.now()
+          const expired = !!v.expires_at && expiryMs(v.expires_at)! <= Date.now()
           setSubscriptionExpired(expired)
         } else {
           const reason = v.reason || '授权校验失败，请重新登录'
@@ -186,18 +200,7 @@ export default function App() {
     return () => { alive = false; window.clearInterval(timer) }
   }, [session?.token])
 
-  const activateCard = async () => {
-    const card = profileCard.trim()
-    if (!card) { useAppStore.getState().pushToast('请输入卡密', 'err'); return }
-    try {
-      const r = await api.activate(session?.email || '', card)
-      if (!r.ok) throw new Error(r.message || '激活失败')
-      useAppStore.getState().setSession({ ...(session as any), plan: r.plan || 'member', expiresAt: (r.expires_at || 0) * 1000 })
-      setSubscriptionExpired(false)
-      setProfileCard('')
-      useAppStore.getState().pushToast('卡密激活成功', 'ok')
-    } catch (e: any) { useAppStore.getState().pushToast(e.message || '激活失败', 'err') }
-  }
+  // 卡密激活统一收敛到 ProfileModal 组件内（doActivate 在组件内实现）。
 
   if (!engineReady) {
     return (
@@ -221,22 +224,7 @@ export default function App() {
   if (!session) return (
     <>
       <LoginPage />
-      {showProfile && (
-        <div className="fw-profile-modal" onClick={() => setShowProfile(false)}>
-          <div className="fw-profile-card" onClick={(e) => e.stopPropagation()}>
-            <div className="fw-profile-head"><div><div className="fw-profile-title"><UserCircle size={20} />个人中心</div><div className="fw-profile-sub">账号与订阅管理</div></div><button className="fw-profile-close" onClick={() => setShowProfile(false)}>×</button></div>
-            <div className="fw-profile-email">{session?.email}</div>
-            <div className="fw-profile-grid">
-              <div className="fw-profile-stat"><Crown size={16} /><span>套餐</span><b>{session?.plan === 'member' ? '会员' : '试用'}</b></div>
-              <div className="fw-profile-stat"><CreditCard size={16} /><span>到期时间</span><b>{session?.expiresAt ? new Date(session.expiresAt).toLocaleDateString('zh-CN') : '未设置'}</b></div>
-              <div className="fw-profile-stat"><Sparkles size={16} /><span>积分</span><b>{session?.credits ?? 0}</b></div>
-              <div className="fw-profile-stat"><Monitor size={16} /><span>绑定设备</span><b>{session?.deviceId ? session.deviceId.slice(0, 18) : '本机'}</b></div>
-            </div>
-            <div className="fw-profile-section"><div className="fw-profile-label">卡密激活</div><div className="fw-profile-activate"><input value={profileCard} onChange={(e) => setProfileCard(e.target.value)} placeholder="输入 FW- 开头的卡密" /><button className="fw-btn fw-btn-primary" onClick={activateCard}>激活</button></div></div>
-            <div className="fw-profile-actions"><button className="fw-btn fw-btn-ghost" onClick={() => useAppStore.getState().pushToast('续费请联系管理员获取卡密', 'info')}>续费说明</button><button className="fw-btn fw-btn-danger" onClick={() => useAppStore.getState().setSession(null)}><LogOut size={14} />退出登录</button></div>
-          </div>
-        </div>
-      )}
+      {showProfile && <ProfileModal open onClose={() => setShowProfile(false)} />}
       {authNotice && (
         <div className="fw-auth-modal" role="dialog" aria-modal="true" aria-labelledby="fw-auth-title">
           <div className="fw-auth-modal-card">
@@ -280,7 +268,13 @@ export default function App() {
           {showAccount && <div className="fw-account-popover" style={{ top: 38, right: 0, left: 'auto', bottom: 'auto' }}>
             <div className="fw-account-name">{session.email}</div>
             <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
-            <button onClick={() => { setShowAccount(false); setProfileCard(''); setShowProfile(true) }}>个人中心</button>
+            {/* D-08（t10）：激活入口前置 —— 试用账户在账户菜单直接给「激活会员」CTA，不再藏进个人中心 */}
+            {session.plan !== 'member' && (
+              <button className="fw-account-activate" onClick={() => { setShowAccount(false); setShowProfile(true) }}>
+                <><Crown size={12} /> 激活会员</>
+              </button>
+            )}
+            <button onClick={() => { setShowAccount(false); setShowProfile(true) }}>个人中心</button>
             <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
           </div>}
           <div className="fw-topbar-group">
@@ -297,19 +291,19 @@ export default function App() {
             </button>
           </div>
           <div className="fw-topbar-group">
-            <button className={'fw-btn fw-btn-ghost' + (showAccount ? ' active' : '')} title="账户" onClick={() => setShowAccount(v => !v)}>
+            <button className={'fw-btn fw-btn-ghost' + (showAccount ? ' active' : '')} title="账户 · 个人中心" onClick={() => setShowAccount((v) => !v)}>
               <><UserCircle size={13} /> 账户</>
             </button>
             <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
               <><SettingsIcon size={13} /> 设置</>
             </button>
-          </div>
-        </div>
+          </div>        </div>
       </div>
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}
       {showPlugin && <PluginPanel onClose={() => setShowPlugin(false)} />}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showProfile && <ProfileModal open onClose={() => setShowProfile(false)} />}
 
       {updateState && (
         <div className="fw-update-overlay" role="dialog" aria-modal="true" aria-labelledby="fw-update-title">
@@ -372,6 +366,9 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {/* t11（frontend-pro）：专业面板宿主（队列/素材/模型 + 断点续跑条 + 双击搜索 + 首登引导 + 小视口） */}
+      <ProHub />
     </div>
   )
 }

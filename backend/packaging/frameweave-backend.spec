@@ -54,6 +54,31 @@ def _load_closure_hiddenimports():
 
 CLOSURE_IMPORTS = _load_closure_hiddenimports()
 
+
+def _collect_builtin_basics():
+    """内置基础节点种子（t6/M7 供应链缺口根治）。
+
+    种子树由 backend/packaging/build_seed.py 生成（逐包官方锚验签，24 个 core 基础
+    节点，含 seed_manifest.json）；本函数把每个包目录收进 datas，打包产物落
+    _internal/builtin_basics/<pkg>/。server 首启 seed 逻辑
+    （declarative.seed_builtin_basics）在用户节点目录为空时从该目录向
+    %APPDATA%/FrameWeave/user_nodes 复制（带官方签名，scan 验签可过）。
+    """
+    seed_root = os.path.join(_SPEC_DIR, 'build', 'builtin_basics')
+    if not os.path.isdir(seed_root):
+        raise SystemExit(
+            '缺少内置基础节点种子：请先运行 '
+            'backend/.venv/Scripts/python.exe backend/packaging/build_seed.py')
+    out = []
+    for name in sorted(os.listdir(seed_root)):
+        p = os.path.join(seed_root, name)
+        if os.path.isdir(p) and os.path.isfile(os.path.join(p, 'manifest.json')):
+            out.append((p, os.path.join('builtin_basics', name)))
+    if not out:
+        raise SystemExit('内置基础节点种子为空：请重新运行 build_seed.py')
+    return out
+
+
 a = Analysis(
     [os.path.join(_OBF_ROOT, 'main.py')],
     # 仅混淆树进 pathex：避免源码 backend/app（明文）被重复收集
@@ -69,6 +94,8 @@ a = Analysis(
         (os.path.join(_SPEC_DIR, '..', 'app', 'revocations.json'), 'app'),
         # IndexTTS2 服务脚本（打包版外部 indextts 目录未就绪时保留随包副本）
         (os.path.join(_SPEC_DIR, '..', 'voice_clone'), 'voice_clone'),
+        # t6：内置基础节点种子（24 个官方 core 基础节点，build_seed.py 生成）
+        *_collect_builtin_basics(),
     ],
     hiddenimports=
         # 混淆后的 app 全树（pyarmor 折叠了 import，静态分析不可见，必须显式收集）

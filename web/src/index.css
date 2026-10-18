@@ -1,8 +1,9 @@
 /* ============================================================
    拾帧 FrameWeave · 设计系统「霜幕 v1.2」
    深色优先的专业创作美学：四层底色 + 单一电感紫蓝强调 + 无玻璃铺满
+   流光织机视觉覆盖层已物理合并至本文件末尾（t1：原 @import 打包时被内联在
+   基础规则之前，级联顺序不可靠导致安装包 UI 退化，改为物理追加保证确定性）
    ============================================================ */
-@import './流光织机-overrides.css';
 :root {
   /* ===== 霜幕设计系统 v1.2：四层底色 + 单强调色 + 语义色 ===== */
   /* 底色四层 */
@@ -94,6 +95,10 @@
   --hover-bg: rgba(124,140,255,.10);
   --btn-primary-grad: linear-gradient(135deg,#7c8cff 0%,#6a5af0 52%,#22d3ee 140%);
   --btn-success-grad: linear-gradient(135deg,#0ea5a4 0%,#34d399 100%);
+  --btn-primary-glow: rgba(124,140,255,.38);
+  --btn-primary-glow-strong: rgba(124,140,255,.46);
+  --btn-danger-glow: rgba(251,113,133,.28);
+  --modal-backdrop: rgba(3,6,15,.68);
   --focus-ring: 0 0 0 3px rgba(124,140,255,.22), 0 0 16px rgba(124,140,255,.18);
 }
 
@@ -120,14 +125,14 @@ html[data-theme='light'] {
   --accent2: #5b64d6;
   --cyan: #5b64d6;
   --brand-grad: linear-gradient(135deg, #5b64d6 0%, #4a53c4 50%, #4650c8 100%);
-  --danger: #dc4949;
-  --danger-soft: rgba(220,73,73,.12);
-  --success: #22a55a;
-  --success-soft: rgba(34,165,90,.12);
-  --running: #d9930a;
-  --running-soft: rgba(217,147,10,.12);
-  --cached: #0e8bc0;
-  --cached-soft: rgba(14,139,192,.12);
+  --danger: #c22e3f;
+  --danger-soft: rgba(194,46,63,.12);
+  --success: #15803d;
+  --success-soft: rgba(21,128,61,.12);
+  --running: #b45309;
+  --running-soft: rgba(180,83,9,.12);
+  --cached: #0b6d99;
+  --cached-soft: rgba(11,109,153,.12);
   --text: #1c1e26;
   --text-dim: #4a4f5c;
   --text-faint: #6d7384;
@@ -161,7 +166,13 @@ html[data-theme='light'] {
   --toast-ok-bg: rgba(34,165,90,.12);
   --hover-bg: rgba(91,100,214,.08);
   --btn-primary-grad: linear-gradient(135deg, #5b64d6 0%, #4a53c4 100%);
-  --btn-success-grad: linear-gradient(135deg, #0ea5a4 0%, #22a55a 100%);
+  --btn-success-grad: linear-gradient(135deg, #0f766e 0%, #15803d 100%);
+  --btn-primary-glow: rgba(74,83,196,.22);
+  --btn-primary-glow-strong: rgba(74,83,196,.3);
+  --btn-danger-glow: rgba(194,46,63,.18);
+  --modal-backdrop: rgba(22,26,40,.42);
+  --trial: #4a53c4;
+  --gold: #b45309;
   --focus-ring: 0 0 0 3px rgba(91,100,214,.25);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -340,7 +351,7 @@ input, select, textarea { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   transition: all var(--t-fast) var(--t-ease);
 }
-.lp-btn-theme:hover { color: #fff; border-color: rgba(148, 168, 255, 0.35); background: rgba(108, 140, 255, 0.2); transform: translateY(-1px); }
+.lp-btn-theme:hover { color: var(--login-text); border-color: var(--accent); background: var(--hover-bg); transform: translateY(-1px); }
 .lp-card-wrap { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; padding: 48px 28px; }
 .lp-card {
   width: 408px; max-width: 92vw;
@@ -426,10 +437,10 @@ input, select, textarea { font-family: inherit; }
 .lp-renderless { display: none; }
 
 /* 节点连线端口（霓虹） */
-.fw-handle { width: 12px; height: 12px; border: 2px solid #0a0e18; border-radius: 50%; transition: all .15s; z-index: 2; }
+.fw-handle { width: 12px; height: 12px; border: 2px solid var(--handle-ring); border-radius: 50%; transition: all .15s; z-index: 2; }
 .fw-handle.in { background: var(--accent); box-shadow: 0 0 6px rgba(108,140,255,.8); }
 .fw-handle.out { background: var(--success); box-shadow: 0 0 6px rgba(52,211,153,.7); }
-.fw-handle:hover { transform: scale(1.45); box-shadow: 0 0 0 4px var(--input-focus-ring); cursor: crosshair; }
+/* hover 高亮（尺寸固定，见文件末尾 t1 规则） */
 
 /* ===== 工作区通用组件 ===== */
 .fw-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
@@ -451,12 +462,13 @@ input, select, textarea { font-family: inherit; }
 .fw-btn:active { transform: scale(.965); }
 .fw-btn-primary {
   border: none; background: var(--btn-primary-grad); color: #fff;
-  box-shadow: 0 6px 18px rgba(108, 140, 255, .38), inset 0 1px 0 rgba(255, 255, 255, .28);
+  box-shadow: 0 6px 18px var(--btn-primary-glow), inset 0 1px 0 rgba(255, 255, 255, .28);
 }
-.fw-btn-primary:hover { filter: brightness(1.08); box-shadow: 0 9px 26px rgba(139, 147, 255, .5), inset 0 1px 0 rgba(255, 255, 255, .28); }
-.fw-btn-success { border: none; background: var(--btn-success-grad); color: #fff; box-shadow: 0 6px 18px rgba(52, 211, 153, .35), inset 0 1px 0 rgba(255, 255, 255, .28); }
+.fw-btn-primary:hover { filter: brightness(1.08); box-shadow: 0 9px 26px var(--btn-primary-glow-strong), inset 0 1px 0 rgba(255, 255, 255, .28); }
+.fw-btn-success { border: none; background: var(--btn-success-grad); color: #fff; box-shadow: 0 6px 18px var(--btn-primary-glow), inset 0 1px 0 rgba(255, 255, 255, .28); }
 .fw-btn-success:hover { filter: brightness(1.08); }
-.fw-btn-danger { border: none; background: linear-gradient(135deg, #f87171, #e05252); color: #fff; box-shadow: 0 6px 18px rgba(248, 113, 113, .35); }
+.fw-btn-danger { border: none; background: linear-gradient(135deg, #e05252, #b92f42); color: #fff; box-shadow: 0 6px 18px var(--btn-danger-glow); }
+.fw-btn-danger:hover { filter: brightness(1.08); }
 .fw-btn-ghost { border: none; background: transparent; color: var(--text-dim); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .fw-btn-ghost:hover { background: var(--hover-bg); color: var(--text); }
 
@@ -525,9 +537,8 @@ input, select, textarea { font-family: inherit; }
   --port-dot: rgba(255,255,255,.7);
 }
 
-/* 端口 hover：放大 + 光晕（必须保留 ReactFlow 的 translate(-50%,-50%) 居中，否则缩放时跳位错乱） */
-.fw-handle { transition: transform .12s ease, box-shadow .12s ease, background .12s ease; transform-origin: center; }
-.fw-handle:hover { transform: translate(-50%, -50%) scale(1.35); box-shadow: 0 0 10px var(--accent); z-index: 5; }
+/* 端口 hover：尺寸固定不变、不缩放（t1：仅高亮，规则见文件末尾 merged-overrides 之后） */
+.fw-handle { transition: box-shadow .12s ease, background .12s ease; }
 
 /* 顶部状态条流动动画（running） */
 @keyframes fw-flow {
@@ -640,18 +651,37 @@ input, select, textarea { font-family: inherit; }
 .fw-profile-modal { position: fixed; inset: 0; z-index: 2500; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(8,10,18,.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .fw-profile-card { width: min(520px, calc(100vw - 48px)); padding: 22px; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--overlay); color: var(--text); box-shadow: var(--shadow-lg); }
 .fw-profile-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.fw-profile-head-ic { width: 40px; height: 40px; flex: 0 0 40px; margin-right: 12px; display: flex; align-items: center; justify-content: center; border-radius: 12px; color: var(--accent-strong); background: var(--accent-soft); box-shadow: 0 8px 22px rgba(91,100,214,.18); }
 .fw-profile-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 750; }
 .fw-profile-sub { margin-top: 4px; color: var(--text-faint); font-size: 12px; }
-.fw-profile-close { border: 0; background: transparent; color: var(--text-faint); font-size: 24px; cursor: pointer; line-height: 1; }
-.fw-profile-email { margin-top: 18px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text-dim); font-size: 13px; }
+.fw-profile-close { border: 0; background: transparent; color: var(--text-faint); font-size: 24px; cursor: pointer; line-height: 1; padding: 2px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; transition: background var(--t-fast), color var(--t-fast); }
+.fw-profile-close:hover { background: var(--hover); color: var(--text); }
+.fw-profile-email { margin-top: 18px; display: flex; align-items: center; gap: 9px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text-dim); font-size: 13px; }
+.fw-profile-email-ic { color: var(--accent-strong); flex-shrink: 0; }
+.fw-profile-email-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.fw-profile-copy { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--text-faint); font-size: 11px; cursor: pointer; transition: all var(--t-fast); }
+.fw-profile-copy:hover { color: var(--accent-strong); border-color: var(--accent); background: var(--accent-soft); }
+.fw-plan-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .3px; }
+.fw-plan-badge.trial { color: var(--trial, #9fb4ff); background: rgba(124,140,255,.12); border: 1px solid rgba(124,140,255,.28); }
+.fw-plan-badge.member { color: #fff; background: linear-gradient(135deg, rgba(124,140,255,.28), rgba(34,211,238,.18)); border: 1px solid rgba(124,140,255,.4); box-shadow: 0 4px 16px rgba(124,140,255,.22), inset 0 1px 0 rgba(255,255,255,.18); }
+.fw-plan-badge-tip { font-style: normal; font-weight: 500; font-size: 10.5px; opacity: .72; margin-left: 2px; }
 .fw-profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .fw-profile-stat { display: grid; grid-template-columns: 20px 1fr; gap: 2px 7px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--accent-strong); }
 .fw-profile-stat span { color: var(--text-faint); font-size: 11px; }
 .fw-profile-stat b { color: var(--text); font-size: 13px; grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-profile-device { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 8px 11px; border: 1px dashed var(--border-strong); border-radius: 9px; background: var(--panel-2); color: var(--text-faint); font-size: 11px; line-height: 1.5; }
+.fw-profile-device svg { color: var(--accent-strong); flex-shrink: 0; }
+.fw-profile-device span { flex: 1; }
+.fw-profile-device button { border: 0; background: transparent; color: var(--accent-strong); font-size: 11px; cursor: pointer; flex-shrink: 0; padding: 2px 4px; border-radius: 5px; }
+.fw-profile-device button:hover { background: var(--accent-soft); }
 .fw-profile-section { margin-top: 18px; }
-.fw-profile-label { margin-bottom: 7px; color: var(--text-faint); font-size: 11px; font-weight: 700; letter-spacing: .8px; }
+.fw-profile-label { margin-bottom: 7px; color: var(--text-faint); font-size: 11px; font-weight: 700; letter-spacing: .8px; display: flex; align-items: center; gap: 6px; }
+.fw-profile-label svg { color: var(--accent-strong); }
 .fw-profile-activate { display: flex; gap: 8px; }
 .fw-profile-activate input { min-width: 0; flex: 1; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--input-bg); color: var(--text); outline: none; }
+.fw-profile-activate input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.fw-profile-activate input::placeholder { color: var(--text-faint); }
+.fw-profile-hint { margin-top: 7px; color: var(--text-faint); font-size: 11px; line-height: 1.6; }
 .fw-profile-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 /* 授权状态弹窗：替代原生 alert，统一霜幕视觉并适配亮/暗主题 */
@@ -790,3 +820,102 @@ html[data-theme='light'] .fw-app-shell { box-shadow: 0 12px 40px rgba(30,34,44,.
 .fw-account-popover button { display: block; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-dim); padding: 7px 8px; text-align: left; cursor: pointer; font-size: 11.5px; }
 .fw-account-popover button:hover { background: var(--hover); color: var(--text); }
 .fw-account-popover button.danger { color: var(--danger); }
+
+/* ============================================================================
+   「流光织机」视觉覆盖层（t1 物理合并）
+   来源：src/流光织机-overrides.css。原 @import 在 vite 打包时被内联到基础规则
+   之前，导致多项无 !important 的覆盖声明（抽屉内缩边距/圆角/毛玻璃等）被其后
+   的同优先级基础规则覆盖，安装包 UI 退化为「霜幕」。现将内容直接追加到 index.css
+   末尾以保证：① 打包必定包含；② 级联顺序正确（覆盖层总是最后生效）。
+   ============================================================================ */
+.fw-app-shell{background:var(--bg-grad)!important;background-attachment:fixed!important}
+.fw-topbar,.fw-statusbar,.fw-library-drawer,.fw-param-drawer,.fw-workspace-sidebar,.fw-card,.fw-shortcut,.fw-profile-card,.fw-auth-modal-card,.fw-update-card{background:var(--glass-strong)!important;backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border-color:var(--glass-border)!important;box-shadow:var(--glass-inner),var(--elev-2)}
+.fw-main-layout{gap:10px;padding:10px;background:transparent}
+.fw-workspace-sidebar,.fw-canvas-stage{border-radius:var(--radius-xl);overflow:hidden}
+.fw-workspace-sidebar{border:1px solid var(--glass-border)}
+.fw-canvas-stage{border:1px solid var(--glass-border);background:var(--glass);backdrop-filter:var(--glass-blur)}
+.fw-canvas-stage .react-flow{background:transparent}
+.fw-btn,.fw-input{border-color:var(--glass-border);background:var(--glass);box-shadow:var(--glass-inner),var(--elev-1)}
+.fw-btn:hover{border-color:var(--border-strong);box-shadow:var(--glass-inner),var(--elev-2),0 0 14px var(--accent-soft)}
+.fw-btn-primary{background:var(--btn-primary-grad)!important;box-shadow:0 5px 18px var(--btn-primary-glow),inset 0 1px 0 rgba(255,255,255,.25)}
+.fw-btn-danger{background:linear-gradient(135deg,#e05252,#b92f42);box-shadow:0 5px 18px var(--btn-danger-glow)}
+.fw-library-drawer{right:10px;top:10px;bottom:10px;border-radius:var(--radius-xl)}
+.fw-param-drawer{right:10px;top:10px;bottom:10px;border-radius:var(--radius-xl);overflow:hidden}
+.fw-timeline-bar{margin:0 10px 10px;border:1px solid var(--glass-border);border-radius:var(--radius-xl);background:var(--glass);backdrop-filter:var(--glass-blur);overflow:hidden}
+.fw-timeline-bar>*{background:transparent!important}
+.fw-empty-canvas{background:var(--glass-strong);backdrop-filter:var(--glass-blur);border-color:var(--glass-border);box-shadow:var(--glass-inner),var(--elev-3),0 0 28px rgba(124,140,255,.14)}
+.fw-empty-canvas-mark{background:var(--accent-soft);border-color:rgba(124,140,255,.35);box-shadow:0 0 24px rgba(124,140,255,.25),inset 0 1px 0 rgba(255,255,255,.2)}
+.fw-toast{background:var(--glass-strong);backdrop-filter:var(--glass-blur);border-color:var(--glass-border);box-shadow:var(--glass-inner),var(--elev-3),0 0 18px rgba(124,140,255,.12)}
+.fw-profile-modal,.fw-auth-modal,.fw-update-overlay{background:var(--modal-backdrop);backdrop-filter:blur(18px) saturate(1.25)}
+.fw-handle.in,.fw-handle.out{box-shadow:0 0 9px currentColor}
+.fw-node-param input,.fw-node-param select{background:var(--input-bg);border-color:var(--glass-border)}
+.react-flow__controls{background:var(--glass-strong);backdrop-filter:var(--glass-blur);border-color:var(--glass-border);box-shadow:var(--glass-inner),var(--elev-2)}
+.react-flow__controls button{background:transparent;border-color:var(--glass-border);color:var(--text-dim)}
+.react-flow__controls button:hover{background:var(--accent-soft);color:var(--text)}
+.fw-statusbar{background:var(--glass-strong)!important;backdrop-filter:blur(12px)}
+.lp-root{background:var(--login-brand-bg)!important}
+.lp-hero::before{background:radial-gradient(circle at 24% 38%,rgba(124,140,255,.16),transparent 30%),linear-gradient(135deg,rgba(255,255,255,.08),transparent 46%)}
+.lp-hero::after{border-color:rgba(124,140,255,.18);box-shadow:0 0 0 34px rgba(34,211,238,.035),0 0 0 68px rgba(167,139,250,.025)}
+.lp-stage-line{background:linear-gradient(90deg,rgba(124,140,255,.18),rgba(34,211,238,.82),rgba(167,139,250,.12))}
+.lp-stage-node,.lp-stage-frame{border-color:var(--glass-border);background:var(--glass);box-shadow:0 0 18px var(--accent-soft),inset 0 1px rgba(255,255,255,.12);backdrop-filter:blur(10px)}
+.lp-node-dot{background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.lp-btn-main{background:var(--btn-primary-grad);box-shadow:0 10px 28px var(--btn-primary-glow),inset 0 1px 0 rgba(255,255,255,.3)}
+.lp-btn-main:hover:not(:disabled){box-shadow:0 14px 38px var(--btn-primary-glow-strong),0 0 18px var(--accent-soft),inset 0 1px 0 rgba(255,255,255,.3)}
+@keyframes fw-aurora-pulse{0%,100%{opacity:.72}50%{opacity:1}}
+.fw-app-shell::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(700px 420px at 72% 24%,rgba(124,140,255,.065),transparent 70%);animation:fw-aurora-pulse 8s ease-in-out infinite}
+@media (max-width:720px){.fw-main-layout{padding:0;gap:0}.fw-workspace-sidebar,.fw-canvas-stage{border-radius:0;border-left:0;border-right:0}.fw-timeline-bar{margin:0;border-radius:0}}
+
+/* ---- t1 缺陷 B：节点端口圆点 hover 尺寸固定不变，仅轻微高亮（置于 overrides 之后，
+   确保级联覆盖 .fw-handle.in/.out 的常驻光晕，且不再改变 transform/scale） ---- */
+.fw-handle:hover { box-shadow: 0 0 10px var(--accent), 0 0 0 3px var(--input-focus-ring); cursor: crosshair; z-index: 5; }
+
+/* ---- t1：亮色主题专项修复（置于流光织机覆盖层之后，保证级联） ---- */
+html[data-theme='light'] ::selection { background: rgba(91,100,214,.22); color: #14161f; }
+html[data-theme='light'] .fw-btn-primary:hover,
+html[data-theme='light'] .fw-btn-success:hover { filter: brightness(.96); }
+html[data-theme='light'] .fw-btn-danger:hover { filter: brightness(.94); }
+html[data-theme='light'] .fw-btn:focus-visible { outline-color: var(--accent); box-shadow: var(--focus-ring), var(--glass-inner); }
+
+/* ================================================================
+   t11 / frontend-pro：专业面板（队列/素材/模型）+ 断点续跑 + 双击搜索 + 首登引导 + 小视口
+   ================================================================ */
+
+/* 抽屉滑入 */
+@keyframes fw-drawer-in { from { transform: translateX(100%); opacity: .6; } to { transform: translateX(0); opacity: 1; } }
+
+/* 右下 FAB 簇（小视口更紧凑） */
+.fw-pro-fab { -webkit-app-region: no-drag; }
+@media (max-width: 900px) {
+  .fw-pro-fab { right: 8px; bottom: 14px; }
+  .fw-pro-fab button { font-size: 11px !important; }
+}
+
+/* 抽屉（小视口 = 全屏模态） */
+.fw-pro-drawer { -webkit-app-region: no-drag; }
+@media (max-width: 900px) {
+  .fw-pro-drawer { width: 100vw !important; border-left: 0 !important; }
+}
+
+/* D-20：面板打开时的画布「专注模式」—— 工作流窄栏收窄/隐藏 + 画布压暗（body 类由 ProHub 切换） */
+body.fw-pro-focus .fw-workspace-sidebar { opacity: .45; pointer-events: none; transition: opacity .25s var(--t-ease); }
+body.fw-pro-focus .fw-canvas-stage::after {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: radial-gradient(600px 300px at 50% 40%, transparent 40%, rgba(4,6,12,.28) 100%);
+  transition: opacity .25s var(--t-ease);
+}
+@media (max-width: 900px) {
+  /* D-20：小视口下工作流窄栏整体让位给抽屉，参数面板与节点库互斥（同一时间只有一个浮层） */
+  body.fw-pro-sm.fw-pro-focus .fw-workspace-sidebar { display: none; }
+  body.fw-pro-sm.fw-pro-focus .fw-library-drawer,
+  body.fw-pro-sm.fw-pro-focus .fw-param-drawer { opacity: 0; pointer-events: none; }
+}
+
+/* 断点续跑条：小视口下换行自适应 */
+.fw-resume-bar { -webkit-app-region: no-drag; }
+@media (max-width: 900px) {
+  .fw-resume-bar { top: 8px; left: 8px; transform: none; max-width: calc(100vw - 16px); border-radius: 10px; }
+}
+
+/* 首登引导遮罩（D-21） */
+.fw-onboarding { -webkit-app-region: no-drag; }
+.fw-onboarding b { letter-spacing: .2px; }

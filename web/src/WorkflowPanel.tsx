@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Plus, Search, FileText, Download, Upload, Trash2, Puzzle, Layers, PencilLine, LayoutTemplate } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
+import { MissingNodesModal, ImportedWorkflowModal } from './WorkflowModals'
 
 interface Props {
   onOpenPlugin: () => void
@@ -13,17 +14,21 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
   const workflowId = useAppStore((s) => s.workflowId)
   const setWorkflow = useAppStore((s) => s.setWorkflow)
   const dirty = useAppStore((s) => s.dirty)
+  const specs = useAppStore((s) => s.specs)
   const setTimelineNodeId = useAppStore((s) => s.setTimelineNodeId)
   const pushToast = useAppStore((s) => s.pushToast)
   const [list, setList] = useState<{ id: string; name: string; updated_at: number }[]>([])
   const [query, setQuery] = useState('')
   const [plugCount, setPlugCount] = useState(0)
-  const [templates, setTemplates] = useState<{ id: string; title: string; description: string; nodes: number }[]>([])
+  const [templates, setTemplates] = useState<{ id: string; title: string; description: string; nodes: number; type_ids?: string[] }[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null)
   const [nameBox, setNameBox] = useState<null | { mode: 'create' } | { mode: 'rename'; id: string; name: string }>(null)
   const [nameInput, setNameInput] = useState('')
   const shareInput = useRef<HTMLInputElement>(null)
+  // t10（D-03/D-06）：模板缺节点弹层 + 导入后「立即打开」弹层
+  const [missingModal, setMissingModal] = useState<{ title: string; typeIds: string[] } | null>(null)
+  const [importModal, setImportModal] = useState<{ tplId: string; name: string; nodeCount?: number } | null>(null)
 
   const refresh = async () => {
     try { const l = await api.listWorkflows(); setList(l || []) } catch { /* ignore */ }
@@ -31,6 +36,17 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
     try { const t = await api.listTemplates(); setTemplates(t || []) } catch { /* ignore */ }
   }
   useEffect(() => { refresh() }, [workflowId])
+
+  // t10（D-06 联动）：商城下载导入工作流后（frontend-pro MarketPage 派发），
+  // 与左侧「导入分享」共用同一个「立即打开」弹层 + 单条反馈（toast 去重）。
+  useEffect(() => {
+    const h = (ev: Event) => {
+      const d = (ev as CustomEvent).detail || {}
+      if (d && d.tpl_id) setImportModal({ tplId: d.tpl_id, name: d.name || '导入的工作流', nodeCount: d.node_count })
+    }
+    window.addEventListener('fw-workflow-imported', h)
+    return () => window.removeEventListener('fw-workflow-imported', h)
+  }, [])
 
   const fmt = (ts: number) => {
     const d = Date.now() / 1000 - ts
@@ -60,18 +76,54 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
   const importSharedWorkflow = async (file: File) => {
     try {
       const imported = await api.importWorkflowZip(file)
-      pushToast(imported.message || '工作流已导入，可从模板列表创建', 'ok')
+      // D-06：导入成功弹「立即打开 / 创建副本」——弹窗即反馈，不再重复 toast
+      setImportModal({
+        tplId: (imported as any).tpl_id || '',
+        name: (imported as any).name || '导入的工作流',
+        nodeCount: (imported as any).node_count,
+      })
       await refresh()
     } catch (e: any) { pushToast('导入工作流失败: ' + (e.message || e), 'err') }
+  }
+
+  // D-06：从模板创建工作流（导入后「立即打开/创建副本」共用）
+  const openImportedTemplate = async (tplId: string, name: string, duplicate: boolean) => {
+    const tpl = importModal
+    setImportModal(null)
+    if (!tplId) { pushToast('模板 id 缺失，请从左侧「我的工作流」创建', 'err'); return }
+    try {
+      const created = await api.createFromTemplate(tplId)
+      const id = (created as any).id
+      const n = (duplicate ? (name || '工作流') + ' 副本' : (created as any).name || name || '模板工作流')
+      setWorkflow(id, n)
+      setTimelineNodeId(null)
+      await refresh()
+      const missing = (created as any).missing_type_ids
+      if (Array.isArray(missing) && missing.length > 0) {
+        setMissingModal({ title: '工作流「' + n + '」缺少节点', typeIds: missing })
+      } else {
+        pushToast('已创建：' + n, 'ok')
+      }
+    } catch (e: any) { pushToast('创建模板失败: ' + (e.message || e), 'err') }
   }
 
   const newFromTemplate = async (tplId: string) => {
     setShowTemplates(false)
     try {
       const created = await api.createFromTemplate(tplId)
-      setWorkflow((created as any).id, (created as any).name || '模板工作流')
+      const id = (created as any).id
+      const name = (created as any).name || '模板工作流'
+      setWorkflow(id, name)
       setTimelineNodeId(null)
       refresh()
+      // D-03：模板所需节点未安装 → 弹缺失依赖清单（去商城安装/批量安装，装完自动生效），
+      // 不阻断打开画布；无缺失时给出「已创建」明确反馈（D-07）
+      const missing = (created as any).missing_type_ids
+      if (Array.isArray(missing) && missing.length > 0) {
+        setMissingModal({ title: '模板「' + name + '」缺少节点', typeIds: missing })
+      } else {
+        pushToast('已创建：' + name, 'ok')
+      }
     } catch (e: any) { pushToast('创建模板失败: ' + (e.message || e), 'err') }
   }
 
@@ -85,6 +137,8 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
         const c = await api.createWorkflow(name)
         setWorkflow((c as any).id, name)
         setTimelineNodeId(null)
+        // D-07：新建工作流成功后明确反馈（空白画布 + toast「已创建」）
+        pushToast('已创建：' + name, 'ok')
         refresh()
       } else {
         await api.renameWorkflow(nb.id, name)
@@ -170,12 +224,23 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
           <div onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: '90vw', borderRadius: 'var(--radius-xl)', padding: 18, background: 'var(--card-grad)', border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--elev-3)' }}>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><LayoutTemplate size={15} color="var(--accent)" /> 我的工作流</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {templates.map((t) => (
+              {templates.map((t) => {
+                // D-06：模板卡片标注「缺少节点」状态（服务端 type_ids 已返回，未安装时提示）
+                const missingCount = Array.isArray((t as any).type_ids)
+                  ? (t as any).type_ids.filter((tid: string) => !specs.some((s) => s.type_id === tid)).length
+                  : 0
+                return (
                 <button key={t.id} onClick={() => newFromTemplate(t.id)} style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-panel)', color: 'var(--text)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 650 }}>{t.title}</div>
+                  <div style={{ fontSize: 13, fontWeight: 650, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                    {missingCount > 0 && (
+                      <span className="fw-badge" style={{ background: 'rgba(224,168,0,.15)', color: '#e0a800', flexShrink: 0 }}>缺 {missingCount} 节点</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.description} · {t.nodes} 节点</div>
                 </button>
-              ))}
+                )
+              })}
               {templates.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>暂无模板，请先从商城安装工作流模板。</div>}
             </div>
           </div>
@@ -226,6 +291,26 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* t10（D-03）：模板缺节点依赖弹层（去商城安装 / 批量安装） */}
+      {missingModal && (
+        <MissingNodesModal
+          title={missingModal.title}
+          typeIds={missingModal.typeIds}
+          note="安装完成后节点库自动刷新，画布重新加载即生效。"
+          onClose={() => setMissingModal(null)}
+        />
+      )}
+
+      {/* t10（D-06）：导入后「立即打开 / 创建副本」 */}
+      {importModal && (
+        <ImportedWorkflowModal
+          name={importModal.name}
+          nodeCount={importModal.nodeCount}
+          onOpen={(dup) => void openImportedTemplate(importModal.tplId, importModal.name, dup)}
+          onClose={() => setImportModal(null)}
+        />
       )}
     </div>
   )

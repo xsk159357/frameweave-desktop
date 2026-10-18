@@ -17,6 +17,7 @@ import base64
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 import urllib.request
@@ -29,12 +30,38 @@ from .perm import PermissionDenied, PermissionGate
 
 
 class WorkerJobError(Exception):
-    """worker 任务错误（带 §1.4 错误码）。"""
+    """worker 任务错误（带 §1.4 错误码）。
 
-    def __init__(self, code: str, detail: str):
-        super().__init__("[%s] %s" % (code, detail))
+    D-05（t9）：支持结构化负载 {node, stage, code, message, hint}（traceback 仅作
+    detail）；str(e) 为用户可读主文案（不含 traceback），to_dict() 为结构化视图。
+    旧调用（code, detail 两参）保持兼容（message=detail、node/stage/hint 空）。
+    """
+
+    def __init__(self, code: str, detail: Any = "", node: str = "", stage: str = "",
+                 hint: str = "", message: str = ""):
         self.code = code
         self.detail = detail
+        self.node = node
+        self.stage = stage
+        self.hint = hint
+        self.message = message or (str(detail) if not isinstance(detail, dict) else "")
+        super().__init__(self._rendered())
+
+    def _rendered(self) -> str:
+        parts = ["[%s]" % self.code]
+        if self.node:
+            parts.append("节点 %s" % self.node)
+        if self.stage:
+            parts.append("阶段 %s" % self.stage)
+        parts.append(str(self.message))
+        if self.hint:
+            parts.append("建议：%s" % self.hint)
+        return " ".join(parts)
+
+    def to_dict(self) -> Dict[str, str]:
+        return {"node": self.node, "stage": self.stage, "code": self.code,
+                "message": str(self.message), "hint": self.hint,
+                "detail": str(self.detail)}
 
 
 class WorkerTimeout(WorkerJobError):
@@ -274,9 +301,25 @@ class WorkerSupervisor:
             raise WorkerTimeout("节点超时（%gs）: %s" % (self.timeout_s, self.type_id))
         if not resp.get("ok"):
             code = str(resp.get("code") or rpc.ERR_RUNTIME)
-            detail = str(resp.get("error") or "未知错误")
+            detail = resp.get("error") or "未知错误"
+            # D-05（t9）：worker 已把运行错误归一为结构化 JSON（error 字段），
+            # 解析出 {node, stage, code, message, hint}；detail（traceback）单独携带。
+            structured: Optional[Dict[str, Any]] = None
+            if isinstance(detail, str) and detail.strip().startswith("{"):
+                try:
+                    structured = json.loads(detail)
+                except (ValueError, TypeError):
+                    structured = None
             if code == rpc.ERR_PERMISSION:
                 raise WorkerPermission(detail)
+            if isinstance(structured, dict):
+                raise WorkerJobError(
+                    code,
+                    detail=structured.get("detail") or detail,
+                    node=str(structured.get("node") or ""),
+                    stage=str(structured.get("stage") or ""),
+                    hint=str(structured.get("hint") or ""),
+                    message=str(structured.get("message") or detail))
             raise WorkerJobError(code, detail)
         return resp.get("outputs") or {}
 
@@ -367,9 +410,23 @@ class WorkerSupervisor:
         timeout_s = line.get("timeout_s")
         job_id = self.job_id
         try:
-            res = await self.host.run_tracked(job_id, argv, timeout=timeout_s)
-            out_tail = (res.stdout or "")[-4000:]
-            err_tail = (res.stderr or "")[-4000:]
+            # t9（D-01 配套）：子进程输出必须由 host 捕获（stdout/stderr=PIPE）——
+            # 否则 ffmpeg/ffprobe 等子进程 stdout 泄漏进 worker 的 JSONL 通道
+            # （stdout_tail 空 → 探测失败；且污染协议流）。cwd 一并透传。
+            res = await self.host.run_tracked(job_id, argv, timeout=timeout_s,
+                                              cwd=line.get("cwd") or None,
+                                              stdout=subprocess.PIPE,
+                                              stderr=subprocess.PIPE)
+            # run_tracked 为二进制管道模式（text 未透传）→ 解码为文本再截尾，
+            # 否则 bytes 经 rpc 编码 default=str 变成 repr 垃圾（stdout 非 JSON）。
+            out = res.stdout or b""
+            err = res.stderr or b""
+            if isinstance(out, bytes):
+                out = out.decode("utf-8", "replace")
+            if isinstance(err, bytes):
+                err = err.decode("utf-8", "replace")
+            out_tail = out[-4000:]
+            err_tail = err[-4000:]
         except asyncio.TimeoutError:
             self._respond(line["id"], None, {"exit": -1, "stdout_tail": "",
                                              "stderr_tail": "spawn 超时（%ss）" % timeout_s})

@@ -184,10 +184,29 @@ class WorkerContext:
 
     # ---------- 类型化访问 ----------
     def __getitem__(self, key: str) -> Any:
-        """兼容官方节点 dict 风格访问（ctx["store"] / ctx["run_tracked"] ...）。"""
-        if hasattr(self, key):
+        """兼容官方节点 dict 风格访问（ctx["store"] / ctx["run_tracked"] ...）。
+
+        D-01（t9）：非 str key 防御——旧实现 `hasattr(self, key)` 对非字符串
+        key（如 dict(ctx) 退化为序列迭代协议时的 ctx[0]）抛
+        `TypeError: attribute name must be string`；非 str key 按映射语义返回
+        KeyError（dict(ctx)/for-in 会正确终止迭代）。
+        """
+        if isinstance(key, str) and hasattr(self, key):
             return getattr(self, key)
         raise KeyError(key)
+
+    # D-01（t9）：dict(ctx) 兼容视图——keys()/__iter__/__len__ 使本对象满足
+    # dict(obj) 的映射协议（dict(m) 检测到 keys() 后按「遍历 keys → m[k]」构造），
+    # 结果与 to_dict() 一致；避免退化为 __getitem__ 序列迭代协议（ctx[0] 崩溃）。
+    def keys(self) -> List[str]:
+        return list(self.to_dict().keys())
+
+    def __iter__(self):
+        """映射式键迭代（to_dict 键集合；供 list(ctx) / for k in ctx 使用）。"""
+        return iter(self.to_dict())
+
+    def __len__(self) -> int:
+        return len(self.to_dict())
 
     def get(self, key: str, default: Any = None) -> Any:
         try:

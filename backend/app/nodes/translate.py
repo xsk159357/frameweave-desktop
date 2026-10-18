@@ -1,3 +1,8 @@
+# [LEGACY 标注 · t3-M6] 本文件为插件化改造前的内置节点实现，已确认被 registry 弃用：
+#   backend/app/registry.py:60 autodiscover() 明确"核心业务节点不再从 app.nodes 内置导入"，
+#   运行时无任何非测试代码 import app.nodes；type_id 归属已迁移到官方插件包
+#   (frameweave-plugins/packages/，经 backend/user_nodes 或商城安装加载)。
+# 保留仅用于测试（tests_t4_p2_ext.py 等）与历史参考；禁止作为新节点实现模板。
 """翻译节点：中文文案/字幕 → 多语种（英/日/韩/西/阿 + 小语种）。
 
 - 输入：文案草稿(script) 或 字幕(subtitle)，输出：翻译文案 / 翻译字幕

@@ -40,6 +40,20 @@ class WorkerRpcError(Exception):
     """worker↔host 管道错误（host 未响应/EOF）。"""
 
 
+def _error_hint(e: BaseException) -> str:
+    """异常 → 用户可行动建议（D-05：结构化错误 hint 字段）。"""
+    name = type(e).__name__
+    if name in ("TypeError", "AttributeError"):
+        return "节点协议不兼容或插件版本过旧，请更新节点包/应用后重试"
+    if name in ("FileNotFoundError", "OSError"):
+        return "输入文件/素材缺失或不可读，请检查路径与权限后重试"
+    if name == "KeyError":
+        return "节点依赖的上游输出缺失，请检查连线与上游节点是否成功"
+    if name == "ValueError":
+        return "节点参数值不合法，请检查参数后重试"
+    return "请检查节点参数与输入是否完整后重试；若持续失败请更新节点包或联系支持"
+
+
 class WorkerBootstrap:
     def __init__(self, job: Dict[str, Any], gate: PermissionGate,
                  jail: NamespaceJail):
@@ -161,6 +175,7 @@ class WorkerBootstrap:
     def _handle_run(self, msg: Dict[str, Any], writer: rpc.JSONLWriter) -> None:
         req_id = msg["id"]
         params = msg.get("params") or {}
+        stage = "load"
         try:
             if self._cancelled:
                 raise RuntimeError("节点已被取消")
@@ -170,6 +185,7 @@ class WorkerBootstrap:
             cls = self._load_node_class()
             node_obj = cls()
             # setup（可选；NotImplementedError 视为无初始化）
+            stage = "setup"
             setup = getattr(node_obj, "setup", None)
             if callable(setup):
                 try:
@@ -181,6 +197,7 @@ class WorkerBootstrap:
                 except NotImplementedError:
                     pass
             # run（asyncio 单循环；ctx 请求为同步 RPC，同线程安全）
+            stage = "run"
             loop = asyncio.new_event_loop()
             try:
                 outputs = loop.run_until_complete(node_obj.run(ctx, inputs, params))
@@ -195,11 +212,29 @@ class WorkerBootstrap:
                                   "%s（%s）" % (e, self.gate.deny_info(e))))
         except asyncio.TimeoutError:
             writer.send(rpc.error(req_id, rpc.ERR_TIMEOUT, "worker 内 run 超时"))
-        except Exception as e:  # noqa: BLE001 —— 插件运行错误收口为应答（带栈便于排障）
+        except Exception as e:  # noqa: BLE001 —— 插件运行错误收口为应答
             import traceback
             tb = traceback.format_exc(limit=8)
+            # D-05（t9）：[PLUGIN_RUNTIME_ERROR] 归一为结构化错误
+            # {node, stage, code, message, hint}，traceback 仅作 detail 字段；
+            # JSON 字符串承载（RPC error 字段保持字符串协议兼容，host 侧解析）。
             writer.send(rpc.error(req_id, rpc.ERR_RUNTIME,
-                                  "%s: %s\n%s" % (type(e).__name__, e, tb)))
+                                  self._structured_error(stage, e, tb)))
+
+    def _structured_error(self, stage: str, e: BaseException, tb: str) -> str:
+        """插件运行错误 → 结构化 JSON 字符串（D-05）。
+
+        {node, stage, code, message, hint, detail}；message 为用户可读一行文案，
+        hint 为可行动建议，detail 仅承载 traceback（前端折叠展示）。
+        """
+        return json.dumps({
+            "node": str(self.job.get("node_id") or ""),
+            "stage": stage,
+            "code": rpc.ERR_RUNTIME,
+            "message": "%s: %s" % (type(e).__name__, e),
+            "hint": _error_hint(e),
+            "detail": tb,
+        }, ensure_ascii=False)
 
     def _write_outputs(self, outputs: Dict[str, Any]) -> Dict[str, str]:
         """输出 → scratch/out/<port>.json 描述符；返回 port→rel 映射。"""

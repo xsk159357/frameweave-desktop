@@ -336,6 +336,14 @@ class JsmTkDubbingNode(NodeBase):
                          default="", widget="password", description="支持 @secret:名称"),
                 PortSpec("asr_base_url", PortType.STRING, label="ASR 中转地址", required=False,
                          default="https://api.openai.com/v1", widget="text"),
+                PortSpec("enable_diarization", PortType.BOOL, label="说话人区分", default=False,
+                         widget="toggle", description="透传 core/asr：sherpa-onnx 说话人区分（TK 多说话人片源）"),
+                PortSpec("diarization_model_dir", PortType.STRING, label="Diarization 模型目录",
+                         required=False, default="", widget="text",
+                         description="sherpa-onnx 说话人区分模型目录；留空自动探测"),
+                PortSpec("cover_original_subtitle", PortType.BOOL, label="遮盖原字幕", default=False,
+                         widget="toggle",
+                         description="草稿生成时在原字幕区域叠黑条遮盖（避免与新翻译字幕重叠）"),
                 # ---- 文本处理
                 PortSpec("mode", PortType.STRING, label="文本模式", default="translate",
                          widget="select", options=["translate", "rewrite", "cantonese_to_mandarin"]),
@@ -345,7 +353,7 @@ class JsmTkDubbingNode(NodeBase):
                          default="", widget="password", description="支持 @secret:名称"),
                 PortSpec("llm_base_url", PortType.STRING, label="文本中转地址", required=False,
                          default="https://ameaaos.com/v1", widget="text"),
-                PortSpec("llm_model", PortType.STRING, label="文本模型", default="gpt-4o-mini", widget="text"),
+                PortSpec("llm_model", PortType.STRING, label="文本模型", default="", widget="text"),
                 PortSpec("keep_style", PortType.BOOL, label="保留口语风格", default=True, widget="toggle"),
                 # ---- 间隙 / OST（参考 _GAP_MERGE_THRESHOLD=1.5）
                 PortSpec("gap_merge_threshold", PortType.FLOAT, label="间隙合并阈值(秒)", default=1.5, widget="number"),
@@ -377,7 +385,7 @@ class JsmTkDubbingNode(NodeBase):
                          widget="select", options=["original", "16:9", "9:16", "1:1"]),
                 PortSpec("enable_subtitle", PortType.BOOL, label="生成字幕", default=True, widget="toggle"),
             ],
-            version="1.0.0",
+            version="1.1.0",
         )
 
     # ------------------------------------------------------------ 编排
@@ -393,6 +401,8 @@ class JsmTkDubbingNode(NodeBase):
             "api_key": p.get("asr_api_key", ""),
             "base_url": p.get("asr_base_url", "https://api.openai.com/v1"),
             "remote_model": "whisper-1",
+            "enable_diarization": bool(p.get("enable_diarization", False)),
+            "diarization_model_dir": str(p.get("diarization_model_dir", "") or ""),
         })
         return out
 
@@ -468,6 +478,7 @@ class JsmTkDubbingNode(NodeBase):
             "subtitle_style": p.get("subtitle_style", "经典-白字黑边"),
             "font_size": 0.0, "enable_subtitle": bool(p.get("enable_subtitle", True)),
             "fps": 30, "output_dir": "",
+            "cover_original_subtitle": bool(p.get("cover_original_subtitle", False)),
         })
         return out
 
@@ -543,7 +554,7 @@ class JsmTkDubbingNode(NodeBase):
         processed, mode_used = process_texts(
             texts, mode, target_display, target_code, llm_api_key,
             str(params.get("llm_base_url", "https://ameaaos.com/v1")).strip() or "https://ameaaos.com/v1",
-            str(params.get("llm_model", "gpt-4o-mini")).strip() or "gpt-4o-mini")
+            str(params.get("llm_model", "")).strip() or "")
         failed = [r for r in processed if r.get("status") == "failed"]
         if failed:
             warnings.append(f"文本处理 {len(failed)}/{len(processed)} 行失败（保留原文）")

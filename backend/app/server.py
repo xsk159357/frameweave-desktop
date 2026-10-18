@@ -7,6 +7,7 @@ import asyncio
 import itertools
 import json
 import os
+from pathlib import Path
 import sys
 import tempfile
 import time
@@ -99,7 +100,7 @@ BACKEND_PROTOCOL_MINOR = 1                        # 次版本：v3.1 —— P2-1
 BACKEND_PROTOCOL_VERSION = f"{BACKEND_PROTOCOL}.{BACKEND_PROTOCOL_MINOR}"
 PROTOCOL_COMPAT_MAJOR = BACKEND_PROTOCOL          # 兼容位导出（语义化文档用）
 # 版本唯一真源：desktop/package.json（bump 时同步此常量 + cloud_server.py VERSION + preload/cloud_gateway）
-APP_VERSION = "0.3.5"
+APP_VERSION = "0.3.11"
 app = FastAPI(title="FrameWeave Local Service", version=APP_VERSION)
 
 # ---- 本地 API 鉴权（H3 修复 + P3/t3 ③ 防 dev 绕过） ----
@@ -144,7 +145,8 @@ async def local_token_guard(request: Request, call_next):
     if path.startswith("/api/secrets") or path.startswith("/api/export") or path.startswith("/api/assets"):
         need = True
     elif method in ("POST", "PUT", "DELETE") and path.startswith(
-            ("/api/workflows", "/api/market", "/api/user_nodes", "/api/util", "/api/draft", "/api/queue")):
+            ("/api/workflows", "/api/market", "/api/user_nodes", "/api/util",
+             "/api/draft", "/api/queue", "/api/models")):
         need = True
     if need:
         tok = request.headers.get(obf.x_fw_token_header(), "")
@@ -200,6 +202,14 @@ app.add_middleware(
 
 # P0.4 U4：审计事件统一落在 DATA_DIR/audit_log.jsonl（三入口共享 limits）
 limits.set_audit_path(os.path.join(DATA_DIR, "audit_log.jsonl"))
+# t6（M7 供应链缺口根治）：打包版首启内置基础节点种子——用户节点目录为空时从
+# 随包 _internal/builtin_basics 复制 24 个官方 core 基础节点（逐包官方锚验签，
+# 不绕过签名）；已有用户安装节点则跳过（不覆盖/不重复）。失败不阻断启动，
+# scan 按现有目录加载。
+try:
+    declarative.seed_builtin_basics()
+except Exception as _e:  # noqa: BLE001
+    print("[seed] 内置基础节点种子首启异常（不阻断启动，scan 将按现有目录加载）:", _e)
 autodiscover()
 declarative.scan()
 # P2（t4）：资产存储经 StoreAdapter SPI 创建（默认 local=LocalAssetStore；第三方可注册替换）
@@ -961,6 +971,10 @@ async def create_wf_from_template(tpl_id: str):
                                        params=nd.get("params", {}),
                                        inputs=nd.get("inputs") or {})
     wf.edges = edges
+    # t7：跨名边 input_slots 自动派生（保存链 from-template：统一派生后再入库，
+    # 保证保存进库的工作流运行时已含完整 input_slots；未知类型跳过，同名回落不变）
+    from . import slots
+    slots.derive_input_slots(wf)
     wfstore.save(wf)
     result = wf.to_dict()
     # 依赖缺失引导：模板所需 type_id 未注册（插件缺失）
@@ -1000,6 +1014,53 @@ async def import_workflow_zip(file: UploadFile = File(...)):
         except OSError:
             pass
 
+@app.post("/api/workflows/from-comfy")
+async def from_comfy(body: dict):
+    """ComfyUI workflow JSON → FW 工作流结构（D-04 后端转换，供 GUI 导入 t18 使用）。
+
+    支持的 ComfyUI 格式（任选其一，均复用 comfy_convert.py 既有逻辑）：
+      A. UI 保存格式：{nodes: [{id, type, widgets_values, inputs: [{name, link}], outputs}],
+         links: [[id, origin_id, origin_slot, target_id, target_slot, type] 或对象], last_node_id}
+      B. /prompt 执行格式：{node_id: {class_type, inputs: {name: [up, slot] | 值}}}（comfy_to_fw）
+    兼容包裹：{doc: <ComfyJSON>}（前端 wf 封装时）。
+
+    失败**绝不静默成功**：逐节点/逐边错误 {node_id, type_id?, code, message}
+    （unknown_type / missing_type / link_slot_invalid / link_missing / …）→ 422。
+
+    成功响应：{ok, workflow: {nodes: [{id,type,x,y,params,inputs,input_slots}],
+    edges: [{source,target,sourceHandle,targetHandle}]}, warnings}。
+    """
+    from . import comfy_convert as cc
+    body_doc = body or {}
+    if "doc" in body_doc and isinstance(body_doc.get("doc"), dict) \
+            and not isinstance(body_doc.get("nodes"), list) and "prompt" not in body_doc:
+        body_doc = body_doc["doc"]  # 前端包裹兼容
+    try:
+        if isinstance(body_doc, dict) and isinstance(body_doc.get("nodes"), list):
+            wf = cc.comfy_ui_workflow_to_fw(body_doc)
+        else:
+            wf = cc.comfy_to_fw(body_doc)
+    except cc.ComfyConversionError as e:
+        return JSONResponse(
+            {"ok": False, "code": "comfy_convert_failed", "errors": e.errors,
+             "warnings": e.warnings},
+            status_code=422)
+    except (ValueError, KeyError) as e:
+        return JSONResponse(
+            {"ok": False, "code": "comfy_convert_failed",
+             "errors": [{"node_id": "", "code": "invalid_document", "message": str(e)}]},
+            status_code=422)
+    from .engine import GraphNode  # noqa: F401 —— 类型引用（结构投影不落盘）
+    payload_nodes = [{
+        "id": n.id, "type": n.type_id, "x": n.x, "y": n.y,
+        "params": dict(n.params or {}),
+        "inputs": dict(n.inputs or {}),
+        "input_slots": dict(n.input_slots or {}),
+    } for n in wf.nodes.values()]
+    return {"ok": True,
+            "workflow": {"nodes": payload_nodes, "edges": list(wf.edges or [])},
+            "warnings": getattr(wf, "_convert_warnings", [])}
+
 @app.get("/api/workflows")
 async def list_wf():
     return [{"id": w.id, "name": w.name, "updated_at": w.updated_at} for w in wfstore.list()]
@@ -1035,6 +1096,9 @@ async def create_wf(body: WFCreate):
                  "errors": save_errors},
                 status_code=422,
             )
+    # t7：跨名边 input_slots 自动派生（保存链 create：统一派生后再入库）
+    from . import slots
+    slots.derive_input_slots(wf)
     wfstore.save(wf)
     return wf.to_dict()
 
@@ -1128,6 +1192,9 @@ async def update_wf(wfid: str, body: WFUpdate):
                  "errors": save_errors},
                 status_code=422,
             )
+    # t7：跨名边 input_slots 自动派生（保存链 update：统一派生后再入库）
+    from . import slots
+    slots.derive_input_slots(wf)
     wfstore.save(wf)
     return wf.to_dict()
 
@@ -1152,6 +1219,7 @@ async def reset_node(wfid: str, nid: str, body: dict = {}):
     node.asset_ids = {}
     node.cache_key = ""
     node.error = None
+    node.error_detail = ""  # D-05：重置时一并清空结构化明细
     node.progress = 0.0
     node.started_at = None
     force = bool((body or {}).get("force", False))
@@ -1497,6 +1565,416 @@ async def get_asset_file(aid: str):
     return FileResponse(asset.path, filename=os.path.basename(asset.path))
 
 
+# ---- D-02（t10 前端核心）：素材登记 / 视频文件选择回填 ----
+_KIND_BY_EXT = {
+    ".mp4": "VIDEO", ".mov": "VIDEO", ".mkv": "VIDEO", ".avi": "VIDEO",
+    ".webm": "VIDEO", ".flv": "VIDEO", ".m4v": "VIDEO", ".ts": "VIDEO",
+    ".mp3": "AUDIO", ".wav": "AUDIO", ".m4a": "AUDIO", ".flac": "AUDIO",
+    ".aac": "AUDIO", ".ogg": "AUDIO", ".wma": "AUDIO",
+    ".png": "IMAGE", ".jpg": "IMAGE", ".jpeg": "IMAGE", ".webp": "IMAGE",
+    ".gif": "IMAGE", ".bmp": "IMAGE",
+    ".srt": "SUBTITLE", ".ass": "SUBTITLE", ".vtt": "SUBTITLE",
+    ".json": "JSON", ".xml": "JSON", ".zip": "PACKAGE",
+}
+
+
+@app.post("/api/assets/ingest")
+async def ingest_asset(file: UploadFile = File(...)):
+    """素材登记（D-02 视频导入链路）：文件选择器选中的媒体文件收录进素材库并返回本地绝对路径。
+
+    前端 ParamPanel 对 widget=file 参数渲染「选择文件」，浏览器/Electron 统一走本接口上传
+    → 落盘 assets/files/uploaded/（安全文件名 + 同名序号去重）→ 登记 Asset → 返回本地绝对路径。
+    path 可直接回填 load_video.path 等 FILE 类参数，引擎在同一台机器本地读取；素材同时进入
+    资产库（素材/输出中心的登记源头，D-10 素材库可复用）。
+    """
+    if not file or not file.filename:
+        raise HTTPException(400, "未选择文件")
+    fname = os.path.basename(str(file.filename)).strip()
+    if not fname:
+        raise HTTPException(400, "文件名无效")
+    ext = os.path.splitext(fname)[1].lower()
+    kind = _KIND_BY_EXT.get(ext, "FILE")
+    up_dir = os.path.join(store.files_dir, "uploaded")
+    os.makedirs(up_dir, exist_ok=True)
+    # 安全文件名（仅保留字母数字与 . _ - 空格）＋ 同名序号去重，防止路径穿越/覆盖
+    safe = "".join(ch if (ch.isalnum() or ch in " ._-") else "_" for ch in fname).strip() or "upload.bin"
+    dest = os.path.join(up_dir, safe)
+    stem, suffix = os.path.splitext(safe)
+    n = 1
+    while os.path.exists(dest):
+        dest = os.path.join(up_dir, f"{stem}_{n}{suffix}")
+        n += 1
+    try:
+        with open(dest, "wb") as out:
+            while True:
+                chunk = await file.read(limits.ZIP_BLOCK)
+                if not chunk:
+                    break
+                out.write(chunk)
+    except OSError as exc:
+        raise HTTPException(500, "素材保存失败: " + str(exc)) from exc
+    from .assets import Asset  # 局部导入：避免改动模块级 import 区（与并行平台修复隔离）
+    asset = store.save_asset(Asset(id="", kind=kind, path=dest))
+    return {"ok": True, "asset_id": asset.id, "kind": asset.kind,
+            "path": asset.path, "name": os.path.basename(asset.path),
+            "size": asset.size, "message": "素材已登记"}
+
+
+# ---- 资产 API（t11 / D-10 素材中心扩展：列表 / 重命名 / 删除） ----
+def _asset_references(aid: str) -> List[Dict[str, Any]]:
+    """扫描 wfstore 全部工作流，收集引用该资产的 (workflow_id, node_id, port)。
+
+    D-10 删除保护：仍被工作流节点 asset_ids 引用的资产不允许静默删除，
+    前端素材中心据此展示「解除引用或确认删除」。
+    """
+    refs: List[Dict[str, Any]] = []
+    try:
+        for wf in wfstore.list():
+            for nid, node in (wf.nodes or {}).items():
+                for port, val in (node.asset_ids or {}).items():
+                    if str(val) == str(aid):
+                        refs.append({"workflow_id": wf.id, "workflow_name": wf.name,
+                                     "node_id": nid, "port": port})
+    except Exception:  # noqa: BLE001 —— 引用扫描失败不阻断删除主流程
+        refs = []
+    return refs
+
+
+@app.get("/api/assets")
+async def list_assets(kind: str = "", limit: int = 500):
+    """素材中心列表：枚举资产库全部元数据（按创建时间倒序，可 kind 过滤）。
+
+    字段：id/kind/size/created_at/node_id/fingerprint + path（相对 assets 根，供展示）
+    + path_abs（绝对路径，供 reveal/复制路径）。前端 AssetsPanel 按 kind 分组。
+    """
+    items = store.list_all()
+    if kind:
+        items = [a for a in items if a.get("kind") == kind]
+    n = min(max(1, int(limit)), 2000)
+    out: List[Dict[str, Any]] = []
+    for a in items[:n]:
+        p = str(a.get("path") or "")
+        if p:
+            rel = os.path.relpath(p, store.root) if hasattr(store, "root") else p
+            a = {**a, "path": rel, "path_abs": p}
+        out.append(a)
+    return {"ok": True, "assets": out, "count": len(items)}
+
+
+@app.patch("/api/assets/{aid}")
+async def rename_asset(aid: str, body: dict = {}):
+    """重命名资产磁盘文件（仅改文件主干名；内容指纹不变）。
+
+    参数中引用旧路径的节点需手动更新；返回更新后的资产元数据（含相对/绝对路径）。
+    """
+    if store.get(aid) is None:
+        raise HTTPException(404, "资产不存在")
+    new_name = str((body or {}).get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(422, "缺少新名称 name")
+    try:
+        updated = store.rename(aid, new_name)
+    except KeyError:
+        raise HTTPException(404, "资产不存在")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    d = updated.to_dict()
+    if d.get("path"):
+        d = {**d, "path_abs": d["path"],
+             "path": os.path.relpath(d["path"], store.root) if hasattr(store, "root") else d["path"]}
+    return {"ok": True, **d}
+
+
+@app.delete("/api/assets/{aid}")
+async def delete_asset(aid: str, force: int = 0):
+    """删除资产（元数据 + 本地文件）。
+
+    409 + code=asset_in_use：资产仍被工作流节点引用（body.references 给出引用清单），
+    携带 ?force=1 确认后删除；被删文件的缓存键在下次命中时因文件缺失自然失效重算。
+    """
+    if store.get(aid) is None:
+        raise HTTPException(404, "资产不存在")
+    refs = _asset_references(aid)
+    if refs and not force:
+        return JSONResponse(
+            {"ok": False, "code": "asset_in_use",
+             "message": f"资产仍被 {len(refs)} 处引用，请先解除引用或确认删除（?force=1）",
+             "references": refs},
+            status_code=409)
+    store.delete(aid)
+    return {"ok": True, "asset_id": aid, "removed_references": refs}
+
+
+# ---- 模型 API（t11 + t17 / D-11 模型中心：状态快照 + 一键下载 + 引用保护删除） ----
+# 进程内下载状态（POST /api/models/download 触发后记录；GET 快照并入）
+_MODEL_DOWNLOADS: Dict[str, Dict[str, Any]] = {}
+
+
+def _model_type(mid: str, info: Dict[str, Any]) -> str:
+    """模型类型（粗分类，供列表分组；registry 无 type 字段时按 id/note 推导）。"""
+    m = str(mid).lower()
+    note = str(info.get("note") or "").lower()
+    if "whisper" in m or "asr" in m:
+        return "ASR"
+    if m in ("index-tts",) or "tts" in m or "语音合成" in note:
+        return "TTS"
+    if "clip" in m or "dino" in m or "transnet" in m or "画面" in note or "视觉" in note:
+        return "视觉"
+    if "demucs" in m or "vocal" in m or "分离" in note:
+        return "音频分离"
+    if "llm" in m:
+        return "LLM"
+    return "模型"
+
+
+def _models_snapshot() -> List[Dict[str, Any]]:
+    """models_registry 登记模型的统一快照（/api/models 与 /api/models/status 共用）。
+
+    字段：{id, name, type, ready, source, path, size_bytes, weight_file,
+    download[], download_state, installed}。只读不写盘；未下载 → ready=false 状态而非报错。
+    """
+    from app.plugin import deps as _deps
+
+    try:
+        reg = _deps.load_models_registry() or {}
+    except Exception:  # noqa: BLE001
+        reg = {}
+    out: List[Dict[str, Any]] = []
+    for mid, info in (reg or {}).items():
+        if not isinstance(info, dict):
+            continue
+        label = str(info.get("name") or info.get("label") or mid)
+        try:
+            r = _deps.resolve_model(str(mid), env=os.environ) or {}
+        except Exception:  # noqa: BLE001
+            r = {}
+        rec: Dict[str, Any] = {
+            "id": str(mid), "name": label, "type": _model_type(str(mid), info),
+            "ready": bool(r.get("ready")), "source": str(r.get("source") or ""),
+            "path": str(r.get("path") or ""), "warnings": list(r.get("warnings") or []),
+            "size_bytes": None, "weight_file": None, "download_state": None,
+        }
+        pth = rec["path"]
+        if rec["ready"] and pth:
+            _p = Path(pth)
+            try:
+                if _p.is_dir():
+                    files = [f for f in _p.rglob("*") if f.is_file()]
+                    rec["size_bytes"] = sum(f.stat().st_size for f in files if f.stat().st_size is not None)
+                    wts = [f for f in files if f.suffix.lower() in (".safetensors", ".bin", ".ckpt", ".pt", ".pth", ".onnx")]
+                    if wts:
+                        rec["weight_file"] = wts[0].name
+                elif _p.is_file():
+                    rec["size_bytes"] = _p.stat().st_size
+                    rec["weight_file"] = _p.name
+            except OSError:
+                rec["size_bytes"] = None
+        repo = str(info.get("repo") or "")
+        rec["download"] = []
+        if repo:
+            rec["download"].append(f"hf download {repo} --local-dir \"{rec['path'] or '<MODELS_DIR>/' + str(mid)}\"")
+        fb = str(info.get("fallback_repo") or "")
+        if fb and fb != repo:
+            rec["download"].append(f"下载(备选)：{fb}")
+        if info.get("size_mb"):
+            rec["download"].append(f"体积约 {int(info['size_mb'])} MB；放置 DATA_DIR/models/<id> 约定目录")
+        st = _MODEL_DOWNLOADS.get(str(mid))
+        if st:
+            rec["download_state"] = dict(st)
+        rec["installed"] = bool(rec["ready"])
+        out.append(rec)
+    out.sort(key=lambda m: (bool(m["ready"]), str(m["id"])))
+    return out
+
+
+@app.get("/api/models")
+async def models_list():
+    """模型中心列表（D-11）：{id, name, type, status, path, size_bytes, installed, download_state}。
+
+    离线可用：未下载返回 status=not_installed（非报错）；已下载 status=installed。
+    """
+    snap = _models_snapshot()
+    out = [{
+        "id": m["id"], "name": m["name"], "type": m["type"],
+        "status": "installed" if m["ready"] else "not_installed",
+        "ready": m["ready"], "path": m["path"], "size_bytes": m["size_bytes"],
+        "weight_file": m["weight_file"], "installed": m["installed"],
+        "download_state": m["download_state"], "download": m["download"],
+    } for m in snap]
+    return {"ok": True, "models": out, "count": len(out),
+            "registry_count": len(snap), "note": "未下载返回状态而非报错；下载经 POST /api/models/download 触发"}
+
+
+@app.get("/api/models/status")
+async def models_status():
+    """模型中心只读快照（t11 契约保持；t17 附加 type/download_state 字段，追加不破坏）。
+
+    与官方 core/check_models 节点同源逻辑（app.plugin.deps.resolve_model + load_models_registry），
+    只读不写盘、不下载。字段：{id, name, type, ready, source, path, size_bytes, weight_file, download[], download_state}。
+    """
+    from app.plugin import deps as _sdeps
+    snap = _models_snapshot()
+    return {"ok": True, "models": snap, "count": len(snap),
+            "registry_count": len((_sdeps.load_models_registry()) or {}),
+            "note": "只读快照；详细自检/校验请运行 core/check_models 节点；下载经 POST /api/models/download"}
+
+
+@app.post("/api/models/download")
+async def models_download(body: dict):
+    """按 id 触发模型下载（D-11 模型中心一键下载）。
+
+    请求体：{id: <model_key>, prefer?: "modelscope"|"huggingface"}。
+    语义：
+      - 已安装 → {ok, status: "already_installed", path}（不重复下载）；
+      - 下载中 → {ok, status: "downloading"}（进程内状态，GET 快照可见）；
+      - 触发成功 → {ok, status: "started"}（后台线程执行，完成/失败落 download_state）；
+      - 未登记 id / 下载失败 → 明确错误码（unknown_model / download_failed），不静默。
+    """
+    mid = str((body or {}).get("id") or (body or {}).get("model") or "").strip()
+    if not mid:
+        return JSONResponse({"ok": False, "code": "model_id_required",
+                             "message": "缺少模型 id"}, status_code=400)
+    from app.plugin import deps as _deps
+    from app import model_download as _md
+
+    r = _deps.resolve_model(mid, env=os.environ)
+    if r.get("ready") and r.get("path"):
+        return {"ok": True, "status": "already_installed", "model": mid, "path": r["path"]}
+    if mid in _MODEL_DOWNLOADS and _MODEL_DOWNLOADS[mid].get("state") == "downloading":
+        return {"ok": True, "status": "downloading", "model": mid}
+    if mid not in (_deps.load_models_registry() or {}):
+        return JSONResponse({"ok": False, "code": "unknown_model",
+                             "message": f"模型未登记: {mid}（请先更新 models_registry）"},
+                            status_code=404)
+    prefer = str((body or {}).get("prefer") or "modelscope").lower()
+    mdir = _deps.models_dir()
+    task_id = uuid.uuid4().hex[:12]
+    _MODEL_DOWNLOADS[mid] = {"task_id": task_id, "state": "downloading",
+                             "started_at": time.time(), "message": ""}
+
+    def _run():
+        started = _MODEL_DOWNLOADS[mid].get("started_at")
+        try:
+            res = _md.download_model(mid, mdir, prefer=prefer)
+            after = _deps.resolve_model(mid, env=os.environ)
+            _MODEL_DOWNLOADS[mid] = {
+                "task_id": task_id, "state": "done", "started_at": started,
+                "finished_at": time.time(), "message": "下载完成",
+                "path": str(res.get("path") or ""),
+                "ready": bool(after.get("ready")),
+            }
+        except Exception as _e:  # noqa: BLE001
+            _MODEL_DOWNLOADS[mid] = {"task_id": task_id, "state": "error",
+                                     "started_at": started, "finished_at": time.time(),
+                                     "message": f"{type(_e).__name__}: {_e}"}
+
+    try:
+        import asyncio as _asyncio
+        _asyncio.get_running_loop().run_in_executor(None, _run)
+    except RuntimeError:
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "status": "started", "model": mid, "task_id": task_id,
+            "message": f"开始下载 {mid}（后台执行；GET /api/models/tasks/{task_id} 实时进度）"}
+
+
+@app.get("/api/models/tasks/{task_id}")
+async def models_task(task_id: str):
+    """模型下载任务实时进度（t23 增强，t19 契约缺口补齐）。
+
+    查询 _MODEL_DOWNLOADS 中 task_id 对应的下载任务：
+      {ok, task: {task_id, model, state(downloading|done|error), started_at, finished_at,
+                  message, path, ready}}
+    未找到 → 404 task_not_found（不静默）。
+    """
+    tid = str(task_id or "").strip()
+    if not tid:
+        return JSONResponse({"ok": False, "code": "task_not_found",
+                             "message": "缺少 task_id"}, status_code=404)
+    for mid, rec in _MODEL_DOWNLOADS.items():
+        if str(rec.get("task_id") or "") == tid:
+            return {"ok": True, "task": {
+                "task_id": tid, "model": mid,
+                "state": str(rec.get("state") or ""),
+                "started_at": rec.get("started_at"),
+                "finished_at": rec.get("finished_at"),
+                "message": str(rec.get("message") or ""),
+                "path": str(rec.get("path") or ""),
+                "ready": bool(rec.get("ready")),
+            }}
+    return JSONResponse({"ok": False, "code": "task_not_found",
+                         "message": f"任务不存在: {task_id}"}, status_code=404)
+
+
+@app.delete("/api/models/{mid}")
+async def models_delete(mid: str):
+    """删除已装模型（D-11，引用保护）。
+
+    规则：
+      - 未安装 → 404 not_installed；
+      - 路径不在 DATA_DIR/models 约定目录内（env/param 指向的外部路径）→ 409 protected_path；
+      - 被任一工作流节点 params/literal_inputs 引用 → 409 model_in_use（列出引用）；
+      - 删除成功 → {ok, status: "deleted"}。
+    """
+    from app.plugin import deps as _deps
+
+    r = _deps.resolve_model(str(mid), env=os.environ)
+    if not r.get("ready") or not r.get("path"):
+        return JSONResponse({"ok": False, "code": "not_installed", "model": str(mid),
+                             "message": "模型未安装"}, status_code=404)
+    path = str(r["path"])
+    mdir = os.path.abspath(_deps.models_dir())
+    absp = os.path.abspath(path)
+    if not (absp == mdir or absp.startswith(mdir + os.sep)):
+        return JSONResponse({"ok": False, "code": "protected_path", "model": str(mid),
+                             "message": "模型路径由环境变量/参数指定（非 DATA_DIR/models 约定目录），API 不删除"},
+                            status_code=409)
+    refs = _find_model_refs(path)
+    if refs:
+        return JSONResponse({"ok": False, "code": "model_in_use", "model": str(mid),
+                             "refs": refs[:10], "ref_count": len(refs),
+                             "message": "模型正被工作流引用，请先解除引用后再删除"},
+                            status_code=409)
+    try:
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        elif os.path.isfile(path):
+            os.remove(path)
+        else:
+            return JSONResponse({"ok": False, "code": "delete_failed", "model": str(mid),
+                                 "message": "路径既非文件也非目录，未删除"}, status_code=409)
+    except OSError as _e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "code": "delete_failed", "model": str(mid),
+                             "message": str(_e)}, status_code=409)
+    _MODEL_DOWNLOADS.pop(str(mid), None)
+    return {"ok": True, "model": str(mid), "status": "deleted", "path": path}
+
+
+def _find_model_refs(model_path: str, store: Any = None) -> List[Dict[str, Any]]:
+    """引用保护：扫描工作流节点 params/literal_inputs 中引用模型路径的引用清单。
+
+    store 缺省用全局 wfstore；测试可注入临时 WorkflowStore。
+    """
+    path = os.path.abspath(str(model_path))
+    refs: List[Dict[str, Any]] = []
+    st = store if store is not None else wfstore
+    for wf in st.list():
+        for nid, node in wf.nodes.items():
+            for k, v in (node.params or {}).items():
+                if isinstance(v, str) and v:
+                    av = os.path.abspath(v)
+                    if av == path or av.startswith(path + os.sep):
+                        refs.append({"workflow": wf.id, "workflow_name": wf.name,
+                                     "node": nid, "param": k, "value": v})
+            for k, v in (node.literal_inputs or {}).items():
+                if isinstance(v, str) and v:
+                    av = os.path.abspath(v)
+                    if av == path or av.startswith(path + os.sep):
+                        refs.append({"workflow": wf.id, "workflow_name": wf.name,
+                                     "node": nid, "param": k, "value": v})
+    return refs
+
+
 # ---- 授权 API（纯云化：无本地 LicenseService 回落，强制云端） ----
 _CLOUD_UNAVAILABLE = "无法连接云端授权服务器，请联网后重试"
 _CLOUD_NOT_CONFIGURED = "需要云端授权：云端授权服务器未配置，请检查网络后重试"
@@ -1817,6 +2295,78 @@ if DEV_ENDPOINTS:
             return gate
         return {"ok": False, "code": "cloud_admin_only",
                 "message": "加积分请在云端管理后台（/admin）操作", "credits": 0}
+
+    @app.post("/api/dev/queue-slow-tasks")
+    async def dev_queue_slow_tasks(body: dict):
+        """R-04 队列 fixture（仅 dev 模式，FRAMEWEAVE_DEV_ENDPOINTS=1）：
+
+        压入 n 个慢任务（sleep 型最小链 `user/__sleep_test__`，默认 20s），供前端
+        验证队列排队/并发上限/逐任务取消。一次性调用即得到 6 任务排队现场。
+
+        请求：{count?: int(默认6), seconds?: float(默认20), cancel_pending?: bool(默认false)}
+        响应：{ok, tasks: [{task_id, wfid, queue_position}], snapshot: <queue.snapshot()>}
+        """
+        from .worker import limits as _wl
+        count = min(max(int((body or {}).get("count", 6) or 6), 1), 12)
+        seconds = float((body or {}).get("seconds", 20.0) or 20.0)
+        node_dir = declarative.USER_NODES_DIR
+        pkg = os.path.join(node_dir, "user_sleep_test")
+        os.makedirs(pkg, exist_ok=True)
+        manifest = {
+            "schema_version": 2, "engine_api": "1.0", "kind": "python",
+            "runtime": "python", "entrypoint": "node.py", "class_name": "SleepTestNode",
+            "type_id": "user/sleep_test", "title": "慢任务测试（sleep）",
+            "category": "用户节点",
+            "description": "验收 fixture：按 seconds 秒阻塞，供队列排队/取消验证",
+            "version": "1.0.0",
+            "inputs": [],
+            "outputs": [{"name": "out", "type": "JSON", "required": False}],
+            "params": [{"name": "seconds", "type": "FLOAT", "label": "秒", "required": False,
+                        "default": 20.0, "widget": "number"}],
+            "permission": {},
+        }
+        with open(os.path.join(pkg, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        node_py = (
+            "import asyncio\n"
+            "from app.nodespec import NodeBase, NodeSpec, PortSpec, PortType\n"
+            "class SleepTestNode(NodeBase):\n"
+            "    @classmethod\n"
+            "    def spec(cls):\n"
+            "        return NodeSpec(type_id='user/sleep_test', title='慢任务测试（sleep）',\n"
+            "                        category='用户节点', description='验收 fixture：sleep',\n"
+            "                        inputs=[],\n"
+            "                        outputs=[PortSpec('out', PortType.JSON, required=False)],\n"
+            "                        params=[PortSpec('seconds', PortType.FLOAT, default=20.0,\n"
+            "                                        widget='number', required=False)],\n"
+            "                        version='1.0.0')\n"
+            "    async def run(self, ctx, inputs, params):\n"
+            "        secs = float((params or {}).get('seconds', 20.0) or 20.0)\n"
+            "        await asyncio.sleep(max(0.5, min(secs, 300.0)))\n"
+            "        return {'out': {'slept': secs}}\n"
+        )
+        with open(os.path.join(pkg, "node.py"), "w", encoding="utf-8") as f:
+            f.write(node_py)
+        try:
+            declarative.scan()  # 运行时注册 fixture 节点（幂等）
+        except Exception as _e:  # noqa: BLE001
+            pass
+        if declarative.get_class("user/sleep_test") is None:
+            return JSONResponse({"ok": False, "code": "fixture_register_failed",
+                                 "message": "sleep 测试节点注册失败"}, status_code=500)
+        from .engine import GraphNode
+        tasks = []
+        for i in range(count):
+            wf = wfstore.create(f"queue-slow-{i + 1}")
+            wf.nodes["n1"] = GraphNode(id="n1", type_id="user/sleep_test",
+                                       params={"seconds": seconds})
+            wfstore.save(wf)
+            t = await task_queue.enqueue(wf.id, mode="all")
+            tasks.append({"task_id": t.task_id, "wfid": wf.id,
+                          "queue_position": task_queue.position_of(t.task_id)})
+        snap = await task_queue.snapshot()
+        return {"ok": True, "count": len(tasks), "tasks": tasks,
+                "snapshot": snap, "note": "dev fixture：排队/取消验证用（cancel: DELETE /api/queue/{task_id}）"}
 
 
 @app.api_route("/api/auth/verify", methods=["GET", "POST"])

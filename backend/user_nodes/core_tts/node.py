@@ -10,6 +10,12 @@
             auto_start_server 拉起后从服务日志读取真实 bound port（不硬编码轮询）；
             合成后按 duration_factor 变速。
 - cloud:    OpenAI 兼容 /audio/speech（base_url 可配，Key 支持 @secret: 引用）
+- aliyun:   阿里云双模式——NLS REST（/stream/v1/tts，AppKey+Token，speech_rate/
+            volume/pitch_rate）与 CosyVoice（DashScope text2audio SSE，speed 倍率）；
+            Token 支持预签发（aliyun_token）或 AK/SK 签名获取（aliyun_ak_id+_secret）。
+- volcano:  豆包（火山引擎）合成 REST（POST /api/v1/tts，AppID+AccessToken，
+            speed_ratio/volume_ratio/pitch_ratio），ICL2.0 克隆音色以 SpeakerID
+            作 voice_type 直接复用（training 链在火山控制台/OpenAPI 侧完成）。
 
 批量语义：连接 segments(SEGMENTS) 时按段合成（每段取 text/narration/source_text），
 段级并发 ≤ max_concurrent、失败隔离、可选 ffmpeg 合并；未连接 segments 时按
@@ -86,8 +92,8 @@ def voice_options() -> List[str]:
 def resolve_edge_voice(voice: str) -> str:
     """edge 引擎音色归一：接受 {provider}:{native_id} 统一模型 → native_id。
 
-    非 edge 提供商（volcano/aliyun/index）→ 明确报错（core/tts 仅能合成
-    edge/indextts/cloud 引擎音色）；裸 id（无冒号）按 edge 兼容处理。
+    非 edge 提供商（volcano/aliyun/index）→ 明确报错（需切换到对应引擎）；
+    裸 id（无冒号）按 edge 兼容处理。
     """
     v = str(voice or "").strip()
     if not v:
@@ -96,10 +102,68 @@ def resolve_edge_voice(voice: str) -> str:
         provider, native = v.split(":", 1)
         if provider != "edge":
             raise RuntimeError(
-                f"invalid: 音色 {v!r} 属于 {provider} 引擎，当前 core/tts 仅支持 "
-                "edge/indextts/cloud 引擎合成（volcano/aliyun 音色需对应服务接入）")
+                f"invalid: 音色 {v!r} 属于 {provider} 引擎，edge 引擎仅支持 edge:* 音色——"
+                "请切换到 aliyun/volcano/index 对应引擎")
         return native
     return v
+
+
+def resolve_vendor_voice(engine: str, voice: str, mode: str = "") -> str:
+    """aliyun/volcano 引擎音色归一：接受 {provider}:{native_id} → native_id。
+
+    - volcano：接受 volcano:*（含 ICL2.0 克隆 SpeakerID，直接作 voice_type）；
+    - aliyun：接受 aliyun:*/aliyun-nls:*/aliyun-cosy:*（nls/cosyvoice 双模式共用，
+      mode 由 aliyun_mode 参数决定；带模式前缀与参数冲突时明确报错）。
+    裸 id（无冒号）按该引擎原生音色 id 兼容处理。
+    """
+    v = str(voice or "").strip()
+    if not v:
+        return ""
+    if ":" not in v:
+        return v
+    provider, native = v.split(":", 1)
+    if provider == engine:
+        return native
+    if engine == "aliyun" and provider in ("aliyun-nls", "aliyun-cosy"):
+        if mode == "nls" and provider == "aliyun-cosy":
+            raise RuntimeError(
+                f"invalid: 音色 {v!r} 是 CosyVoice 音色，请把 aliyun_mode 切换为 cosyvoice")
+        if mode == "cosyvoice" and provider == "aliyun-nls":
+            raise RuntimeError(
+                f"invalid: 音色 {v!r} 是 NLS 音色，请把 aliyun_mode 切换为 nls")
+        return native
+    raise RuntimeError(
+        f"invalid: 音色 {v!r} 不属于 {engine} 引擎——请选择 {engine}:* 音色（edge/index 音色请切换引擎）")
+
+
+def _ratio_param(raw: Any, default: float = 1.0, lo: float = 0.5, hi: float = 2.0) -> float:
+    """把 edge 语法参数（+10% / -20% / +0Hz / 1.2）转换为比率（1.0=正常）。
+
+    aliyun/volcano 引擎请求里 rate/volume/pitch 一律按比率语义映射：
+      "+10%" → 1.10；"-20%" → 0.80；"+50Hz"（音调）→ 1.50 近似；裸数字 → 直取。
+    解析失败回落 default，并限幅到 [lo, hi]。
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return default
+    sign = 1.0 if not s.startswith("-") else -1.0
+    if s.endswith("%"):
+        num = re.sub(r"[^0-9.]", "", s)
+        try:
+            return max(lo, min(hi, 1.0 + sign * float(num) / 100.0))
+        except ValueError:
+            return default
+    if s.lower().endswith("hz"):
+        num = re.sub(r"[^0-9.]", "", s)
+        try:
+            # 音调 +xHz → 比率近似 1 + x/100（有限幅度内线性近似）
+            return max(lo, min(hi, 1.0 + float(num) / 100.0))
+        except ValueError:
+            return default
+    try:
+        return max(lo, min(hi, float(s)))
+    except ValueError:
+        return default
 
 
 def _split_long_text(text: str, chunk_chars: int) -> List[str]:
@@ -155,13 +219,18 @@ def _ffprobe_bin(ffmpeg: str) -> str:
 
 
 async def _probe_duration(ctx, ffmpeg_path: str, media_path: str) -> Optional[float]:
-    """ffprobe 音频时长（秒）。失败返回 None（不阻断主流程）。"""
+    """ffprobe 音频时长（秒）。失败返回 None（不阻断主流程）。
+
+    run_tracked 默认继承 stdout（不捕获）——显式 PIPE 捕获，否则输出落入父进程
+    控制台、stdout=None，时长探测恒失败（duration/marks 退化为 0）。
+    """
+    import subprocess as _sp
     ffmpeg = _resolve_ffmpeg(ffmpeg_path)
     ffprobe = _ffprobe_bin(ffmpeg)
     try:
         out = await ctx["run_tracked"](
             [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", media_path],
-            timeout=60)
+            timeout=60, stdout=_sp.PIPE, stderr=_sp.PIPE)
         if out.returncode != 0 or not out.stdout:
             return None
         data = json.loads(out.stdout.decode("utf-8", "replace"))
@@ -231,7 +300,7 @@ class TTSNode(NodeBase):
             type_id="core/tts",
             title="TTS 配音（多引擎）",
             category="音频",
-            description="文字转语音：Edge免费 / IndexTTS2本地克隆 / 云端兼容 / 人工配音；长文本分块与分段批量合成",
+            description="文字转语音：Edge免费 / IndexTTS2本地克隆 / OpenAI兼容 / 阿里NLS+CosyVoice / 豆包火山；长文本分块与分段批量合成",
             inputs=[
                 PortSpec(name="script", type=PortType.SCRIPT, label="文案", required=False),
                 PortSpec(name="segments", type=PortType.SEGMENTS, label="分段列表", required=False),
@@ -248,10 +317,11 @@ class TTSNode(NodeBase):
                 PortSpec(name="direct_text", type=PortType.STRING, label="直接输入文案",
                          default="", widget="text", description="留空时使用上游文案输入"),
                 PortSpec(name="engine", type=PortType.STRING, label="引擎", default="edge",
-                         widget="select", options=["edge", "manual", "indextts", "cloud"]),
+                         widget="select",
+                         options=["edge", "manual", "indextts", "cloud", "aliyun", "volcano"]),
                 PortSpec(name="voice", type=PortType.STRING, label="音色", default="zh-CN-XiaoxiaoNeural",
                          widget="select", options=voice_options(),
-                         description="edge 音色（内置 39 + 音色库 214 动态加载，id=provider:native_id 统一模型）；indextts/cloud 由 lang/cloud_voice 等控制"),
+                         description="edge 音色（内置 39 + 音色库 214 动态加载，id=provider:native_id 统一模型）；volcano 选 volcano:*（含 ICL 克隆 SpeakerID）；aliyun 选 aliyun:*（mode 由 aliyun_mode 决定）"),
                 PortSpec(name="rate", type=PortType.STRING, label="语速", default="+0%",
                          widget="text", description="edge-tts 语速如 +10%"),
                 PortSpec(name="pitch", type=PortType.STRING, label="音调", default="+0Hz", widget="text"),
@@ -277,6 +347,35 @@ class TTSNode(NodeBase):
                          default="alloy", widget="text"),
                 PortSpec(name="cloud_speed", type=PortType.STRING, label="云端语速", default="1.0",
                          widget="text", description="0.25~4.0"),
+                PortSpec(name="aliyun_mode", type=PortType.STRING, label="阿里模式", default="nls",
+                         widget="select", options=["nls", "cosyvoice"],
+                         description="nls=NLS REST 标准音色；cosyvoice=DashScope 大模型音色"),
+                PortSpec(name="aliyun_appkey", type=PortType.STRING, label="阿里 AppKey",
+                         widget="text", description="NLS AppKey（可 @secret:名称 引用）"),
+                PortSpec(name="aliyun_token", type=PortType.STRING, label="阿里 Token",
+                         widget="text", description="NLS 预签发 Token 或 DashScope API Key（可 @secret:名称 引用）；留空且填 AK/SK 时自动换取"),
+                PortSpec(name="aliyun_ak_id", type=PortType.STRING, label="阿里 AccessKey ID",
+                         widget="text", description="NLS Token 换取用 AccessKey ID（可 @secret:名称 引用）"),
+                PortSpec(name="aliyun_ak_secret", type=PortType.STRING, label="阿里 AccessKey Secret",
+                         widget="password", description="NLS Token 换取用 AccessKey Secret（可 @secret:名称 引用）"),
+                PortSpec(name="aliyun_model", type=PortType.STRING, label="CosyVoice 模型",
+                         default="cosyvoice-v2", widget="text",
+                         description="cosyvoice-v2 / cosyvoice-v3-flash"),
+                PortSpec(name="aliyun_base_url", type=PortType.STRING,
+                         label="阿里合成端点", default="https://nls-gateway-cn-shanghai.aliyuncs.com",
+                         widget="text", description="nls 模式=NLS /stream/v1/tts 网关；cosyvoice 模式=DashScope base（默认 https://dashscope.aliyuncs.com，可配代理/地域端点）"),
+                PortSpec(name="aliyun_token_url", type=PortType.STRING,
+                         label="NLS Token 端点", default="https://nls-meta.cn-shanghai.aliyuncs.com/oauth2/token",
+                         widget="text", description="AK/SK 换取 NLS Token 的 RPC 端点"),
+                PortSpec(name="volcano_appid", type=PortType.STRING, label="豆包 AppID",
+                         widget="text", description="火山引擎豆包 TTS AppID（可 @secret:名称 引用）"),
+                PortSpec(name="volcano_token", type=PortType.STRING, label="豆包 AccessToken",
+                         widget="password", description="火山引擎豆包 TTS AccessToken（可 @secret:名称 引用）"),
+                PortSpec(name="volcano_cluster", type=PortType.STRING, label="豆包集群",
+                         default="volcano_tts", widget="text"),
+                PortSpec(name="volcano_base_url", type=PortType.STRING,
+                         label="豆包合成端点", default="https://openspeech.bytedance.com",
+                         widget="text", description="POST /api/v1/tts 基址"),
                 PortSpec(name="chunk_chars", type=PortType.INT, label="长文本分块字数", default=800,
                          widget="number", description="edge/indextts 按标点分块合成再合并"),
                 PortSpec(name="max_concurrent", type=PortType.INT, label="批量并发", default=5,
@@ -288,7 +387,7 @@ class TTSNode(NodeBase):
                 PortSpec(name="ffmpeg_path", type=PortType.STRING, label="ffmpeg 路径", default="",
                          widget="text", description="留空自动探测"),
             ],
-            version="2.0.0",
+            version="2.1.0",
         )
 
     async def run(self, ctx, inputs, params) -> Dict[str, Any]:
@@ -320,8 +419,9 @@ class TTSNode(NodeBase):
             return await self._run_edge_single(ctx, inputs, params, text, progress)
         if engine == "indextts":
             return await self._run_indextts_single(ctx, inputs, params, text, progress)
-        if engine == "cloud":
-            return await self._run_cloud_single(ctx, inputs, params, text, progress)
+        if engine in ("cloud", "aliyun", "volcano"):
+            # OpenAI 兼容 / 阿里 NLS+CosyVoice / 豆包火山 共用分块-并发-合并骨架
+            return await self._run_vendor_single(engine, ctx, inputs, params, text, progress)
         raise RuntimeError(f"未知引擎: {engine}")
 
     # ------------------------------------------------------------ 公共工具
@@ -355,6 +455,22 @@ class TTSNode(NodeBase):
             "cloud_model": str(params.get("cloud_model", "tts-1") or "tts-1"),
             "cloud_voice": str(params.get("cloud_voice", "alloy") or "alloy"),
             "cloud_speed": str(params.get("cloud_speed", "1.0") or "1.0"),
+            # 阿里 / 豆包 引擎（C4）
+            "aliyun_mode": str(params.get("aliyun_mode", "nls") or "nls").lower(),
+            "aliyun_appkey": str(params.get("aliyun_appkey", "") or ""),
+            "aliyun_token": str(params.get("aliyun_token", "") or ""),
+            "aliyun_ak_id": str(params.get("aliyun_ak_id", "") or ""),
+            "aliyun_ak_secret": str(params.get("aliyun_ak_secret", "") or ""),
+            "aliyun_model": str(params.get("aliyun_model", "cosyvoice-v2") or "cosyvoice-v2"),
+            "aliyun_base_url": str(params.get("aliyun_base_url",
+                                              "https://nls-gateway-cn-shanghai.aliyuncs.com") or ""),
+            "aliyun_token_url": str(params.get("aliyun_token_url",
+                                               "https://nls-meta.cn-shanghai.aliyuncs.com/oauth2/token") or ""),
+            "volcano_appid": str(params.get("volcano_appid", "") or ""),
+            "volcano_token": str(params.get("volcano_token", "") or ""),
+            "volcano_cluster": str(params.get("volcano_cluster", "volcano_tts") or "volcano_tts"),
+            "volcano_base_url": str(params.get("volcano_base_url",
+                                               "https://openspeech.bytedance.com") or ""),
         }
 
     async def _save_audio(self, store, path: str, meta: Dict[str, Any],
@@ -376,6 +492,10 @@ class TTSNode(NodeBase):
                                                   text=text, out_path=out_path)
         elif engine == "cloud":
             await self._cloud_synth_with_retry(ctx, p, text, out_path)
+        elif engine == "aliyun":
+            await self._aliyun_synth_with_retry(ctx, p, text, out_path)
+        elif engine == "volcano":
+            await self._volcano_synth_with_retry(ctx, p, text, out_path)
         else:
             raise RuntimeError(f"批量不支持引擎: {engine}")
         duration = await _probe_duration(ctx, p.get("ffmpeg_path", ""), out_path)
@@ -627,6 +747,7 @@ class TTSNode(NodeBase):
                      "可用环境变量 INDEX_TTS_ROOT 指定，或 INDEX_TTS_URL 指向已运行服务"))
         log_path = os.path.join(proj if not getattr(sys, "frozen", False) else os.path.dirname(sys.executable),
                                 "data", "indextts_server.log")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
         logf = open(log_path, "a", encoding="utf-8")
         env = dict(os.environ)
         env["PYTHONUTF8"] = "1"
@@ -914,6 +1035,15 @@ class TTSNode(NodeBase):
                 await asyncio.sleep(min(30, 0.25 * (2 ** attempt)))
 
     async def _run_cloud_single(self, ctx, inputs, params, text: str, progress) -> Dict[str, Any]:
+        return await self._run_vendor_single("cloud", ctx, inputs, params, text, progress)
+
+    async def _run_vendor_single(self, engine: str, ctx, inputs, params, text: str,
+                                 progress) -> Dict[str, Any]:
+        """厂商 REST 引擎单条合成（cloud/aliyun/volcano 共用）：分块-并发-合并-资产骨架。
+
+        分块策略与 edge/cloud 一致：按 chunk_chars 标点分块、段级并发 ≤ max_concurrent、
+        多块时 ffmpeg concat 合并；时长探测失败不阻断。
+        """
         p = self._params(params)
         out_dir = self._out_dir(ctx["store"])
         progress(0.1)
@@ -925,8 +1055,8 @@ class TTSNode(NodeBase):
 
         async def one(chunk: str) -> Dict[str, Any]:
             async with sem:
-                path = self._uniq_path(out_dir, "cloud_chunk", "mp3")
-                await self._cloud_synth_with_retry(ctx, p, chunk, path)
+                path = self._uniq_path(out_dir, engine + "_chunk", p["output_format"])
+                await self._synth_worker(ctx, engine, p, chunk, path)
                 dur = await _probe_duration(ctx, p["ffmpeg_path"], path)
                 return {"path": path, "duration": dur, "chars": len(chunk)}
 
@@ -940,7 +1070,7 @@ class TTSNode(NodeBase):
         if len(paths) == 1:
             final_path = paths[0]
         else:
-            final_path = self._uniq_path(out_dir, "cloud_merged", "mp3")
+            final_path = self._uniq_path(out_dir, engine + "_merged", p["output_format"])
             await _ffmpeg_concat(ctx, p["ffmpeg_path"], paths, final_path)
             for pth in paths:
                 if pth != final_path:
@@ -950,16 +1080,268 @@ class TTSNode(NodeBase):
                         pass
         total_dur = await _probe_duration(ctx, p["ffmpeg_path"], final_path) or round(sum(durations), 3)
         progress(1.0)
+        voice = str(params.get("voice", ""))
         asset = await self._save_audio(ctx["store"], final_path,
-                                       {"engine": "cloud", "voice": p["cloud_voice"],
-                                        "model": p["cloud_model"], "chunks": len(chunks),
+                                       {"engine": engine, "voice": voice,
+                                        "chunks": len(chunks),
                                         "rt_s": round(time.time() - started, 1)}, duration=total_dur)
         marks = self._build_marks(chunks, durations, [r["chars"] for r in results], total_dur)
-        report = {"engine": "cloud", "voice": p["cloud_voice"], "model": p["cloud_model"],
+        report = {"engine": engine, "voice": voice,
                   "chunks": len(chunks), "duration": total_dur,
                   "rt_s": round(time.time() - started, 1),
                   "warnings": [f"分块合成 {len(chunks)} 段并合并"] if len(chunks) > 1 else []}
         return {"audio": asset, "duration": total_dur, "marks": marks, "report": report}
+
+    # ------------------------------------------------------------ aliyun（NLS + CosyVoice，C4）
+
+    @staticmethod
+    def _nls_fetch_token(ak: str, sk: str, token_url: str) -> str:
+        """阿里云 RPC 签名（HMAC-SHA1）换取 NLS Token（nls-meta /oauth2/token CreateToken）。"""
+        import base64
+        import hashlib
+        import hmac
+        import urllib.parse
+        import urllib.request
+        from datetime import datetime, timezone
+
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        params = {
+            "AccessKeyId": ak, "Action": "CreateToken", "Format": "JSON",
+            "SignatureMethod": "HMAC-SHA1", "SignatureNonce": uuid.uuid4().hex,
+            "SignatureVersion": "1.0", "Timestamp": ts, "Version": "2019-02-28",
+        }
+
+        def enc(v: str) -> str:
+            return urllib.parse.quote(str(v), safe="")
+
+        canonical = "&".join("%s=%s" % (enc(k), enc(params[k])) for k in sorted(params))
+        string_to_sign = "GET&%2F&" + urllib.parse.quote(canonical, safe="")
+        sig = base64.b64encode(hmac.new(
+            (sk + "&").encode("utf-8"), string_to_sign.encode("utf-8"),
+            hashlib.sha1).digest()).decode("utf-8")
+        url = token_url + "?" + canonical + "&Signature=" + urllib.parse.quote(sig, safe="")
+        try:
+            with urllib.request.urlopen(url, timeout=20) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+        except Exception as e:  # noqa: BLE001 —— 网络/解析失败统一收口
+            raise RuntimeError(f"aliyun NLS 获取 Token 失败: {e}") from e
+        tok = ((data.get("Token") or {}).get("Id")) or ""
+        if not tok:
+            raise RuntimeError(
+                "invalid: 阿里云 NLS 换取 Token 失败（检查 AccessKey ID/Secret）: %s"
+                % json.dumps(data, ensure_ascii=False)[:300])
+        return tok
+
+    async def _aliyun_nls_synth_once(self, ctx, p: Dict[str, Any], text: str,
+                                     out_path: str, token: str) -> None:
+        """NLS REST：POST /stream/v1/tts（appkey+token，speech_rate/volume/pitch_rate）。"""
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+        appkey = _resolve_secret(ctx, str(p.get("aliyun_appkey", "") or ""))
+        if not appkey:
+            raise RuntimeError("invalid: 需配置密钥——aliyun NLS 需要 AppKey（aliyun_appkey，可 @secret: 引用）")
+        voice = resolve_vendor_voice("aliyun", p.get("voice", ""), "nls")
+        if not voice:
+            raise RuntimeError("invalid: aliyun NLS 需要 aliyun:* 音色（音色库或原生 NLS 音色名）")
+        speed = _ratio_param(p.get("rate", "+0%"))
+        volume = _ratio_param(p.get("volume", "+0%"), default=1.0, lo=0.0, hi=1.5)
+        pitch = _ratio_param(p.get("pitch", "+0Hz"))
+        query = {
+            "appkey": appkey, "token": token,
+            "format": p["output_format"], "sample_rate": "16000", "voice": voice,
+            "speech_rate": str(max(-500, min(500, round((speed - 1.0) * 100)))),
+            "pitch_rate": str(max(-500, min(500, round((pitch - 1.0) * 100)))),
+            "volume": str(max(0, min(100, round(volume * 50)))),
+            "text_type": "plain", "text": text,
+        }
+        url = str(p.get("aliyun_base_url", "") or "https://nls-gateway-cn-shanghai.aliyuncs.com").rstrip("/")
+        url += "/stream/v1/tts?" + urllib.parse.urlencode(query)
+        req = urllib.request.Request(url, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                audio = r.read()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"aliyun NLS /stream/v1/tts HTTP {e.code}: "
+                               f"{e.read().decode('utf-8', 'replace')[:300]}") from e
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"aliyun NLS /stream/v1/tts 网络/超时错误: {e}") from e
+        if not audio or len(audio) < 512:
+            raise RuntimeError("aliyun NLS 返回空音频")
+        with open(out_path, "wb") as f:
+            f.write(audio)
+
+    async def _aliyun_cosy_synth_once(self, ctx, p: Dict[str, Any], text: str,
+                                      out_path: str, api_key: str) -> None:
+        """CosyVoice（DashScope）：POST text2audio/generation，SSE 事件内 base64 音频。"""
+        import base64 as _b64
+        import urllib.error
+        import urllib.request
+        voice = resolve_vendor_voice("aliyun", p.get("voice", ""), "cosyvoice")
+        if not voice:
+            raise RuntimeError("invalid: aliyun CosyVoice 需要 aliyun:* 音色（大模型音色）")
+        speed = _ratio_param(p.get("rate", "+0%"), lo=0.5, hi=2.0)
+        payload = {
+            "model": str(p.get("aliyun_model", "cosyvoice-v2") or "cosyvoice-v2"),
+            "input": {"text": text},
+            "voice": voice,
+            "parameters": {"format": p["output_format"], "sample_rate": 24000, "speed": speed},
+        }
+        base = str(p.get("aliyun_base_url", "") or "").rstrip("/") or "https://dashscope.aliyuncs.com"
+        url = base + "/api/v1/services/aigc/text2audio/generation"
+        req = urllib.request.Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                                     method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", "Bearer " + api_key)
+        req.add_header("X-DashScope-SSE", "enable")
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                raw = r.read()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"aliyun CosyVoice text2audio HTTP {e.code}: "
+                               f"{e.read().decode('utf-8', 'replace')[:300]}") from e
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"aliyun CosyVoice text2audio 网络/超时错误: {e}") from e
+        # SSE 解析：逐行 data: {json}，output.audio 为 base64 音频（可多段拼接）；
+        # 非 SSE（mock/代理直回二进制）→ 原文落盘。
+        text_body = raw.decode("utf-8", "replace")
+        audio_parts: List[bytes] = []
+        for line in text_body.splitlines():
+            if not line.startswith("data:"):
+                continue
+            try:
+                obj = json.loads(line[5:].strip())
+            except ValueError:
+                continue
+            out = obj.get("output") or {}
+            if out.get("audio"):
+                try:
+                    audio_parts.append(_b64.b64decode(str(out["audio"])))
+                except Exception:  # noqa: BLE001
+                    continue
+        if audio_parts:
+            audio = b"".join(audio_parts)
+        else:
+            audio = raw
+        if not audio or len(audio) < 512:
+            raise RuntimeError("aliyun CosyVoice 返回空音频")
+        with open(out_path, "wb") as f:
+            f.write(audio)
+
+    async def _aliyun_synth_with_retry(self, ctx, p: Dict[str, Any], text: str, out_path: str) -> None:
+        mode = str(p.get("aliyun_mode", "nls") or "nls").lower()
+        retries = int(p.get("retries", 3) or 3)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                if mode == "nls":
+                    token = _resolve_secret(ctx, str(p.get("aliyun_token", "") or ""))
+                    if not token:
+                        ak = _resolve_secret(ctx, str(p.get("aliyun_ak_id", "") or ""))
+                        sk = _resolve_secret(ctx, str(p.get("aliyun_ak_secret", "") or ""))
+                        if not ak or not sk:
+                            raise RuntimeError(
+                                "invalid: 需配置密钥——aliyun NLS 需要预签发 Token（aliyun_token）或 "
+                                "AccessKey ID/Secret（aliyun_ak_id+aliyun_ak_secret），均可 @secret: 引用")
+                        token = self._nls_fetch_token(ak, sk, str(p.get("aliyun_token_url", "")))
+                    await self._aliyun_nls_synth_once(ctx, p, text, out_path, token)
+                elif mode == "cosyvoice":
+                    api_key = _resolve_secret(ctx, str(p.get("aliyun_token", "") or ""))
+                    if not api_key:
+                        api_key = _resolve_secret(ctx, str(p.get("api_key", "") or ""))
+                    if not api_key:
+                        raise RuntimeError(
+                            "invalid: 需配置密钥——aliyun CosyVoice 需要 DashScope API Key"
+                            "（aliyun_token 或 api_key，可 @secret: 引用）")
+                    await self._aliyun_cosy_synth_once(ctx, p, text, out_path, api_key)
+                else:
+                    raise RuntimeError(f"invalid: 未知 aliyun_mode: {mode!r}（nls|cosyvoice）")
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 —— 重试网络类错误，配置类错误原样上抛
+                if attempt > retries:
+                    raise RuntimeError(f"aliyun {mode} 第 {attempt} 次失败: {e}") from e
+                await asyncio.sleep(min(30, 0.25 * (2 ** attempt)))
+
+    # ------------------------------------------------------------ volcano（豆包，C4）
+
+    async def _volcano_synth_once(self, ctx, p: Dict[str, Any], text: str, out_path: str,
+                                  appid: str, token: str) -> None:
+        """豆包合成 REST：POST /api/v1/tts（speed_ratio/volume_ratio/pitch_ratio）。"""
+        import urllib.error
+        import urllib.request
+        voice = resolve_vendor_voice("volcano", p.get("voice", ""))
+        if not voice:
+            raise RuntimeError("invalid: volcano 引擎需要 volcano:* 音色（音色库或 ICL 克隆 SpeakerID）")
+        cluster = str(p.get("volcano_cluster", "volcano_tts") or "volcano_tts")
+        encoding = p["output_format"]
+        if encoding not in ("mp3", "wav", "pcm", "ogg"):
+            encoding = "mp3"
+        payload = {
+            "app": {"appid": appid, "token": token, "cluster": cluster},
+            "user": {"uid": "frameweave_user"},
+            "audio": {
+                "voice_type": voice, "encoding": encoding,
+                "speed_ratio": _ratio_param(p.get("rate", "+0%")),
+                "volume_ratio": _ratio_param(p.get("volume", "+0%"), default=1.0, lo=0.0, hi=1.5),
+                "pitch_ratio": _ratio_param(p.get("pitch", "+0Hz")),
+            },
+            "request": {"reqid": uuid.uuid4().hex, "text": text,
+                        "text_type": "plain", "operation": "query"},
+        }
+        url = str(p.get("volcano_base_url", "") or "https://openspeech.bytedance.com").rstrip("/")
+        url += "/api/v1/tts"
+        req = urllib.request.Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                                     method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", "Bearer;" + token)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                audio = r.read()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"volcano /api/v1/tts HTTP {e.code}: "
+                               f"{e.read().decode('utf-8', 'replace')[:300]}") from e
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"volcano /api/v1/tts 网络/超时错误: {e}") from e
+        # 业务错误以 JSON 返回（code == 3000 为成功；成功时为二进制音频，JSON 解析失败属正常）
+        err = None
+        try:
+            parsed = json.loads(audio.decode("utf-8", "replace"))
+            if isinstance(parsed, dict):
+                code = parsed.get("code")
+                if code not in (None, 3000):
+                    raise RuntimeError(f"volcano /api/v1/tts 业务错误: {parsed}")
+        except (UnicodeDecodeError, ValueError):
+            pass
+        if len(audio) < 512:
+            raise RuntimeError("volcano /api/v1/tts 返回空音频")
+        with open(out_path, "wb") as f:
+            f.write(audio)
+
+    async def _volcano_synth_with_retry(self, ctx, p: Dict[str, Any], text: str, out_path: str) -> None:
+        appid = _resolve_secret(ctx, str(p.get("volcano_appid", "") or ""))
+        token = _resolve_secret(ctx, str(p.get("volcano_token", "") or ""))
+        if not appid:
+            raise RuntimeError(
+                "invalid: 需配置密钥——volcano 引擎需要 AppID（volcano_appid，可 @secret: 引用）")
+        if not token:
+            raise RuntimeError(
+                "invalid: 需配置密钥——volcano 引擎需要 AccessToken（volcano_token，可 @secret: 引用）")
+        retries = int(p.get("retries", 3) or 3)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                await self._volcano_synth_once(ctx, p, text, out_path, appid, token)
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                if attempt > retries:
+                    raise RuntimeError(f"volcano 第 {attempt} 次失败: {e}") from e
+                await asyncio.sleep(min(30, 0.25 * (2 ** attempt)))
 
     # ------------------------------------------------------------ 批量（分段）
 

@@ -45,6 +45,8 @@
 - [FrameWeave 项目深度分析报告](reports/FrameWeave_项目深度分析报告.md)
 - [cloud E2E 报告](reports/cloud_e2e_report.md)
 - [授权服务器连通性验证报告 20261009](reports/授权服务器连通性验证报告_20261009.md)
+- [服务器安全运维审计 20261017](reports/服务器安全运维审计_20261017.md)
+- [部署前检查清单与回滚步骤 20261017](reports/部署前检查清单与回滚步骤_20261017.md)
 
 ## 维护约定
 

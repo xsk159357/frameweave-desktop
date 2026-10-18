@@ -395,8 +395,14 @@ class ASRNode(NodeBase):
                          widget="number", description="gemini 引擎按此窗长切分逐窗直听"),
                 PortSpec("add_roles", PortType.BOOL, label="标注角色(role)", default=True, widget="toggle",
                          description="为字幕行补 role 并输出 dialogues 端口（本地 Whisper 用启发式）"),
+                PortSpec("enable_diarization", PortType.BOOL, label="说话人区分", default=False,
+                         widget="toggle",
+                         description="启用 sherpa-onnx 说话人区分（TK 流程）；为字幕行补 speaker 字段（speaker_0/1...）"),
+                PortSpec("diarization_model_dir", PortType.STRING, label="Diarization 模型目录", default="",
+                         widget="text",
+                         description="sherpa-onnx 说话人区分模型目录（含 model.onnx/segmentation 与 embedding 模型）；留空自动探测 models/diarization"),
             ],
-            version="3.0.0",
+            version="3.1.0",
         )
 
     async def run(self, ctx: dict, inputs: dict, params: dict) -> Dict[str, Any]:
@@ -422,6 +428,8 @@ class ASRNode(NodeBase):
         remote_model = str(params.get("remote_model", "whisper-1") or "whisper-1").strip() or "whisper-1"
         gemini_model = str(params.get("gemini_model", "gemini-1.5-flash") or "gemini-1.5-flash").strip() or "gemini-1.5-flash"
         window_seconds = float(params.get("window_seconds", 60.0) or 60.0)
+        enable_diarization = bool(params.get("enable_diarization", False))
+        diarization_model_dir = str(params.get("diarization_model_dir", "") or "").strip()
 
         progress = ctx.get("progress") or (lambda p: None)
         warnings: List[str] = []
@@ -478,6 +486,25 @@ class ASRNode(NodeBase):
             raise RuntimeError(
                 "contract: 无可用的 ASR 引擎——安装 faster-whisper（local）或提供 api_key（gemini/remote）")
 
+        # G2：可选说话人区分（sherpa-onnx SpeakerDiarization；模型缺失/失败 → 降级警告不阻断）
+        diar_warnings: List[str] = []
+        if enable_diarization:
+            try:
+                from app.plugin import deps
+                mdir = diarization_model_dir or ""
+                if not mdir:
+                    mr = deps.resolve_model("sherpa-onnx-diarization",
+                                            params={"model_dir": diarization_model_dir})
+                    mdir = str(mr.get("path") or "") if mr.get("ready") else ""
+                if not mdir or not os.path.isdir(mdir):
+                    diar_warnings.append(
+                        "enable_diarization=开但模型目录不可用（sherpa-onnx 说话人区分模型未就绪），跳过 speaker 标注")
+                else:
+                    rows, diar_warnings = await self._diarize_speakers(
+                        src_path, mdir, rows, diar_warnings)
+            except Exception as e:  # noqa: BLE001
+                diar_warnings.append(f"说话人区分失败（{type(e).__name__}: {e}），跳过 speaker 标注")
+
         # C2/A5：角色标注（本地/远程句级用启发式；gemini 已在解析时带 role）
         if add_roles and engine_used != "gemini":
             rows = annotate_roles(rows, with_role=True)
@@ -490,8 +517,18 @@ class ASRNode(NodeBase):
         role_stats: Dict[str, int] = {}
         for d in dialogues:
             role_stats[d["role"]] = role_stats.get(d["role"], 0) + 1
+        if diar_warnings:
+            warnings = list(warnings) + diar_warnings
 
         store = ctx["store"]
+
+        # G2：diarization 语义沿用到 dialogues（speaker 字段并入）
+        if enable_diarization and not diar_warnings:
+            for d in dialogues:
+                sp = str(d.get("speaker") or "")
+                if sp:
+                    d["raw_role"] = d.get("raw_role") or d.get("role")
+                    d["role"] = "speaker"
         sub_asset = store.save_asset(
             Asset(id="", kind=PortType.SUBTITLE.value,
                   meta={"count": len(rows), "engine": engine_used, "model": model,
@@ -522,6 +559,10 @@ class ASRNode(NodeBase):
             "window_seconds": window_seconds if engine_used == "gemini" else None,
             "media": {"path": src_path, "kind": getattr(src_asset, "kind", "")},
             "warnings": warnings,
+            "diarization": {"enabled": enable_diarization,
+                            "model_dir": diarization_model_dir or "",
+                            "ok": bool(enable_diarization and not diar_warnings),
+                            "warnings": diar_warnings},
             "dependency": self._dep_blob(model, engine_used),
             "finished_at": time.time(),
         }
@@ -764,6 +805,117 @@ class ASRNode(NodeBase):
         lang_info = {"language": language_guess(rows), "language_probability": None, "duration": total}
         progress(1.0)
         return rows, lang_info, warnings
+
+    # ---------------------------------------------------------------- G2：说话人区分（sherpa-onnx）
+    async def _diarize_speakers(self, media_path: str, model_dir: str,
+                                rows: List[Dict[str, Any]],
+                                warnings: List[str]) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """sherpa-onnx SpeakerDiarization：为字幕行补 speaker 字段（按时间中心重叠匹配）。
+
+        - 模型目录需含 segmentation（如 sherpa-onnx-pyannote-segmentation-3-0）与
+          embedding（如 nemo_en_titanet_large）两大类 onnx 文件（模型中心 diarization 惯例）。
+        - 分段返回 [{start,end,speaker}]；字幕行时间中心落在分段内 → 标 speaker_n（按出现顺序重映射）。
+        - 失败以 warnings 降级（不抛错），返回原 rows。
+        """
+        try:
+            import sherpa_onnx  # noqa: F401
+        except ImportError:
+            return rows, warnings + [
+                "sherpa-onnx 未安装（pip install sherpa-onnx），说话人区分跳过——字幕仍由 ASR 引擎产出"]
+        try:
+            seg_path = os.path.join(model_dir, "segmentation.onnx")
+            emb_dir = os.path.join(model_dir, "embedding")
+            seg_ok = os.path.isfile(seg_path)
+            emb_ok = os.path.isdir(emb_dir)
+            if not seg_ok:
+                # 兼容平铺目录：model.onnx + 任意 embedding onnx
+                seg_path = os.path.join(model_dir, "model.onnx")
+                seg_ok = os.path.isfile(seg_path)
+                emb_ok = any(f.endswith(".onnx") for f in os.listdir(model_dir)
+                             if f != os.path.basename(seg_path))
+            if not seg_ok or not emb_ok:
+                return rows, warnings + [
+                    f"说话人区分模型目录不完整（缺 segmentation/embedding onnx）：{model_dir}"]
+            from sherpa_onnx import (SpeakerDiarization,  # noqa: E402
+                                     SpeakerDiarizationConfig,
+                                     SegModelConfig, EmbeddingModelConfig)
+
+            def _seg_models(md: str) -> SegModelConfig:
+                if os.path.isfile(os.path.join(md, "segmentation.onnx")):
+                    return SegModelConfig(model=os.path.join(md, "segmentation.onnx"))
+                return SegModelConfig(model=os.path.join(md, "model.onnx"))
+
+            def _emb_models(md: str) -> EmbeddingModelConfig:
+                cands = [os.path.join(md, "embedding", f) for f in os.listdir(
+                    os.path.join(md, "embedding")) if f.endswith(".onnx")] \
+                    if os.path.isdir(os.path.join(md, "embedding")) else []
+                if not cands:
+                    cands = [os.path.join(md, f) for f in os.listdir(md)
+                             if f.endswith(".onnx") and f not in ("segmentation.onnx", "model.onnx")]
+                if not cands:
+                    raise RuntimeError("embedding onnx 未找到")
+                return EmbeddingModelConfig(model=max(cands, key=os.path.getsize))
+
+            cfg = SpeakerDiarizationConfig(
+                segmentation=_seg_models(model_dir),
+                embedding=_emb_models(model_dir),
+                min_duration_on=0.2, min_duration_off=0.5)
+            diar = SpeakerDiarization(cfg)
+            wav, sample_rate = self._load_wav(media_path)
+            if wav is None:
+                return rows, warnings + ["说话人区分：音频解码失败，跳过"]
+            segs = diar.process(wav, sample_rate)
+            if not segs:
+                return rows, warnings + ["说话人区分：未检测到说话人分段"]
+            # 分段 → 时间中心匹配
+            mapping = {}
+            for s in segs:
+                start = float(getattr(s, "start", 0.0))
+                end = float(getattr(s, "end", 0.0))
+                spk = str(getattr(s, "speaker", "speaker_0") or "speaker_0")
+                if spk not in mapping:
+                    mapping[spk] = f"speaker_{len(mapping)}"
+                for r in rows:
+                    c = (float(r.get("start", 0)) + float(r.get("end", 0))) / 2.0
+                    if start <= c < end:
+                        r["speaker"] = mapping[spk]
+            return rows, warnings + [f"说话人区分完成：{len(set(r.get('speaker') for r in rows if r.get('speaker')))} 人"]
+        except Exception as e:  # noqa: BLE001
+            return rows, warnings + [f"说话人区分失败（{type(e).__name__}: {e}），跳过 speaker 标注"]
+
+    @staticmethod
+    def _load_wav(path: str):
+        """加载音频为 (float32 单声道数组, sample_rate)；失败返回 None。"""
+        import asyncio
+        import subprocess as _sp
+        ff = "ffmpeg"
+        try:
+            from app.plugin import deps
+            r = deps.resolve_binary("ffmpeg", env=os.environ)
+            if r.get("ready"):
+                ff = r["path"]
+        except Exception:  # noqa: BLE001
+            pass
+        import tempfile
+        tmp = os.path.join(tempfile.gettempdir(), f"fw_asr_diar_{os.getpid()}_{uuid.uuid4().hex[:8]}.wav")
+        try:
+            proc = _sp.run([ff, "-y", "-i", path, "-ac", "1", "-ar", "16000", "-f", "f32le", tmp],
+                           capture_output=True, timeout=300)
+            if proc.returncode != 0 or not os.path.exists(tmp):
+                return None
+            import array
+            with open(tmp, "rb") as f:
+                raw = f.read()
+            fmt = "f" if sys.byteorder == "little" else ">f"
+            samples = array.array(fmt, raw)
+            return samples, 16000
+        except Exception:  # noqa: BLE001
+            return None
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def ctx_workdir(src_path: str) -> str:

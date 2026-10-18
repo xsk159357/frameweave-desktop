@@ -4,8 +4,8 @@
   "type_id": "core/tts",
   "title": "TTS 配音（多引擎）",
   "category": "音频",
-  "description": "文字转语音：Edge免费 / IndexTTS2本地克隆 / 云端兼容 / 人工配音；支持长文本分块与分段批量合成",
-  "version": "2.0.0",
+  "description": "文字转语音：Edge免费 / IndexTTS2本地克隆 / OpenAI兼容 / 阿里NLS+CosyVoice / 豆包火山；支持长文本分块与分段批量合成",
+  "version": "2.1.0",
   "kind": "python",
   "runtime": "python",
   "entrypoint": "node.py",
@@ -116,9 +116,11 @@
         "edge",
         "manual",
         "indextts",
-        "cloud"
+        "cloud",
+        "aliyun",
+        "volcano"
       ],
-      "description": "edge=微软免费；manual=人工导入；indextts=IndexTTS2 本地克隆；cloud=OpenAI 兼容云端"
+      "description": "edge=微软免费；manual=人工导入；indextts=IndexTTS2 本地克隆；cloud=OpenAI 兼容云端；aliyun=阿里 NLS+CosyVoice；volcano=豆包火山"
     },
     {
       "name": "voice",
@@ -311,6 +313,129 @@
       "description": "0.25~4.0"
     },
     {
+      "name": "aliyun_mode",
+      "type": "STRING",
+      "label": "阿里模式",
+      "required": true,
+      "default": "nls",
+      "widget": "select",
+      "options": [
+        "nls",
+        "cosyvoice"
+      ],
+      "description": "nls=NLS REST 标准音色；cosyvoice=DashScope 大模型音色"
+    },
+    {
+      "name": "aliyun_appkey",
+      "type": "STRING",
+      "label": "阿里 AppKey",
+      "required": true,
+      "default": null,
+      "widget": "text",
+      "options": [],
+      "description": "NLS AppKey（可 @secret:名称 引用）"
+    },
+    {
+      "name": "aliyun_token",
+      "type": "STRING",
+      "label": "阿里 Token",
+      "required": true,
+      "default": null,
+      "widget": "text",
+      "options": [],
+      "description": "NLS 预签发 Token 或 DashScope API Key（可 @secret:名称 引用）；留空且填 AK/SK 时自动换取"
+    },
+    {
+      "name": "aliyun_ak_id",
+      "type": "STRING",
+      "label": "阿里 AccessKey ID",
+      "required": true,
+      "default": null,
+      "widget": "text",
+      "options": [],
+      "description": "NLS Token 换取用 AccessKey ID（可 @secret:名称 引用）"
+    },
+    {
+      "name": "aliyun_ak_secret",
+      "type": "STRING",
+      "label": "阿里 AccessKey Secret",
+      "required": true,
+      "default": null,
+      "widget": "password",
+      "options": [],
+      "description": "NLS Token 换取用 AccessKey Secret（可 @secret:名称 引用）"
+    },
+    {
+      "name": "aliyun_model",
+      "type": "STRING",
+      "label": "CosyVoice 模型",
+      "required": true,
+      "default": "cosyvoice-v2",
+      "widget": "text",
+      "options": [],
+      "description": "cosyvoice-v2 / cosyvoice-v3-flash"
+    },
+    {
+      "name": "aliyun_base_url",
+      "type": "STRING",
+      "label": "阿里合成端点",
+      "required": true,
+      "default": "https://nls-gateway-cn-shanghai.aliyuncs.com",
+      "widget": "text",
+      "options": [],
+      "description": "nls 模式=NLS /stream/v1/tts 网关；cosyvoice 模式=DashScope base（默认 https://dashscope.aliyuncs.com，可配代理/地域端点）"
+    },
+    {
+      "name": "aliyun_token_url",
+      "type": "STRING",
+      "label": "NLS Token 端点",
+      "required": true,
+      "default": "https://nls-meta.cn-shanghai.aliyuncs.com/oauth2/token",
+      "widget": "text",
+      "options": [],
+      "description": "AK/SK 换取 NLS Token 的 RPC 端点"
+    },
+    {
+      "name": "volcano_appid",
+      "type": "STRING",
+      "label": "豆包 AppID",
+      "required": true,
+      "default": null,
+      "widget": "text",
+      "options": [],
+      "description": "火山引擎豆包 TTS AppID（可 @secret:名称 引用）"
+    },
+    {
+      "name": "volcano_token",
+      "type": "STRING",
+      "label": "豆包 AccessToken",
+      "required": true,
+      "default": null,
+      "widget": "password",
+      "options": [],
+      "description": "火山引擎豆包 TTS AccessToken（可 @secret:名称 引用）"
+    },
+    {
+      "name": "volcano_cluster",
+      "type": "STRING",
+      "label": "豆包集群",
+      "required": true,
+      "default": "volcano_tts",
+      "widget": "text",
+      "options": [],
+      "description": ""
+    },
+    {
+      "name": "volcano_base_url",
+      "type": "STRING",
+      "label": "豆包合成端点",
+      "required": true,
+      "default": "https://openspeech.bytedance.com",
+      "widget": "text",
+      "options": [],
+      "description": "POST /api/v1/tts 基址"
+    },
+    {
       "name": "chunk_chars",
       "type": "INT",
       "label": "长文本分块字数",
@@ -389,7 +514,7 @@
   "signature": {
     "alg": "ed25519",
     "key_id": "a8998646b062c170",
-    "value": "KDLUeF3UwCUrsHbrj9EXMNacokdpOjbNsjCTjufXHg1iQB7c4fH6vVGMZ9A+t+esuCD09IIIaPdbSg0KEN2GBg==",
+    "value": "HlU6u2rGv5s524wpjMHNDH7ZoLD8nC9/Zf42VKAiIMimI9Nw4dn/c8hR5u4DKGBAdjEdOIFxjpBWUYUfWQxtDw==",
     "over": "manifest"
   }
 }

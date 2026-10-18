@@ -30,7 +30,7 @@ from typing import Optional
 
 from . import obf
 
-CLIENT_VERSION = "0.3.5"  # 与 desktop/package.json / server.APP_VERSION / cloud_server.VERSION 保持一致
+CLIENT_VERSION = "0.3.11"  # 与 desktop/package.json / server.APP_VERSION / cloud_server.VERSION 保持一致
 
 # urllib 默认遵循系统地址顺序；部分 VM 的 IPv6 可解析但不可出网。
 # 仅在一次请求失败后临时优先 IPv4，不修改全局 socket 配置。
@@ -166,7 +166,7 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
     重试策略：
     - 仅网络层异常重试（URLError/超时/EOF/连接重置/读响应失败），最多 2 次
       指数退避（0.5s/1s）；首请求/跨国冷连接偶发抖动用慢速容错（末次 attempt
-      超时放宽到 ≥12s）。IPv4 回退逻辑（_urlopen_ipv4）保持不变。
+      超时放宽到 ≥15s）。IPv4 回退逻辑（_urlopen_ipv4）保持不变。
     - 业务错误（读到 HTTP 响应体，含 4xx/5xx、ok:false、签名失败）绝不重试，
       避免注册/激活/扣费等副作用重复提交。
     - 重试后仍失败才返回 None（调用方按"云端不可达"拒绝离线回落）。
@@ -177,7 +177,7 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
     _dbg("CLOUD_URL=%r enabled=%s path=%s" % (url, cloud_enabled(), path))
     if not cloud_enabled():
         return None
-    tries = ((timeout, 0.0), (timeout, 0.5), (max(timeout, 12), 1.0))
+    tries = ((timeout, 0.0), (timeout, 0.5), (max(timeout, 15), 1.0))
     last_net_err: Optional[BaseException] = None
     for attempt, (t, backoff) in enumerate(tries):
         if backoff > 0:
@@ -215,9 +215,11 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
             _dbg("CLOUD_HTTP path=%s code=%s resp=%s" % (path, e.code, raw[:200]))
             if isinstance(parsed, dict):
                 parsed.setdefault("ok", False)
+                parsed.setdefault("code", "cloud_http_" + str(e.code))
                 parsed.setdefault("message", "云端 HTTP " + str(e.code))
                 return parsed
-            return {"ok": False, "message": "云端 HTTP " + str(e.code) + ((": " + raw[:120]) if raw else ""),
+            return {"ok": False, "code": "cloud_http_" + str(e.code),
+                    "message": "云端 HTTP " + str(e.code) + ((": " + raw[:120]) if raw else ""),
                     "http_status": e.code}
         except Exception as _first_err:  # noqa: BLE001 —— 网络层异常，尝试默认地址族
             _dbg("CLOUD_RETRY_DEFAULT path=%s err=%s" % (path, repr(_first_err)))
@@ -240,9 +242,11 @@ def _post(path: str, body: dict, timeout: int = 8) -> Optional[dict]:
                 _dbg("CLOUD_HTTP path=%s code=%s resp=%s" % (path, e.code, raw[:200]))
                 if isinstance(parsed, dict):
                     parsed.setdefault("ok", False)
+                    parsed.setdefault("code", "cloud_http_" + str(e.code))
                     parsed.setdefault("message", "云端 HTTP " + str(e.code))
                     return parsed
-                return {"ok": False, "message": "云端 HTTP " + str(e.code) + ((": " + raw[:120]) if raw else ""),
+                return {"ok": False, "code": "cloud_http_" + str(e.code),
+                        "message": "云端 HTTP " + str(e.code) + ((": " + raw[:120]) if raw else ""),
                         "http_status": e.code}
             except Exception as _second_err:  # noqa: BLE001
                 last_net_err = _second_err

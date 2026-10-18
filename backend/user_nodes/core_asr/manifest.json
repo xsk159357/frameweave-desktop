@@ -4,8 +4,8 @@
   "type_id": "core/asr",
   "title": "语音转字幕",
   "category": "分析",
-  "description": "ASR 字幕 + A5 对白提取（含 role）：faster-whisper 本地转录 / OpenAI 兼容远程 / Gemini input_audio 直听 60s 窗；输出 SUBTITLE 与 dialogue[{start,end,role,text}]",
-  "version": "3.0.0",
+  "description": "ASR 字幕 + A5 对白提取（含 role）：faster-whisper 本地转录 / OpenAI 兼容远程 / Gemini input_audio 直听 60s 窗；输出 SUBTITLE 与 dialogue[{start,end,role,text}]；可选 sherpa-onnx 说话人区分（speaker 字段）",
+  "version": "3.1.0",
   "kind": "python",
   "runtime": "python",
   "entrypoint": "node.py",
@@ -229,6 +229,26 @@
       "widget": "toggle",
       "options": [],
       "description": "为字幕行补 role 并输出 dialogues 端口（本地 Whisper 用启发式）"
+    },
+    {
+      "name": "enable_diarization",
+      "type": "BOOL",
+      "label": "说话人区分",
+      "required": true,
+      "default": false,
+      "widget": "toggle",
+      "options": [],
+      "description": "启用 sherpa-onnx 说话人区分（TK 流程）；为字幕行补 speaker 字段（speaker_0/1...）"
+    },
+    {
+      "name": "diarization_model_dir",
+      "type": "STRING",
+      "label": "Diarization 模型目录",
+      "required": true,
+      "default": "",
+      "widget": "text",
+      "options": [],
+      "description": "sherpa-onnx 说话人区分模型目录（含 model.onnx/segmentation 与 embedding 模型）；留空自动探测 models/diarization"
     }
   ],
   "permission": {
@@ -241,7 +261,7 @@
   "signature": {
     "alg": "ed25519",
     "key_id": "a8998646b062c170",
-    "value": "+bTlEIDTzzRKNoqrwIhfY7RG4S4Vv1fawYTG6VqoFfJR6WgMmmyx50aQkkuEGY2tXgvcqhCUOAmlk3mcbqY7DQ==",
+    "value": "8VqTSiCmwzpNwgwaY+5G1x45Gz2bme6XFkGrwu6wkEVapV3QXh7mU+CFJZACQ76KsZcNT+wy4Qe9MGtFxM76Ag==",
     "over": "manifest"
   }
 }

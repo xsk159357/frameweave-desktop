@@ -1,9 +1,9 @@
 ﻿# release-github-korea.ps1 — 经韩国授权服务器 SSH 代理，发布 GitHub Release（electron-updater github provider）
 # 背景：本机直连 GitHub 上传大文件（200MB+）不稳定，0.3.1/0.3.2 均经韩国机 curl 代理上传。
 # 用法:
-#   pwsh scripts/release-github-korea.ps1 -Version 0.3.2 -Sha 1e14c03…   # 建 tag + draft + 上传三件套 + publish
-#   pwsh scripts/release-github-korea.ps1 -Version 0.3.2 -Sha … -NoPublish  # 保持 draft，人工网页发布
-#   pwsh scripts/release-github-korea.ps1 -Version 0.3.2 -Sha … -CheckOnly  # 仅核对远端 Release/tag 状态
+#  pwsh scripts/release-github-korea.ps1 -Version 0.3.2 -Sha 1e14c03…   # 建 tag + draft + 上传三件套 + publish
+#  pwsh scripts/release-github-korea.ps1 -Version 0.3.2 -Sha … -NoPublish  # 保持 draft，人工网页发布
+#  pwsh scripts/release-github-korea.ps1 -Version 0.3.2 -Sha … -CheckOnly  # 仅核对远端 Release/tag 状态
 # 凭据: GitHub token 三级解析（-Token > env GH_TOKEN > git credential fill）；韩国密码同 upload-release-korea.ps1
 param(
   [Parameter(Mandatory=$true)][string]$Version,
@@ -13,7 +13,8 @@ param(
   [string]$Token = "",
   [string]$Server = "43.108.23.200",
   [switch]$NoPublish,
-  [switch]$CheckOnly
+  [switch]$CheckOnly,
+  [switch]$AllowLegacyFallback   # t3：显式允许读取 .tmp/kr_fix_upload.py 遗留明文口令（默认禁用）
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -44,14 +45,14 @@ if (-not $pw -and (Test-Path -LiteralPath $envFile)) {
     if ($line) { $pw = $line.Substring($key.Length + 1).Trim(); if ($pw) { break } }
   }
 }
-if (-not $pw) {
+if (-not $pw -and $AllowLegacyFallback) {
   $hist = Join-Path (Join-Path $root ".tmp") "kr_fix_upload.py"
   if (Test-Path $hist) {
     $m = [regex]::Match((Get-Content $hist -Raw), "c\.connect\('([^']+)'[^)]*password='([^']*)'")
-    if ($m.Success) { $Server = $m.Groups[1].Value; $pw = $m.Groups[2].Value }
+    if ($m.Success) { $Server = $m.Groups[1].Value; $pw = $m.Groups[2].Value; Write-Host "[gh-kr] ⚠ 已显式启用 -AllowLegacyFallback 读取 .tmp 遗留明文口令（高危：尽快迁移 SSH 密钥并轮换口令）" }
   }
 }
-if (-not $pw) { throw "未找到韩国服务器凭据" }
+if (-not $pw) { throw "未找到韩国服务器凭据：设 env FW_KOREA_PASSWORD（-AllowLegacyFallback 可临时启用 .tmp 明文回退，建议迁移 SSH 密钥 ~/.ssh/frameweave_auth 并轮换口令）" }
 
 $py = @'
 import sys, io, os, json, shlex

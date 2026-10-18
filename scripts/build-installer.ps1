@@ -119,12 +119,20 @@ Set-Content -Path $appUpdateYml -Value $appUpdate -Encoding UTF8
 if (-not (Test-Path $appUpdateYml)) { throw "app-update.yml 未生成" }
 Write-Host "[build] app-update.yml 已写入: $appUpdateYml"
 
-# 3) 生成 NSIS 脚本（模板注入版本/路径）
+# 3) 生成 NSIS 脚本（模板注入版本/路径/品牌资产）
 Write-Host "[build] 3/4 生成 NSIS 脚本"
 $tpl = Get-Content (Join-Path $PSScriptRoot "nsis\frameweave.nsi.tpl") -Raw -Encoding UTF8
-$nsi = $tpl.Replace('$FW_VER', $ver).Replace('$FW_OUT', $out.Replace("/", "\")).Replace('$FW_UNPACKED', $unpacked.Replace("/", "\"))
+$buildDir = (Join-Path $root 'desktop\build')
+# 品牌资产路径注入（generate-installer-assets.py 产出；@TOKEN@ 占位符避免 PowerShell ${} 插值歧义）
+$tpl = $tpl.Replace('$FW_VER', $ver)
+$tpl = $tpl.Replace('$FW_OUT', $out.Replace("/", "\"))
+$tpl = $tpl.Replace('$FW_UNPACKED', $unpacked.Replace("/", "\"))
+$tpl = $tpl.Replace('@FW_ICON@', (Join-Path $buildDir 'installerIcon.ico'))
+$tpl = $tpl.Replace('@FW_UNICON@', (Join-Path $buildDir 'uninstallerIcon.ico'))
+$tpl = $tpl.Replace('@FW_HEADER_BMP@', (Join-Path $buildDir 'installerHeader.bmp'))
+$tpl = $tpl.Replace('@FW_SIDEBAR_BMP@', (Join-Path $buildDir 'installerSidebar.bmp'))
 $nsiFile = Join-Path $build "frameweave.nsi"
-Set-Content -Path $nsiFile -Value $nsi -Encoding UTF8
+Set-Content -Path $nsiFile -Value $tpl -Encoding UTF8
 
 # 4) makensis 编译
 Write-Host "[build] 4/4 makensis 编译（压缩大文件，需几分钟）"

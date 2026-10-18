@@ -518,10 +518,12 @@ class InProcessExecutor:
                 if node.status in (NodeStatus.SUCCESS, NodeStatus.CACHED) and node.cache_key != new_key:
                     node.status = NodeStatus.PENDING
                     node.error = ""
+                    node.error_detail = ""  # D-05：重算时清空明细
                     node.progress = 0.0
                 elif node.status not in (NodeStatus.SUCCESS, NodeStatus.CACHED):
                     node.status = NodeStatus.PENDING
                     node.error = ""
+                    node.error_detail = ""  # D-05：重算时清空明细
                     node.progress = 0.0
                 node.cache_key = new_key
             host._emit({"type": "node_update", "node_id": nid, "status": node.status.value,
@@ -667,6 +669,7 @@ class WorkerExecutor(InProcessExecutor):
             node.asset_ids = {}
             node.status = NodeStatus.FAILED
             node.error = str(e)
+            node.error_detail = ""
             node.finished_at = _time.time()
             _append_history(node, "failed")
             host._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
@@ -674,10 +677,14 @@ class WorkerExecutor(InProcessExecutor):
         except (WorkerPermission, WorkerJobError) as e:
             node.asset_ids = {}
             node.status = NodeStatus.FAILED
+            # D-05（t9）：node.error = 用户可读主文案（[code] 节点/阶段 message 建议），
+            # 不再内嵌 traceback；traceback 归入 node.error_detail（结构化 detail）。
             node.error = str(e)
+            node.error_detail = str(getattr(e, "detail", "") or "")
             node.finished_at = _time.time()
             _append_history(node, "failed")
-            host._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error})
+            host._emit({"type": "node_update", "node_id": nid, "status": "failed", "error": node.error,
+                        "error_detail": node.error_detail})
             return False
         except BaseException as e:  # noqa: BLE001 —— worker 崩溃/平台异常收口，不外传
             if "sup" in locals():

@@ -1,6 +1,6 @@
 // 右侧参数面板：参数表单 + 执行状态 + 输出资产预览
-import { useState } from 'react'
-import { Lock, Check, Zap, X, Eye, Settings2, CircleDot } from 'lucide-react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { Lock, Check, Zap, X, Eye, Settings2, CircleDot, FolderOpen, Loader2 } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import type { NodeSpec } from './types'
@@ -11,10 +11,13 @@ interface Props {
   params: Record<string, string>
   run_history?: { time: number; status: string; params?: Record<string, unknown>; cache_key?: string; error?: string }[]
   onUpdate: (nodeId: string, patch: Record<string, string>) => void
+  /** D-14：forceInput 参数状态由画布保存到 node.forceInputs */
+  forceInputs?: Record<string, boolean>
+  onForceInputChange?: (nodeId: string, paramName: string, enabled: boolean) => void
   onClose?: () => void
 }
 
-export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClose }: Props) {
+export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, forceInputs = {}, onForceInputChange, onClose }: Props) {
   const nodeStatus = useAppStore((s) => s.nodeStatus)
   const nodeError = useAppStore((s) => s.nodeError)
   const nodeAssets = useAppStore((s) => s.nodeAssets)
@@ -50,6 +53,10 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
   const renderParam = (p: any) => {
     const val = params[p.name] ?? p.default ?? ''
     const widget = p.widget || (p.type === 'INT' ? 'number' : 'text')
+    // D-02（P0）：FILE 类参数渲染「选择文件」——选中后回填路径并显示时长/分辨率/缩略图「已就绪」
+    if (widget === 'file') {
+      return <FileParamInput nodeId={nodeId} param={p} value={String(val)} onUpdate={onUpdate} />
+    }
     if (widget === 'select' || (p.options && p.options.length)) {
       return (
         <select
@@ -154,10 +161,16 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
           <div style={{ ...styles.label, marginTop: 2 }}><Settings2 size={11} /> 参数</div>
           {spec.params.map((p) => (
             <div key={p.name}>
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 2 }}>
-                {p.label} {p.description ? '· ' + p.description : ''}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-dim)', marginBottom: 2 }}>
+                <span style={{ flex: 1 }}>{p.label} {p.description ? '· ' + p.description : ''}</span>
+                {p.forceInput && onForceInputChange && (
+                  <button type="button" title={forceInputs[p.name] ? '已转为输入端口，点击恢复控件' : '允许上游连线注入此参数'} onClick={() => onForceInputChange(nodeId, p.name, !forceInputs[p.name])}
+                    style={{ border: '1px solid ' + (forceInputs[p.name] ? 'var(--accent)' : 'var(--border)'), background: forceInputs[p.name] ? 'var(--accent-soft)' : 'transparent', color: forceInputs[p.name] ? 'var(--accent-strong)' : 'var(--text-faint)', borderRadius: 6, padding: '2px 6px', fontSize: 10.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {forceInputs[p.name] ? '输入端口已启用' : '转为输入'}
+                  </button>
+                )}
               </div>
-              {renderParam(p)}
+              {forceInputs[p.name] ? <div style={{ border: '1px dashed var(--accent)', borderRadius: 8, padding: '7px 9px', color: 'var(--accent-strong)', fontSize: 11.5, marginBottom: 10 }}>已转为输入端口，连接后由上游注入（控件已锁定）</div> : renderParam(p)}
             </div>
           ))}
         </>
@@ -184,7 +197,7 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
                     <span style={{ color: 'var(--text-faint)' }}>{t}</span>
                   </div>
                   {paramSummary && <div style={{ color: 'var(--text-faint)', marginTop: 2 }}>{paramSummary}</div>}
-                  {h.error && <div style={{ color: 'var(--danger)', marginTop: 2, wordBreak: 'break-all' }}>{String(h.error).slice(0, 120)}</div>}
+                  {h.error && <div style={{ color: 'var(--danger)', marginTop: 2, wordBreak: 'break-all' }}><span style={{ display: 'inline-block', fontSize: 10, color: 'var(--text-faint)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 4px', marginRight: 4 }}>历史记录</span>{String(h.error).slice(0, 120)}</div>}
                 </div>
               )
             })}
@@ -247,6 +260,161 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, onClos
               padding: 8, borderRadius: 6, maxHeight: 300, overflow: 'auto', fontSize: 11 }}>
               {String((preview.content as any).text || JSON.stringify(preview.content)).slice(0, 2500)}
             </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- D-02（t10）：FILE 类参数文件选择 —— 选中回填路径 + 时长/分辨率/缩略图「已就绪」 ----
+const FILE_ACCEPT = 'video/*,audio/*,image/*,.srt,.ass,.vtt,.json,.xml,.zip'
+
+interface FileReadyMeta {
+  name: string
+  path: string
+  duration?: string
+  resolution?: string
+  thumbnail?: string
+}
+
+function FileParamInput({ nodeId, param, value, onUpdate }: {
+  nodeId: string
+  param: any
+  value: string
+  onUpdate: (nodeId: string, patch: Record<string, string>) => void
+}) {
+  const pushToast = useAppStore((s) => s.pushToast)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [meta, setMeta] = useState<FileReadyMeta | null>(null)
+
+  const probeMeta = async (file: File, path: string) => {
+    const base: FileReadyMeta = { name: file.name, path }
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    try {
+      if (['mp4', 'mov', 'mkv', 'webm', 'avi', 'flv', 'm4v', 'ts'].includes(ext)) {
+        const url = URL.createObjectURL(file)
+        const v = document.createElement('video')
+        v.preload = 'metadata'
+        v.muted = true
+        v.src = url
+        await new Promise<void>((res, rej) => {
+          v.onloadedmetadata = () => res()
+          v.onerror = () => rej(new Error('读取视频元数据失败'))
+          setTimeout(() => rej(new Error('读取视频超时')), 8000)
+        })
+        const dur = v.duration || 0
+        const min = Math.floor(dur / 60)
+        const sec = Math.floor(dur % 60)
+        base.duration = `${min}:${String(sec).padStart(2, '0')}`
+        if (v.videoWidth) base.resolution = `${v.videoWidth}×${v.videoHeight}`
+        try {
+          v.currentTime = Math.min(1, dur / 2)
+          await new Promise<void>((res, rej) => {
+            v.onseeked = () => res()
+            v.onerror = () => rej(new Error('seek'))
+            setTimeout(() => rej(new Error('seek 超时')), 5000)
+          })
+          if (v.videoWidth) {
+            const c = document.createElement('canvas')
+            c.width = v.videoWidth
+            c.height = v.videoHeight
+            c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
+            base.thumbnail = c.toDataURL('image/jpeg', 0.72)
+          }
+        } catch { /* 缩略图失败不阻断，元数据仍可用 */ }
+        URL.revokeObjectURL(url)
+      } else if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
+        const url = URL.createObjectURL(file)
+        const img = new Image()
+        img.onload = () => {
+          base.resolution = `${img.width}×${img.height}`
+          try {
+            const c = document.createElement('canvas')
+            c.width = img.width
+            c.height = img.height
+            c.getContext('2d')?.drawImage(img, 0, 0)
+            base.thumbnail = c.toDataURL('image/jpeg', 0.72)
+          } catch { /* 忽略 */ }
+          URL.revokeObjectURL(url)
+          setMeta({ ...base })
+        }
+        img.onerror = () => { URL.revokeObjectURL(url); setMeta(base) }
+        img.src = url
+        return
+      }
+    } catch { /* 元数据读取失败仍可回填路径 */ }
+    setMeta(base)
+  }
+
+  const onPick = async (file: File | undefined) => {
+    if (!file) return
+    setBusy(true)
+    try {
+      // Electron 下 File.path 为真实绝对路径；浏览器/headless 模式走后端素材登记返回路径
+      const p = (file as any).path
+      if (typeof p === 'string' && p) {
+        onUpdate(nodeId, { [param.name]: p })
+        void probeMeta(file, p)
+      } else {
+        const r = await api.ingestAsset(file)
+        onUpdate(nodeId, { [param.name]: r.path })
+        void probeMeta(file, r.path)
+      }
+    } catch (e: any) {
+      pushToast('选择文件失败: ' + (e?.message || e), 'err')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const shortPath = (v: string) => {
+    if (!v) return ''
+    const seg = v.split(/[\\/]/)
+    return seg.length > 1 ? seg.slice(-2).join('/') : v
+  }
+
+  const boxStyle: CSSProperties = {
+    width: '100%', padding: '8px 11px', borderRadius: 10, fontSize: 13, boxSizing: 'border-box',
+    border: 'var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text)',
+    boxShadow: 'var(--glass-inner)', outline: 'none',
+  }
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 7, alignItems: 'stretch' }}>
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          title={param.description || '选择本地媒体文件'}
+          style={{ ...boxStyle, width: 'auto', flexShrink: 0, cursor: busy ? 'wait' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--accent-strong)', background: 'var(--accent-soft)', borderColor: 'rgba(139,147,255,.35)' }}
+        >
+          {busy ? <Loader2 size={13} className="fw-spin" /> : <FolderOpen size={13} />}
+          {busy ? '登记中…' : '选择文件'}
+        </button>
+        <input
+          data-testid="media-file-input" ref={inputRef} type="file" accept={FILE_ACCEPT}
+          style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files?.[0]; void onPick(f); e.target.value = '' }}
+        />
+        <div style={{ ...boxStyle, flex: 1, fontSize: 12, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={value || param.name}>
+            {value ? shortPath(value) : (meta?.name || '未选择文件')}
+          </span>
+          {(meta || value) && (
+            <span style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--success)', fontSize: 11, fontWeight: 600 }}>
+              <Check size={11} /> 已就绪
+            </span>
+          )}
+        </div>
+      </div>
+      {(meta?.duration || meta?.resolution) && (
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {meta.duration && <span>时长 {meta.duration}</span>}
+          {meta.resolution && <span>分辨率 {meta.resolution}</span>}
+          {meta.thumbnail && (
+            <img src={meta.thumbnail} alt="视频缩略图" style={{ width: 96, borderRadius: 8, border: '1px solid var(--border)', marginTop: 4, objectFit: 'cover', aspectRatio: '16/9' }} />
           )}
         </div>
       )}
