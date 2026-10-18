@@ -37,7 +37,7 @@ jobs:
       - name: Checkout frameweave-plugins (S1-T9)
         uses: actions/checkout@v4
         with:
-          repository: FrameWeave/frameweave-plugins
+          repository: xsk159357/frameweave-plugins
           path: frameweave-plugins
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || 'main' }}
       - name: Set FRAMEWEAVE_PLUGINS_DIR
@@ -85,7 +85,7 @@ jobs:
       - name: Checkout frameweave-plugins
         uses: actions/checkout@v4
         with:
-          repository: FrameWeave/frameweave-plugins
+          repository: xsk159357/frameweave-plugins
           path: frameweave-plugins
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || 'main' }}
       - name: Set FRAMEWEAVE_PLUGINS_DIR
