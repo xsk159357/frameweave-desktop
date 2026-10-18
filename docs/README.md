@@ -24,6 +24,7 @@
 - [插件商城自动安装说明](guides/插件商城自动安装说明.md)
 - [服务器自动更新说明](guides/服务器自动更新说明.md)
 - [节点市场化_空壳分发说明](guides/节点市场化_空壳分发说明.md)
+- [凭据轮换与明文清理](guides/凭据轮换与明文清理.md) — 凭据纪律 / 轮换步骤 / 明文扫描门禁
 - [待办清单](guides/待办清单.md)
 
 ### specs/ — 技术规范
@@ -44,7 +45,8 @@
 
 ### reports/ — 验证与深度报告
 - [全量 UI / 布局重设计 2026-10（应用 + 后台 + 官网）](reports/ui-redesign-2026-10/README.md)
-- [FrameWeave 项目深度分析报告](reports/FrameWeave_项目深度分析报告.md)
+- [FrameWeave 项目深度分析报告](reports/FrameWeave_项目深度分析报告.md)（v0.2.12 基线，已被 0.3.12 审阅取代）
+- [FrameWeave 全量审阅 20261019](reports/FrameWeave_全量审阅_20261019.md) — 0.3.12 全量通读 + 实测（pytest / tsc / 插件校验 / git / 体积）
 - [cloud E2E 报告](reports/cloud_e2e_report.md)
 - [授权服务器连通性验证报告 20261009](reports/授权服务器连通性验证报告_20261009.md)
 - [服务器安全运维审计 20261017](reports/服务器安全运维审计_20261017.md)
