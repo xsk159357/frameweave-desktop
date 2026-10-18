@@ -861,7 +861,7 @@ class Engine:
 
             # 落盘输出资产
             node.asset_ids = {}
-            for port_name, spec_p in zip(spec.outputs, spec.outputs):
+            for spec_p in spec.outputs:
                 val = outputs.get(spec_p.name)
                 if val is None:
                     continue
