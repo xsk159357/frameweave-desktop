@@ -182,12 +182,18 @@ def test_http_protocol_error_codes(server):
     j2b = json.loads(body2.decode() or "{}")
     assert st2b == 400 and j2b.get("code") == "bad_json"
     # 超大请求体 → 413（MAX_BODY 由 t3 加固提供）
+    # 2026-10-19：服务端在读到超限后立即 413 并关闭连接，而客户端仍在写 1MB 体，
+    # Windows 上表现为 ConnectionAbortedError(10053)/ConnectionReset(10054) 而不是
+    # HTTPError——两者都证明「超限请求被拒」，此前断言只认 413 导致随机红（复跑 3 次才复现）。
     big = b"x" * (cs.MAX_BODY + 10)
     req3 = urllib.request.Request(base + "/api/admin/login", data=big, method="POST")
     st3 = 0
+    aborted = False
     try:
         with urllib.request.urlopen(req3, timeout=10):
             pass
     except urllib.error.HTTPError as e:
         st3 = e.code
-    assert st3 == 413
+    except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+        aborted = True
+    assert st3 == 413 or aborted, "超限请求未被拒绝: status=%s aborted=%s" % (st3, aborted)

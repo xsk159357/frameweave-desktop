@@ -35,6 +35,16 @@ _PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
             "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 
 
+def _shutdown_queue(srv):
+    """同步测试收尾：取消残留调度任务（本文件不起事件循环，sched 为空时即空操作）。
+
+    原写法 `srv.task_queue.shutdown()` 是 async，未 await 会刷 RuntimeWarning
+    「coroutine was never awaited」（2026-10-19 审阅 P3-12）。
+    """
+    sched = getattr(getattr(srv, "task_queue", None), "_sched", None)
+    if sched is not None and not sched.done():
+        sched.cancel()
+
 def _mk_manifest(pkg_dir, type_id, kind="python", entry="node.py",
                  cls="ProbeNode", inputs=None, outputs=None, params=None):
     import json as _j
@@ -134,7 +144,7 @@ def test_mapping_links_and_literals():
     assert n1.literal_inputs == {}
     n2 = wf.nodes["2"]
     assert n2.inputs == {} and n2.params == {}
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_mapping_literal_on_input_port():
@@ -146,7 +156,7 @@ def test_mapping_literal_on_input_port():
     assert err is None, err
     assert wf.nodes["1"].literal_inputs == {"in": "hello"}
     assert wf.nodes["1"].inputs == {}
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_mapping_unknown_input_rejected():
@@ -162,7 +172,7 @@ def test_mapping_unknown_input_rejected():
         {"1": {"class_type": "user/not_exist", "inputs": {}}}, [])
     assert wf2 is None and err2 is not None
     assert "class_type_not_found" in [e[0] for e in err2["node_errors"]["1"]]
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_partial_prune_upstream_closure():
@@ -181,7 +191,7 @@ def test_partial_prune_upstream_closure():
     assert set(wf.nodes) == {"1", "2", "3"}, set(wf.nodes)
     wf2, err2 = _build_prompt_workflow(prompt, ["9"])
     assert wf2 is None and err2 is not None
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_engine_runs_prompt_workflow():
@@ -203,7 +213,7 @@ def test_engine_runs_prompt_workflow():
     n1 = wf.nodes["1"]
     assert n1.status == NodeStatus.SUCCESS, n1.status
     assert n1.asset_ids.get("out"), "echo_q 经槽位 0 链接应拿到上游 IMAGE 输出并产出 out"
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 # ================================================================ API 级（TestClient + app.server）
@@ -246,7 +256,7 @@ def test_api_prompt_image_output_history():
         out = rec["outputs"]
         assert "1" in out and out["1"].get("images"), out
         assert out["1"]["images"][0]["type"] == "output" and out["1"]["images"][0]["filename"]
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_api_prompt_validation_error_shape():
@@ -261,7 +271,7 @@ def test_api_prompt_validation_error_shape():
         j = r.json()
         assert "error" in j and "node_errors" in j and "prompt_id" not in j, j
         assert j["node_errors"]["1"][0][0] == "class_type_not_found"
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_api_prompt_alias_and_partial():
@@ -285,7 +295,7 @@ def test_api_prompt_alias_and_partial():
         assert rec and rec["status"]["status_str"] == "success"
         # 部分执行：节点 3 不在结果里（被剪枝），节点 1/2 成功
         assert "3" not in rec["outputs"], rec
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_dual_channel_consistency_specs_vs_prompt():
@@ -307,7 +317,7 @@ def test_dual_channel_consistency_specs_vs_prompt():
                 raise AssertionError(f"specs 注册但 prompt 拒绝: {spec['type_id']} {err}")
             ok += 1
         assert ok == len(specs), f"双通道不一致: {ok}/{len(specs)}"
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 def test_api_workflows_run_regression():
@@ -328,7 +338,7 @@ def test_api_workflows_run_regression():
         assert _wait_queue_empty(srv, c)
         wf = c.get(f"/api/workflows/{wid}", headers=h).json()
         assert wf["nodes"][0]["status"] == "success", wf
-    srv.task_queue.shutdown()
+    _shutdown_queue(srv)
 
 
 # ================================================================ 独立脚本入口（T9 前断言）
