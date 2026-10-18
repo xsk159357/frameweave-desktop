@@ -25,7 +25,7 @@
 | 版本 | **0.3.12**（desktop/web/backend/cloud 四端一致，实测 grep） |
 | git | `main` @ `ed63a14`（2026-10-19 00:37），135 commits，工作区干净 |
 | 与远端 | **领先 origin/main 2 个提交，未推送** |
-| tag | 11 个，最新 `v0.3.4`；**0.3.5–0.3.12 无 tag** |
+| tag | 本地 11 个、远端 14 个；远端已有 `v0.3.5/v0.3.11/v0.3.12`，**缺 `v0.3.6–v0.3.10`**（无独立提交，见 P1-6） |
 | 发布产物 | `release/0.3.12/`：exe 224,370,119 B + blockmap 236,087 B + latest.yml（sha512 一致） |
 | 商业模式 | 订阅制：QQ 邮箱验证码 + 卡密激活 + 1 账号 1 设备 + 30s 在线校验，无离线宽限 |
 
@@ -217,9 +217,13 @@ plugins   frameweave-plugins：70 包（68 python 运行时 + 1 声明式 transf
 - 证据：`tests/test_ws_events.py` 5 项全部 `ModuleNotFoundError: No module named 'websockets'`；CI 用 `pip install pytest httpx websockets` 手工补，`requirements.txt` 无此项。
 - 动作：新增 `requirements-dev.txt`（pytest/httpx/websockets）或在 `requirements.txt` 补 `websockets>=12`；本地与 CI 用同一份清单。
 
-### P1-6 git 发布纪律缺口
-- 证据：`main` 领先 `origin/main` **2 个提交未推送**；tag 仅 11 个、最新 `v0.3.4`，而 release 目录已到 0.3.12。
-- 动作：推送 2 个提交；为 0.3.5–0.3.12 补打 tag（可指向各自 release commit）；把「tag = 发布版本」写进 `docs/guides/打包发布规范.md` 的检查项。
+### P1-6 git 发布纪律缺口（复核后修正）
+- 证据（`git ls-remote --tags origin` 实测）：远端已有 `v0.3.5`(5b5bd16)、`v0.3.11`(9509cad)、`v0.3.12`(87e3e42)，
+  **缺 `v0.3.6 / v0.3.7 / v0.3.8 / v0.3.9 / v0.3.10`**；本机 tag 列表陈旧（未 fetch），首轮误判为「停在 v0.3.4」。
+- 另：`main` 曾领先 `origin/main` 2 个提交未推送。
+- 0.3.6–0.3.10 无独立提交：这几个版本是同一工作树的连续构建，改动全部并入 `9509cad`(v0.3.11)，
+  因此无法补打有意义的 tag（不伪造指向）。
+- 动作：`git fetch --tags --force` 同步本地；已推送 `main`；把「发布前 `git tag -a` + `git push --tags`」写进发布规范检查项。
 
 ### P1-7 CI 两处必失败点
 - 证据（读 `.github/workflows/ci_backend.yml`）：① `health` job 无 `actions/setup-python`、无依赖安装，直接 `python -m pytest tests/test_health_governance.py` → ubuntu-latest 缺 fastapi 必失败；② `health` job 上传 `classify.json`，该文件在工作区根、不在 `FrameWeave` 仓库内 → `if-no-files-found: warn` 空跑。
@@ -265,3 +269,42 @@ plugins   frameweave-plugins：70 包（68 python 运行时 + 1 声明式 transf
 - **未连生产服务器**：授权服务 `shouquan.frameweave.top` 的实际健康、部署版本、数据库状态未验证（本轮未发起外网请求）。
 - **未验安装包**：`release/0.3.12` 三件套只核对了本地尺寸与 latest.yml 哈希一致性，未做 fresh install / 自动更新实测。
 - **未做覆盖率统计**：仓库无 coverage 配置，无法给出模块级覆盖数字。
+
+---
+
+## 13. 处置结果（2026-10-19 当日执行）
+
+> 本节记录 §10 清单的实际处置，全部有命令输出佐证；提交范围：`1c29eac..7a85c58`（6 个提交，已推送 origin/main）。
+
+| 编号 | 问题 | 处置 | 证据 |
+|---|---|---|---|
+| P0-1 | `.tmp` 明文口令 | 31 个脚本移入 `_archive/2026-10-19-凭据脚本隔离/`；`.tmp/kr_fix_upload.py` 改读 `FW_SERVER_PASSWORD`；另发现并清理 3 个 E2E 脚本里写死的云端管理密钥（改 `FW_ADMIN_KEY`）；新增 `scripts/scan_plaintext_secrets.py` + CI 步骤 | 扫描 0 命中；轮换步骤见 `docs/guides/凭据轮换与明文清理.md` |
+| P0-2 | junction 自引用 | `cmd rmdir` 删除 `.tmp/t6_hygiene_scratch/FrameWeave` 链接（目标内容未动） | 仓库 21 个顶层条目不变 |
+| P1-3 | 1,232 个 `fw_*` 残留 | 全部移入归档；conftest 固定 TMPDIR/TEMP/TMP + `tempfile.tempdir`，`pytest_sessionfinish` 整目录清理 | 测试跑完 `backend/fw_*` = 0 |
+| P1-4 | `cloud.db` 在源码树 | 移入归档；`cloud_server.py` 默认路径改为 `data/cloud.db`（生产目录无 `data/` → 行为不变） | `tests_cloud_admin.py` 57/57 |
+| P1-5 | `websockets` 未声明 | 新增 `backend/requirements-dev.txt`，CI 与本地共用 | ws 用例 5/5 通过 |
+| P1-6 | tag / 推送 | `main` 已推送；`git fetch --tags` 同步远端（远端本就有 0.3.5/0.3.11/0.3.12）；0.3.6–0.3.10 无独立提交，不伪造 tag | `git ls-remote --tags` |
+| P1-7 | CI 两处必失败 | 两个 job 均 setup-python + requirements-dev；去掉不存在的 `classify.json` 上传；pytest 与 ci_gate 去重；新增「测试后不得新增 fw_*/cloud.db/pyarmor.bug.log」硬断言 | `.github/workflows/ci_backend.yml` |
+| P2-8 | 死代码 | `app/nodes/`(2,256 行) + `app/license.py`(328 行) 归档并 `git rm` | 测试全绿；object_info 仍 70 节点 |
+| P2-9 | 大文件单点 | server.py 2404→1940（拆 `http_models`/`prompt_protocol`/`models_api`）；index.css 769 行→7 个 `styles/*.css`；Canvas 撤销重做抽 `useGraphHistory`（1264→1246） | tsc 0 错误；vite build 成功；pytest 109 passed |
+| P2-10 | 文档漂移 | README 去掉「M0 骨架」；开发指南版本行改 0.3.12 | — |
+| P2-11 | 产物堆积 | `release/` 只留 0.3.11/0.3.12（其余 2.78 GB 归档）；3 个无签名 zip 重新签名（dist 73/73 全验签）；`.pipcache`/`.npm-cache` 清理 | `_archive/2026-10-19-历史发布产物/` |
+| P3-12 | 代码小问题 | engine 冗余 `zip` 删除；`task_queue.shutdown()` 未 await 改同步收尾（RuntimeWarning 消失）；超限请求断言容忍 RST（复跑偶发红） | — |
+
+### 13.1 仍未闭环（需你本人操作）
+
+1. **凭据轮换**：服务器 root 口令、X-UI 面板口令、`FRAMEWEAVE_ADMIN_KEY`（曾随 git 历史提交）必须更换。
+   本地已无明文，但历史提交/备份里仍有旧值，**只有轮换才能失效**。步骤见 `docs/guides/凭据轮换与明文清理.md` §2。
+2. **安装包重建**：`web/dist` 因本次前端改动已重建（bundle `index-CWvk8OiI.js`），`desktop/integrity.json` 已同步；
+   但 `release/0.3.12` 三件套仍是改动前的产物。要发布含本次改动的版本，需按 `docs/guides/打包发布规范.md` 重新打包并 bump 版本。
+3. **进一步拆分**：server.py 仍有 1,940 行（assets/auth/market/export/user_nodes 四组路由未拆）；Canvas.tsx 仍有 1,246 行。
+   本轮按「低风险优先」只做了可被 tsc/pytest 完全覆盖的拆分，剩余拆分建议单独一个 PR 做。
+
+### 13.2 复验命令
+
+```bash
+cd backend && python -m pip install -r requirements-dev.txt && python -m pytest -q   # 109 passed
+cd web && npx tsc --noEmit && npx vite build                                          # 0 错误 / 构建成功
+cd .. && python sdk/check_all.py                                                      # 70 OK / 0 FAILED
+python scripts/scan_plaintext_secrets.py --root .                                     # 0 命中
+```
