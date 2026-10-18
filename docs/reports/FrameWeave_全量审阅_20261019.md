@@ -312,7 +312,7 @@ python scripts/scan_plaintext_secrets.py --root .                               
 ### 13.3 CI 首次跑通（2026-10-19，run #14）
 
 > 结论：`Backend CI / S1-T9` 两个 job 全部 success，**这是该 workflow 建立以来第一次绿**。
-> 证据：`https://github.com/xsk159357/frameweave-desktop/actions/runs/39172437235`（commit `274de01`）。
+> 证据：`https://github.com/xsk159357/frameweave-desktop/actions/runs/39172342551`（commit `274de01`）。
 
 修的过程（run #10 → #14，5 个提交）暴露的问题全部是「本地从没在干净环境跑过」：
 
