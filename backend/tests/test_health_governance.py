@@ -15,6 +15,7 @@
 """
 import json
 import os
+import pytest
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKSPACE = os.path.dirname(os.path.dirname(BACKEND))
