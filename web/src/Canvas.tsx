@@ -10,6 +10,7 @@ import { api, connectWS, nodeSpecs } from './api'
 import { useAppStore } from './store'
 import { canConnect, type FlowNodeData, type NodeSpec } from './types'
 import { FlowNode } from './nodes/FlowNode'
+import { useGraphHistory } from './canvas/useGraphHistory'
 import { ParamPanel } from './ParamPanel'
 import { ResultPanel } from './ResultPanel'
 import { MissingNodesModal, openMarketForTypeIds } from './WorkflowModals'
@@ -80,31 +81,11 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
     action()
   }, [readOnly, pushToast])
 
-  // ---- 撤销 / 重做（D3） ----
-  const historyRef = useRef<{ nodes: any[]; edges: Edge[] }[]>([])
-  const futureRef = useRef<{ nodes: any[]; edges: Edge[] }[]>([])
-  // t3：本地画布编辑序号 —— 工作流加载窗口内（getWorkflow 未返回）用户已添加
-  // 节点时跳过服务端覆盖，杜绝「新建工作流后添加的首个节点被异步加载清掉」。
-  const editSeqRef = useRef(0)
-  const pushHistory = useCallback(() => {
-    historyRef.current.push({ nodes, edges })
-    if (historyRef.current.length > 40) historyRef.current.shift()
-    futureRef.current = []
-  }, [nodes, edges])
-  const undo = useCallback(() => {
-    const prev = historyRef.current.pop()
-    if (!prev) return
-    futureRef.current.push({ nodes, edges })
-    setNodes(prev.nodes); setEdges(prev.edges)
-    setDirty(false)
-  }, [nodes, edges, setNodes, setEdges, setDirty])
-  const redo = useCallback(() => {
-    const next = futureRef.current.pop()
-    if (!next) return
-    historyRef.current.push({ nodes, edges })
-    setNodes(next.nodes); setEdges(next.edges)
-    setDirty(false)
-  }, [nodes, edges, setNodes, setEdges, setDirty])
+  // ---- 撤销 / 重做（D3）：2026-10-19 拆到 canvas/useGraphHistory.ts（审阅 P2-9）----
+  // editSeqRef：工作流加载窗口内用户已编辑的序号（防异步 getWorkflow 覆盖新加节点）。
+  const { pushHistory, undo, redo, resetHistory, editSeqRef } = useGraphHistory({
+    nodes, edges, setNodes, setEdges, setDirty,
+  })
 
   // 节点状态注入画布（v4.2 性能：引用相同则保持原节点对象，零处置节点不触发重渲染）
   useEffect(() => {
@@ -464,7 +445,7 @@ const onAddNode = useCallback((typeId: string) => {
       setNodes([]); setEdges([])
       setSelectedNodeId(null)
       setBatchNodeId(null); setShowResults(false)
-      historyRef.current = []; futureRef.current = []
+      resetHistory()
       copyRef.current = null
       setDirty(false)
     }

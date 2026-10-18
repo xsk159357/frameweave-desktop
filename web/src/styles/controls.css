@@ -1,0 +1,62 @@
+/* ============================================================================
+   通用控件：按钮 / 输入 / 下拉 / 命令条
+   拆分自 src/index.css（2026-10-19 审阅 P2-9）；令牌见 tokens.css
+   ============================================================================ */
+
+/* ============================================================================
+   通用控件
+   ============================================================================ */
+.fw-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 28px; padding: 0 11px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong); background: transparent; color: var(--paper);
+  font-size: 12px; font-weight: 500; white-space: nowrap; user-select: none;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.fw-btn:hover { background: var(--ink-600); border-color: var(--ink-300); }
+.fw-btn:active { background: var(--ink-500); }
+.fw-btn-primary {
+  border-color: var(--brass); background: var(--brass); color: var(--on-brass); font-weight: 600;
+}
+.fw-btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
+.fw-btn-primary:active { background: var(--brass-lo); border-color: var(--brass-lo); }
+.fw-btn-success { border-color: transparent; background: var(--ok); color: #0B1710; font-weight: 600; }
+.fw-btn-danger { border-color: transparent; background: var(--err); color: #1A0C0A; font-weight: 600; }
+.fw-btn-danger:hover { filter: brightness(1.06); }
+.fw-btn-ghost { border-color: transparent; background: transparent; color: var(--paper-dim); }
+.fw-btn-ghost:hover { background: var(--ink-600); color: var(--paper); border-color: transparent; }
+.fw-btn.active { background: var(--brass-soft); color: var(--brass-hi); border-color: transparent; }
+
+.fw-input {
+  width: 100%; height: 30px; padding: 0 10px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong); background: var(--ink-600); color: var(--paper);
+  font-size: 12.5px; outline: none; box-sizing: border-box;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.fw-input::placeholder { color: var(--paper-faint); }
+.fw-input:focus { border-color: var(--brass); box-shadow: 0 0 0 2px var(--brass-soft); }
+
+.fw-card { background: var(--ink-800); border: 1px solid var(--line); border-radius: var(--r-md); }
+.fw-pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.fw-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; padding: 0 6px; height: 16px; border-radius: 999px; letter-spacing: .02em; }
+
+/* ---------- 画布命令条 ---------- */
+.fw-canvas-toolbar {
+  height: 38px; flex: 0 0 38px; display: flex; align-items: center; gap: 3px;
+  padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--ink-900);
+  position: relative; z-index: 9;
+}
+.fw-canvas-toolbar .fw-btn { height: 26px; padding: 0 9px; font-size: 11.5px; }
+.fw-run-btn { min-width: 94px; }
+.fw-run-btn.danger { background: var(--err); border-color: var(--err); color: #1A0C0A; }
+.fw-auto-layout { display: flex; align-items: center; gap: 6px; margin-left: 6px; font-size: 11px; color: var(--paper-faint); cursor: pointer; user-select: none; }
+.fw-auto-layout input { accent-color: var(--brass); width: 12px; height: 12px; margin: 0; }
+.fw-run-progress { display: flex; align-items: center; gap: 6px; margin-left: 8px; }
+.fw-run-progress .track { width: 90px; height: 3px; background: var(--ink-500); border-radius: 2px; overflow: hidden; }
+.fw-run-progress .fill { height: 100%; background: var(--brass); transition: width .3s; }
+.fw-run-progress span { font: 9.5px var(--font-mono); color: var(--paper-faint); }
+.fw-icon-btn { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--paper-faint); }
+.fw-icon-btn:hover { background: var(--ink-600); color: var(--paper); }
+.fw-icon-btn.active { background: var(--brass-soft); color: var(--brass-hi); }
+.fw-toolbar-sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+

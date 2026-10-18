@@ -1,0 +1,24 @@
+/* ============================================================================
+   动效与其他（keyframes / 过渡）
+   拆分自 src/index.css（2026-10-19 审阅 P2-9）；令牌见 tokens.css
+   ============================================================================ */
+
+/* ============================================================================
+   动效 & 其他
+   ============================================================================ */
+@keyframes fw-pop-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fw-minimap-up { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fw-splash-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fw-splash-bar { 0% { transform: translateX(-100%); } 55% { transform: translateX(0); } 100% { transform: translateX(100%); } }
+@keyframes fw-spin { to { transform: rotate(360deg); } }
+.fw-spin { animation: fw-spin .9s linear infinite; }
+.fw-pop { animation: fw-pop-in .18s var(--t-ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

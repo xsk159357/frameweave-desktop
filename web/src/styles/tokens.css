@@ -1,0 +1,200 @@
+/* ============================================================================
+   设计令牌（暗/亮双主题）+ 滚动条
+   拆分自 src/index.css（2026-10-19 审阅 P2-9）；令牌见 tokens.css
+   ============================================================================ */
+
+/* ============================================================================
+   拾帧 FrameWeave · 墨织 INKWEAVE v2.0
+   近黑石墨 + 黄铜 + 米白 · 取景框与帧格语言 · 无玻璃 / 无霓虹 / 无发光
+   设计规范：docs/specs/design-system-inkweave.md
+   ============================================================================ */
+
+/* ---------- 令牌：暗色（默认） ---------- */
+:root {
+  --ink-950: #060708;
+  --ink-900: #0B0C0E;
+  --ink-850: #0E0F11;
+  --ink-800: #101113;
+  --ink-700: #141619;
+  --ink-600: #1A1C20;
+  --ink-500: #212429;
+  --ink-400: #2B2E34;
+  --ink-300: #3A3E45;
+
+  --line: rgba(237, 232, 222, .09);
+  --line-strong: rgba(237, 232, 222, .17);
+
+  --paper: #EDE8DE;
+  --paper-dim: #ADA79A;
+  --paper-faint: #79746A;
+
+  --brass: #D2A45E;
+  --brass-hi: #EAC489;
+  --brass-lo: #A87B3B;
+  --brass-soft: rgba(210, 164, 94, .13);
+  --on-brass: #171208;
+
+  --ok: #8FB996;
+  --ok-soft: rgba(143, 185, 150, .13);
+  --warn: #D8A657;
+  --warn-soft: rgba(216, 166, 87, .13);
+  --err: #D47B70;
+  --err-soft: rgba(212, 123, 112, .14);
+  --info: #8FAEC4;
+  --info-soft: rgba(143, 174, 196, .13);
+  --cached: #9BB7C4;
+
+  --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", system-ui, sans-serif;
+  --font-display: "Georgia", "Times New Roman", "Songti SC", serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+
+  --r-xs: 2px; --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px; --radius-pill: 999px;
+  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 10px;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-2: 0 18px 50px -12px rgba(0, 0, 0, .7);
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: 0 8px 24px -10px rgba(0, 0, 0, .6);
+  --shadow-lg: var(--shadow-2);
+  --elev-1: var(--shadow-1);
+  --elev-2: 0 8px 24px -12px rgba(0, 0, 0, .6);
+  --elev-3: var(--shadow-2);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --card-grad: var(--ink-800);
+  --node-grad: var(--ink-800);
+
+  --t-fast: .12s;
+  --t-med: .18s;
+  --t-ease: cubic-bezier(.22, .8, .28, 1);
+
+  /* 兼容旧组件引用的语义变量 */
+  --bg: var(--ink-900);
+  --bg-grad: radial-gradient(1200px 700px at 78% -12%, rgba(210, 164, 94, .045), transparent 58%), var(--ink-900);
+  --panel: var(--ink-800);
+  --panel-2: var(--ink-700);
+  --overlay: var(--ink-600);
+  --hover: var(--ink-500);
+  --bg-panel: var(--ink-800);
+  --bg-panel-2: var(--ink-700);
+  --glass: var(--ink-800);
+  --glass-strong: var(--ink-850);
+  --glass-hover: var(--ink-500);
+  --glass-blur: none;
+  --glass-border: 1px solid var(--line);
+  --glass-inner: none;
+  --accent: var(--brass);
+  --accent-strong: var(--brass-hi);
+  --accent-soft: var(--brass-soft);
+  --accent-grad: linear-gradient(135deg, var(--brass-hi), var(--brass));
+  --accent2: var(--brass);
+  --cyan: var(--info);
+  --brand-grad: linear-gradient(90deg, var(--brass-hi), var(--brass));
+  --danger: var(--err);
+  --danger-soft: var(--err-soft);
+  --success: var(--ok);
+  --success-soft: var(--ok-soft);
+  --running: var(--warn);
+  --running-soft: var(--warn-soft);
+  --cached-soft: var(--info-soft);
+  --text: var(--paper);
+  --text-dim: var(--paper-dim);
+  --text-faint: var(--paper-faint);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+
+  --canvas-dot: rgba(237, 232, 222, .1);
+  --vignette: rgba(4, 5, 6, .5);
+  --handle-ring: var(--ink-950);
+  --edge-stroke: rgba(237, 232, 222, .34);
+
+  --input-bg: var(--ink-600);
+  --input-focus-ring: rgba(210, 164, 94, .22);
+  --hover-bg: var(--ink-500);
+  --btn-primary-grad: linear-gradient(180deg, var(--brass-hi), var(--brass));
+  --btn-success-grad: var(--ok);
+  --btn-primary-glow: transparent;
+  --btn-primary-glow-strong: transparent;
+  --btn-danger-glow: transparent;
+  --modal-backdrop: rgba(4, 5, 6, .68);
+  --focus-ring: 0 0 0 2px var(--brass-soft), 0 0 0 1px var(--brass);
+  --gold: var(--brass);
+  --trial: var(--info);
+  --login-brand-bg: var(--ink-950);
+  --login-text: var(--paper);
+  --login-text-dim: var(--paper-dim);
+  --login-text-faint: var(--paper-faint);
+  --login-grid-line: rgba(237, 232, 222, .05);
+  --login-card-bg: var(--ink-850);
+  --login-surface-bg: var(--ink-600);
+  --login-field-border: var(--line);
+  --seg-active-shadow: none;
+  --toast-err-bg: var(--err-soft);
+  --toast-ok-bg: var(--ok-soft);
+}
+
+/* ---------- 令牌：亮色（纸张） ---------- */
+html[data-theme='light'] {
+  --ink-950: #EDE8DD;
+  --ink-900: #F4F1EA;
+  --ink-850: #F8F5EE;
+  --ink-800: #FCFAF5;
+  --ink-700: #FFFFFF;
+  --ink-600: #F2EEE5;
+  --ink-500: #E8E2D6;
+  --ink-400: #DCD5C7;
+  --ink-300: #C7BFB0;
+  --line: rgba(23, 24, 26, .11);
+  --line-strong: rgba(23, 24, 26, .2);
+  --paper: #17181A;
+  --paper-dim: #55524B;
+  --paper-faint: #8A857A;
+  --brass: #96692A;
+  --brass-hi: #B9853F;
+  --brass-lo: #7A5420;
+  --brass-soft: rgba(150, 105, 42, .1);
+  --on-brass: #FFF8E9;
+  --ok: #3F7A4C;
+  --ok-soft: rgba(63, 122, 76, .1);
+  --warn: #9A6A1E;
+  --warn-soft: rgba(154, 106, 30, .1);
+  --err: #A63F38;
+  --err-soft: rgba(166, 63, 56, .1);
+  --info: #46687D;
+  --info-soft: rgba(70, 104, 125, .1);
+  --cached: #46687D;
+  --shadow-1: 0 1px 2px rgba(30, 34, 44, .1);
+  --shadow-2: 0 18px 50px -12px rgba(30, 34, 44, .28);
+  --bg-grad: radial-gradient(1200px 700px at 78% -12%, rgba(150, 105, 42, .05), transparent 58%), var(--ink-900);
+  --canvas-dot: rgba(23, 24, 26, .14);
+  --vignette: rgba(30, 34, 44, .06);
+  --handle-ring: #FFFDF8;
+  --edge-stroke: rgba(23, 24, 26, .34);
+  --modal-backdrop: rgba(30, 34, 44, .38);
+  --login-brand-bg: var(--ink-950);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+html, body, #root { background: transparent; overflow: hidden; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-grad);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+button:disabled { cursor: default; opacity: .45; }
+::selection { background: rgba(210, 164, 94, .28); color: var(--paper); }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 1px; border-radius: 3px; }
+.timecode, .duration, .ruler-num, .playhead, [data-num] { font-variant-numeric: tabular-nums; }
+
+/* ---------- 滚动条 ---------- */
+.fw-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.fw-scroll::-webkit-scrollbar-thumb { background: var(--ink-400); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+.fw-scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-300); background-clip: content-box; border: 3px solid transparent; }
+.fw-scroll::-webkit-scrollbar-track, .fw-scroll::-webkit-scrollbar-corner { background: transparent; }
+

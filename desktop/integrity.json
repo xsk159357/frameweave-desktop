@@ -1,14 +1,14 @@
 {
   "v": 1,
-  "generated_at": "2026-10-18T15:41:49.428Z",
+  "generated_at": "2026-10-18T22:01:38.718Z",
   "files": {
     "main.cjs": "b39d90d47fb0304b85774ee28fe0bcfae3a2f147d709ac547c87903f659cc60d",
     "preload.cjs": "c89f2779a387c1eedbb15388c9358f732c1577e34090b079d4fd54165a139f33",
     "web/dist/apple-touch-icon.png": "e708b3c276805a459dd9c16dd0a704957acf61f8b5f4f2ae4e238d7dd175ee6e",
     "web/dist/assets/index-BMjnrFQ3.css": "4991dd8b9b68c39aee04436cc9655d1bf27efa96d1bc36a85c2fcc1c38435513",
-    "web/dist/assets/index-D43OsqxJ.js": "cd42e2fc9eaac6be868c296458c8f412acf835ed86f00e7a40f5504d02eae7f0",
+    "web/dist/assets/index-CWvk8OiI.js": "9fefc8c1227d22c392b934f965c4d7fb4fa896f3f8ae1c3f1dc2d834fc57e107",
     "web/dist/favicon.ico": "b8101b9f31ade6dd65044ed31781c5c9f48ac7fcb566d8fb1db0a6c4e1ce45b8",
     "web/dist/icon-512.png": "aeedd3142ea248fe089559c607c058c505cb072f5995c76205db518e3ec91235",
-    "web/dist/index.html": "35e23d2bc6ddac208251c350233f447e891bffbb234da25ce7298bd522fb24cd"
+    "web/dist/index.html": "3266b4000bb4388b2b5ba0aebe0047e0e28940256eaf975df89e6339ab6f2d89"
   }
 }

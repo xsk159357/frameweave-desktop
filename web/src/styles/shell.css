@@ -1,0 +1,103 @@
+/* ============================================================================
+   壳层：顶栏 46px + 图标栏/工作流面板/画布 主布局
+   拆分自 src/index.css（2026-10-19 审阅 P2-9）；令牌见 tokens.css
+   ============================================================================ */
+
+/* ============================================================================
+   壳层
+   ============================================================================ */
+.fw-app-shell {
+  height: 100%; display: flex; flex-direction: column;
+  background: var(--bg-grad); background-attachment: fixed;
+  color: var(--text); overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+}
+html[data-theme='light'] .fw-app-shell { box-shadow: 0 12px 40px rgba(30, 34, 44, .16); }
+
+/* ---------- 顶栏 46px ---------- */
+.fw-topbar {
+  display: flex; align-items: center; gap: 12px;
+  height: 46px; flex: 0 0 46px; padding: 0 14px 0 12px; padding-right: 148px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink-850);
+  position: relative; z-index: 30;
+  -webkit-app-region: drag; user-select: none;
+}
+.fw-topbar * { -webkit-app-region: no-drag; }
+.fw-brand { display: flex; align-items: center; gap: 9px; -webkit-app-region: drag; }
+.fw-brand-logo { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; overflow: hidden; flex: none; }
+.fw-brand-name { font-size: 12.5px; font-weight: 700; letter-spacing: .06em; color: var(--paper); white-space: nowrap; }
+.fw-brand-name em { font-family: var(--font-display); font-style: normal; font-weight: 400; font-size: 10.5px; letter-spacing: .22em; color: var(--brass); margin-left: 7px; text-transform: uppercase; }
+.fw-topbar-sep { width: 1px; height: 18px; background: var(--line-strong); flex: none; }
+.fw-workflow-name {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 12px; color: var(--paper-dim); max-width: 320px;
+}
+.fw-workflow-name b { font-weight: 550; color: var(--paper); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-dirty-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--brass); flex: none; }
+.fw-topbar-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.fw-topbar-groups { display: flex; align-items: center; gap: 6px; }
+.fw-topbar-group { display: flex; align-items: center; gap: 1px; }
+.fw-topbar-group + .fw-topbar-group { padding-left: 6px; border-left: 1px solid var(--line); }
+.fw-topbar .fw-btn { height: 28px; padding: 0 9px; font-size: 11.5px; color: var(--paper-dim); }
+.fw-topbar .fw-btn:hover { color: var(--paper); background: var(--ink-600); }
+.fw-topbar .fw-btn.active { color: var(--brass-hi); background: var(--brass-soft); }
+
+/* 账户气泡 */
+.fw-account-popover {
+  position: absolute; top: 34px; right: 0; width: 208px; padding: 10px;
+  background: var(--ink-700); border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2); z-index: 60; animation: fw-pop-in .16s var(--t-ease) both;
+}
+.fw-account-name { font-size: 12px; font-weight: 600; color: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-account-plan { font-size: 10.5px; color: var(--paper-faint); margin: 2px 0 8px; }
+.fw-account-popover button {
+  display: flex; align-items: center; gap: 6px; width: 100%; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: var(--paper-dim); padding: 7px 8px; text-align: left; font-size: 11.5px;
+}
+.fw-account-popover button:hover { background: var(--ink-500); color: var(--paper); }
+.fw-account-popover button.danger { color: var(--err); }
+.fw-account-popover button.danger:hover { background: var(--err-soft); }
+.fw-account-activate { background: var(--brass-soft) !important; color: var(--brass-hi) !important; }
+
+/* ---------- 主布局：图标栏 + 工作流面板 + 画布 ---------- */
+.fw-main-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+.fw-rail {
+  width: 52px; flex: 0 0 52px; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 8px 0 6px; background: var(--ink-950);
+  border-right: 1px solid var(--line); z-index: 20;
+}
+.fw-rail-btn {
+  position: relative; width: 38px; height: 34px; display: grid; place-items: center;
+  border: 0; border-radius: var(--r-md); background: transparent;
+  color: var(--paper-faint); transition: color var(--t-fast), background var(--t-fast);
+}
+.fw-rail-btn:hover { color: var(--paper); background: var(--ink-600); }
+.fw-rail-btn.active { color: var(--brass-hi); background: var(--brass-soft); }
+.fw-rail-btn.active::before {
+  content: ''; position: absolute; left: -7px; top: 8px; bottom: 8px; width: 2px;
+  background: var(--brass); border-radius: 2px;
+}
+.fw-rail-btn .lbl {
+  position: absolute; left: 44px; top: 50%; transform: translateY(-50%);
+  padding: 4px 8px; font-size: 11px; color: var(--paper); background: var(--ink-600);
+  border: 1px solid var(--line); border-radius: var(--r-sm); white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity var(--t-fast); z-index: 50;
+}
+.fw-rail-btn:hover .lbl { opacity: 1; }
+.fw-rail-sep { width: 24px; height: 1px; background: var(--line); margin: 6px 0; flex: none; }
+.fw-rail-spacer { flex: 1; }
+.fw-rail-avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--ink-600); color: var(--brass-hi); font-size: 10px; font-weight: 700; border: 1px solid var(--line-strong); }
+
+.fw-workspace-sidebar {
+  width: 248px; flex: 0 0 248px; min-height: 0; background: var(--ink-900);
+  border-right: 1px solid var(--line); overflow: hidden;
+}
+.fw-workspace-sidebar > div { width: 100% !important; height: 100%; border-right: 0 !important; background: transparent !important; }
+.fw-workspace-sidebar.collapsed { display: none; }
+.fw-canvas-stage { min-width: 0; min-height: 0; flex: 1; display: flex; position: relative; background: var(--ink-950); }
+
+@media (max-width: 1100px) { .fw-workspace-sidebar { width: 210px; flex-basis: 210px; } }
+@media (max-width: 860px) { .fw-workspace-sidebar { display: none; } }
+
