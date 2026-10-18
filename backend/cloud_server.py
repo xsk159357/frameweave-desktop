@@ -8,7 +8,13 @@ from urllib.parse import urlparse
 CARD_SECRET=os.environ.get('FRAMEWEAVE_CARD_SECRET',''); ADMIN_KEY=os.environ.get('FRAMEWEAVE_ADMIN_KEY','')
 VERIFY_SECRET=os.environ.get('FRAMEWEAVE_VERIFY_SECRET','fw-verify-secret-2026')  # P3/t3 ④：auth 响应 HMAC 签名密钥
 ADMIN_ALLOW_IPS=[x.strip() for x in os.environ.get('FRAMEWEAVE_ADMIN_ALLOW_IPS','').split(',') if x.strip()]
-TRIAL_DAYS=1; DB_PATH=os.environ.get('CLOUD_DB',os.path.join(os.path.dirname(os.path.abspath(__file__)),'cloud.db'))
+TRIAL_DAYS=1
+# 2026-10-19 源码树卫生：仓库开发树存在 backend/data/（已 gitignore）时 DB 落 data/，
+# 避免从仓库内启动把 cloud.db 写回源码树（曾使 test_health_governance 门禁红）。
+# 生产部署目录无 data/ 兄弟目录 → 行为不变（仍在脚本同目录）；CLOUD_DB 优先级最高。
+_BASE_DIR=os.path.dirname(os.path.abspath(__file__))
+_DEV_DATA=os.path.join(_BASE_DIR,'data')
+DB_PATH=os.environ.get('CLOUD_DB', os.path.join(_DEV_DATA,'cloud.db') if os.path.isdir(_DEV_DATA) else os.path.join(_BASE_DIR,'cloud.db'))
 AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.3.12'; AUTHOR_SHARE=0.8
 MARKET_FILE=os.path.join(os.path.dirname(os.path.abspath(DB_PATH)),'market_items.json')
 _MARKET_LOCK=threading.Lock()  # t1：商城 JSON 读写互斥，防并发下载/更新丢计数
