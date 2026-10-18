@@ -196,4 +196,11 @@ def test_http_protocol_error_codes(server):
         st3 = e.code
     except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
         aborted = True
+    except urllib.error.URLError as e:
+        # Linux 上 urllib 把对端提前关闭包成 URLError(BrokenPipeError/ConnectionResetError)
+        reason = getattr(e, "reason", None)
+        if isinstance(reason, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            aborted = True
+        else:
+            raise
     assert st3 == 413 or aborted, "超限请求未被拒绝: status=%s aborted=%s" % (st3, aborted)
