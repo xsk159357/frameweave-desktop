@@ -308,3 +308,27 @@ cd web && npx tsc --noEmit && npx vite build                                    
 cd .. && python sdk/check_all.py                                                      # 70 OK / 0 FAILED
 python scripts/scan_plaintext_secrets.py --root .                                     # 0 命中
 ```
+
+### 13.3 CI 首次跑通（2026-10-19，run #14）
+
+> 结论：`Backend CI / S1-T9` 两个 job 全部 success，**这是该 workflow 建立以来第一次绿**。
+> 证据：`https://github.com/xsk159357/frameweave-desktop/actions/runs/39172437235`（commit `274de01`）。
+
+修的过程（run #10 → #14，5 个提交）暴露的问题全部是「本地从没在干净环境跑过」：
+
+| run | 失败点 | 根因 | 修复 |
+|---|---|---|---|
+| #10 | Checkout frameweave-plugins | workflow 写的是 `FrameWeave/frameweave-plugins`（不存在的 org），远端实际是 `xsk159357/frameweave-plugins` | 改 owner |
+| #11 | import app.server | `UploadFile` 路由需要 `python-multipart`，requirements 未声明 → `RuntimeError`（exit 4） | 补 `python-multipart` / `cryptography`（signatures 顶层 import）/ `imageio-ffmpeg` |
+| #12 | pytest 5 项 | 测试硬编码 `F:\1223\...`、用 `backend/../../` 推插件目录（CI checkout 在仓库内）、断言工作区 `_archive/` 与 `classify.json` | 新增 `tests/_plugin_paths.py`（env → 平级 → 仓库内）；工作区专属断言改 skip |
+| #13 | 2 项 NameError | skip 分支用的 `pytest` 只在个别函数内 import | 补模块级 `import pytest` |
+| #14 | — | 全绿 | — |
+
+同时验证了本次重构没有破坏 CI 路径：新拆的 `http_models` / `prompt_protocol` / `models_api` 在 Py3.12 + 干净依赖下正常 import，`ci_gate` 的 scan / signatures / sdk 三门禁全过。
+
+### 13.4 本地与 CI 的差异（值得记住）
+
+- 本地 Python 3.14、CI 3.12；本地 `TEMP` 有值、CI 没有（这次靠 conftest 钉死才两边一致）。
+- 本地插件仓库是工作区平级目录（70 包），CI checkout 的是 GitHub 上的较早快照（40 包），
+  因此「依赖插件快照内容」的断言（数据资产、特定 type_id）在 CI 上 skip。
+- 本地 `NO_PROXY` 含 `[::1]` 会让 httpx 崩；CI 没有该条目，所以这个坑只在本地复现。
