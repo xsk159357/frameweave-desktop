@@ -6,3 +6,8 @@ opencv-python-headless>=4.10
 requests>=2.32
 aiofiles>=24.1
 alibabacloud_dm20151123>=1.0.0
+
+# 2026-10-19：CI 在干净环境 import app.server 时才暴露的缺失声明
+python-multipart>=0.0.9
+cryptography>=42
+imageio-ffmpeg>=0.5

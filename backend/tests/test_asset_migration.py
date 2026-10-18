@@ -1,5 +1,7 @@
-import json, os
-BASE=r'F:\1223\解说工坊\frameweave-plugins\packages'
+import json, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _plugin_paths import require_packages
+BASE = require_packages()
 def load(p): return json.load(open(os.path.join(BASE,p),encoding='utf8'))
 def test_asset_inventory():
     assert len(load('core_voice_library/data/tts_library.json')['voices'])==214

@@ -19,11 +19,12 @@ os.environ.setdefault("FRAMEWEAVE_LOCAL_TOKEN", "fw-t9-test-token")
 
 # 插件工程根（工作区相对布局：frameweave-plugins 与 FrameWeave 平级；
 # 本文件在 backend/tests/ → 需上溯 4 层到工作区根）
-_WORKSPACE = os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__)))))
-_PLUGIN_REPO = os.path.join(_WORKSPACE, "frameweave-plugins")
-_PACKAGES = os.path.join(_PLUGIN_REPO, "packages")
-_SDK = os.path.join(_PLUGIN_REPO, "sdk")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _plugin_paths import packages_dir, repo_dir, sdk_dir  # noqa: E402
+
+_PLUGIN_REPO = repo_dir()
+_PACKAGES = packages_dir()
+_SDK = sdk_dir()
 
 
 def _list_packages():

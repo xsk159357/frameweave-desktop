@@ -3,7 +3,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_nine_skills_session_continue_duration():
     import importlib.util
-    p=r'F:\1223\解说工坊\frameweave-plugins\packages\user_jsm_narration_studio\node.py'
+    from _plugin_paths import packages_dir
+    import pytest
+    p=os.path.join(packages_dir() or '', 'user_jsm_narration_studio', 'node.py')
+    if not os.path.isfile(p):
+        pytest.skip('user_jsm_narration_studio 插件不可用')
     spec=importlib.util.spec_from_file_location('studio',p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     skills=m.load_skills(); assert len(skills)==9
     from app.assets import create_store

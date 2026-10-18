@@ -24,12 +24,16 @@ import json
 import os
 import sys
 
+import pytest
+
 _TESTS = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_TESTS)
 sys.path.insert(0, _BACKEND)
 
 # 扫描目标 = 官方插件仓库全量包（本测试把 USER_NODES 指向它，覆盖 40+ 插件包）
-_PLUGINS = os.path.abspath(os.path.join(_BACKEND, "..", "..", "frameweave-plugins", "packages"))
+from _plugin_paths import packages_dir  # noqa: E402
+_PLUGINS = packages_dir()
+pytestmark = pytest.mark.skipif(not _PLUGINS, reason="frameweave-plugins/packages 不可用")
 os.environ["FRAMEWEAVE_USER_NODES"] = _PLUGINS
 os.environ.setdefault("FRAMEWEAVE_LOCAL_TOKEN", "fw-t4-test-token")
 
@@ -38,7 +42,8 @@ from app import declarative  # noqa: E402
 # 2026-10-19：显式设置扫描目录。此前只设 env，而 USER_NODES_DIR 在 declarative 导入时
 # 已绑定（conftest 先导入 app.server），导致本文件单独运行时扫到 backend/user_nodes（33 包）
 # 而非插件仓库（70 包）——测试通过与否取决于 test_node_smoke 是否先跑（顺序依赖）。
-declarative.set_user_nodes_dir(_PLUGINS)
+if _PLUGINS:
+    declarative.set_user_nodes_dir(_PLUGINS)
 from app import server as srv  # noqa: E402  导入即 autodiscover() + declarative.scan()
 from app.server import _oi_ports_to_spec  # noqa: E402
 

@@ -53,12 +53,18 @@ def test_backend_no_work_artifacts():
 
 
 def test_cloud_db_and_pyarmor_log_removed():
-    """③ cloud.db / pyarmor.bug.log 已移出 backend（源码树干净）。"""
+    """③ cloud.db / pyarmor.bug.log 已移出 backend（源码树干净）。
+
+    2026-10-19：归档区在工作区（非仓库），CI 检出的是干净仓库、不含 _archive/。
+    因此「源码树里没有」是硬断言；「归档区里有」只在本地工作区存在该批次时校验
+    （否则 CI 必红——这是此前从未真正跑通过 CI 才没暴露的问题）。
+    """
     assert not os.path.exists(os.path.join(BACKEND, "cloud.db"))
     assert not os.path.exists(os.path.join(BACKEND, "pyarmor.bug.log"))
-    # 归档区应存在（移出=移动，非删除）
-    assert os.path.isfile(os.path.join(ARCHIVE, "01-backend-散落", "cloud.db"))
-    assert os.path.isfile(os.path.join(ARCHIVE, "01-backend-散落", "pyarmor.bug.log"))
+    archived = os.path.join(ARCHIVE, "01-backend-散落", "cloud.db")
+    if os.path.isdir(ARCHIVE):
+        assert os.path.isfile(archived), "归档批次存在但 cloud.db 不在其中"
+        assert os.path.isfile(os.path.join(ARCHIVE, "01-backend-散落", "pyarmor.bug.log"))
 
 
 def test_desktop_no_anomalies():
