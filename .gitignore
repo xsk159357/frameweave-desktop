@@ -82,3 +82,7 @@ backend/admin.html
 web/designs/
 web/profile_e2e_t3*.mjs
 web/t1_verify_baseline.mjs
+
+# ===== 测试报告产物（本地/CI 生成） =====
+backend/pytest_results.xml
+backend/health_results.xml
