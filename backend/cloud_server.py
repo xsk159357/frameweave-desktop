@@ -9,7 +9,7 @@ CARD_SECRET=os.environ.get('FRAMEWEAVE_CARD_SECRET',''); ADMIN_KEY=os.environ.ge
 VERIFY_SECRET=os.environ.get('FRAMEWEAVE_VERIFY_SECRET','fw-verify-secret-2026')  # P3/t3 ④：auth 响应 HMAC 签名密钥
 ADMIN_ALLOW_IPS=[x.strip() for x in os.environ.get('FRAMEWEAVE_ADMIN_ALLOW_IPS','').split(',') if x.strip()]
 TRIAL_DAYS=1; DB_PATH=os.environ.get('CLOUD_DB',os.path.join(os.path.dirname(os.path.abspath(__file__)),'cloud.db'))
-AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.3.11'; AUTHOR_SHARE=0.8
+AUTH_REVISION='email-code-v2'; PROTOCOL_VERSION=3; VERSION='0.3.12'; AUTHOR_SHARE=0.8
 MARKET_FILE=os.path.join(os.path.dirname(os.path.abspath(DB_PATH)),'market_items.json')
 _MARKET_LOCK=threading.Lock()  # t1：商城 JSON 读写互斥，防并发下载/更新丢计数
 EMAIL_RE=re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}@qq\.com$',re.I)

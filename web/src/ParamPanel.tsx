@@ -38,16 +38,21 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, forceI
 
   const styles = {
     panel: {
-      width: '100%', height: '100%', borderLeft: 'var(--glass-border)', boxSizing: 'border-box' as const,
-      background: 'var(--card-grad)',       boxShadow: 'none', padding: 16, overflowY: 'auto', flexShrink: 0,
+      width: '100%', height: '100%', borderLeft: 'none', boxSizing: 'border-box' as const,
+      background: 'var(--ink-850)', boxShadow: 'none', padding: '14px 16px 20px', overflowY: 'auto', flexShrink: 0,
     },
-    label: { fontSize: 11, fontWeight: 700, letterSpacing: .4, color: 'var(--text-faint)', margin: '16px 0 8px', textTransform: 'uppercase' as const, display: 'flex', alignItems: 'center', gap: 5 },
+    label: { fontSize: 10, fontWeight: 700, letterSpacing: '.14em', color: 'var(--text-faint)', margin: '18px 0 8px', textTransform: 'uppercase' as const, display: 'flex', alignItems: 'center', gap: 5 },
     input: {
-      width: '100%', padding: '8px 11px', borderRadius: 10, fontSize: 13,
-      border: 'var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text)',
-            boxShadow: 'var(--glass-inner)', marginBottom: 10, boxSizing: 'border-box' as const, outline: 'none',
-      transition: 'border-color .2s, box-shadow .2s',
+      width: '100%', height: 30, padding: '0 9px', borderRadius: 4, fontSize: 12,
+      border: '1px solid var(--line-strong)', background: 'var(--ink-600)', color: 'var(--text)',
+      marginBottom: 9, boxSizing: 'border-box' as const, outline: 'none',
+      transition: 'border-color .15s, box-shadow .15s',
     },
+  }
+
+  const STATUS_TEXT: Record<string, string> = {
+    pending: '待运行', queued: '排队中', running: '运行中', success: '已完成',
+    failed: '失败', cancelled: '已取消', cached: '缓存命中',
   }
 
   const renderParam = (p: any) => {
@@ -122,33 +127,32 @@ export function ParamPanel({ nodeId, spec, params, run_history, onUpdate, forceI
 
   return (
     <div style={styles.panel}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-        <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: 'var(--accent-soft)', color: 'var(--accent-strong)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
+        <span style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, background: 'var(--brass-soft)', color: 'var(--brass-hi)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
           {((spec?.type_id || '').split('/').pop() || 'N').replace(/[^a-zA-Z0-9]/g, '')[0]?.toUpperCase() || 'N'}
         </span>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>{spec?.title || '节点'}</span>
-        <span className="fw-badge" style={{ background: 'var(--border)', color: 'var(--text-faint)', fontFamily: 'Consolas, monospace' }}>#{nodeId.slice(0, 12)}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 650 }}>{spec?.title || '节点'}</span>
+        <span className="fw-badge" style={{ background: 'var(--ink-600)', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', height: 16, borderRadius: 3 }}>#{nodeId.slice(0, 8)}</span>
         <span style={{ flex: 1 }} />
         {onClose && (
-          <button onClick={onClose} title="关闭" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 4, borderRadius: 7, lineHeight: 0 }}><X size={15} /></button>
+          <button onClick={onClose} title="关闭" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 4, borderRadius: 4, lineHeight: 0 }}><X size={14} /></button>
         )}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5, fontFamily: 'Consolas, monospace' }}>
+      <div style={{ fontSize: 9.5, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5, fontFamily: 'var(--font-mono)', letterSpacing: '.02em' }}>
         {spec?.type_id}
       </div>
       {spec?.description && (
-        <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 8, lineHeight: 1.55 }}>{spec.description}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4, marginBottom: 4, lineHeight: 1.6 }}>{spec.description}</div>
       )}
 
       {/* 执行状态 */}
-      <div style={styles.label}><CircleDot size={11} /> 执行状态</div>
+      <div style={styles.label}><CircleDot size={10} /> 执行状态</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%',
+        <span style={{ width: 6, height: 6, borderRadius: '50%',
           background: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)'
-            : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : 'var(--text-faint)',
-          boxShadow: '0 0 0 3px ' + (status === 'success' ? 'var(--success-soft)' : status === 'failed' ? 'var(--danger-soft)' : 'transparent') }} />
-        <span style={{ fontSize: 13, fontWeight: 600, color: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)' : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : 'var(--text)' }}>
-          {status}
+            : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : 'var(--text-faint)' }} />
+        <span style={{ fontSize: 12, fontWeight: 550, color: status === 'success' ? 'var(--success)' : status === 'failed' ? 'var(--danger)' : status === 'running' ? 'var(--running)' : status === 'cached' ? 'var(--cached)' : 'var(--text-dim)' }}>
+          {STATUS_TEXT[status] || status}
         </span>
       </div>
       {error && (

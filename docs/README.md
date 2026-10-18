@@ -29,6 +29,7 @@
 ### specs/ — 技术规范
 - [插件开发规范 v4（现行权威）](specs/plugin-development-spec.md)
 - [节点插件规范 v1（历史参考）](specs/node-plugin-spec.md)
+- [设计系统「墨织 INKWEAVE」v2.0（现行 UI 基线）](specs/design-system-inkweave.md)
 
 ### plans/ — 方案与拆解
 - [UI 重设计方案](plans/ui-redesign-plan.md)
@@ -42,6 +43,7 @@
 - [云端签名部署修复记录 20261011](records/云端签名部署修复记录_20261011.md)、[s14 商城自动刷新](records/s14-market-autorefresh.md)
 
 ### reports/ — 验证与深度报告
+- [全量 UI / 布局重设计 2026-10（应用 + 后台 + 官网）](reports/ui-redesign-2026-10/README.md)
 - [FrameWeave 项目深度分析报告](reports/FrameWeave_项目深度分析报告.md)
 - [cloud E2E 报告](reports/cloud_e2e_report.md)
 - [授权服务器连通性验证报告 20261009](reports/授权服务器连通性验证报告_20261009.md)

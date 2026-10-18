@@ -1,6 +1,6 @@
 // 左侧工作流列表（v1.2：替代节点库侧栏；节点添加移入画布右键菜单）
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Search, FileText, Download, Upload, Trash2, Puzzle, Layers, PencilLine, LayoutTemplate } from 'lucide-react'
+import { Plus, Search, FileText, Download, Upload, Trash2, Puzzle, PencilLine, LayoutTemplate } from 'lucide-react'
 import { api } from './api'
 import { useAppStore } from './store'
 import { MissingNodesModal, ImportedWorkflowModal } from './WorkflowModals'
@@ -151,47 +151,46 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
 
   return (
     <div style={{
-      width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column',
-      background: 'var(--bg)', borderRight: '1px solid var(--border)', minHeight: 0,
+      width: '100%', flexShrink: 0, display: 'flex', flexDirection: 'column',
+      background: 'transparent', borderRight: 'none', minHeight: 0,
     }}>
       {/* 头部：标题 + 插件入口 */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '12px 12px 8px', gap: 6 }}>
-        <Layers size={14} color="var(--accent)" style={{ flexShrink: 0 }} />
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: .6, color: 'var(--text-dim)', flex: 1 }}>工作流</span>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '12px 12px 10px', gap: 6 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', color: 'var(--text-faint)', flex: 1 }}>工作流 · WORKFLOWS</span>
         <button title="节点插件" onClick={onOpenPlugin}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 8, color: 'var(--text-faint)', fontSize: 11 }}>
-          <Puzzle size={12} /> {plugCount > 0 ? plugCount : ''}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 3, color: 'var(--text-faint)', fontSize: 10.5 }}>
+          <Puzzle size={11} /> {plugCount > 0 ? plugCount : ''}
         </button>
       </div>
       {/* 新建主按钮 */}
-      <div style={{ padding: '2px 12px 8px' }}>
+      <div style={{ padding: '0 12px 8px' }}>
         <button className="fw-btn fw-btn-primary" disabled={readOnly} onClick={() => { setNameInput(''); setNameBox({ mode: 'create' }) }}
-          style={{ width: '100%', padding: '7px 10px', justifyContent: 'center', fontSize: 12.5 }}>
-          <><Plus size={13} /> 新建工作流</>
+          style={{ width: '100%', height: 28, justifyContent: 'center', fontSize: 11.5 }}>
+          <><Plus size={12} /> 新建工作流</>
         </button>
       </div>
-      {/* 模板操作：导入分享包 / 从模板新建 */}
+      {/* 模板操作 */}
       <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6 }}>
-        <button disabled={readOnly} onClick={() => shareInput.current?.click()} className="fw-btn fw-btn-ghost" style={{ flex: 1, padding: '6px 6px', justifyContent: 'center', fontSize: 11.5 }} title="导入别人分享的工作流 zip">
-          <Upload size={12} /> 导入分享
+        <button disabled={readOnly} onClick={() => shareInput.current?.click()} className="fw-btn fw-btn-ghost" style={{ flex: 1, height: 26, padding: '0 6px', justifyContent: 'center', fontSize: 10.5, border: '1px solid var(--border)' }} title="导入别人分享的工作流 zip">
+          <Upload size={11} /> 导入
         </button>
-        <button disabled={readOnly || templates.length === 0} onClick={() => setShowTemplates(true)} className="fw-btn fw-btn-ghost" style={{ flex: 1, padding: '6px 6px', justifyContent: 'center', fontSize: 11.5 }}>
-          <LayoutTemplate size={12} /> 我的工作流
+        <button disabled={readOnly || templates.length === 0} onClick={() => setShowTemplates(true)} className="fw-btn fw-btn-ghost" style={{ flex: 1, height: 26, padding: '0 6px', justifyContent: 'center', fontSize: 10.5, border: '1px solid var(--border)' }}>
+          <LayoutTemplate size={11} /> 模板
         </button>
         <input ref={shareInput} type="file" accept=".zip" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) void importSharedWorkflow(file); e.target.value = '' }} />
       </div>
       {/* 搜索 */}
       <div style={{ padding: '0 12px 8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '5px 9px' }}>
-          <Search size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--ink-600)', border: '1px solid var(--border)', borderRadius: 4, padding: '0 8px', height: 28 }}>
+          <Search size={11} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索工作流"
-            style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, width: '100%' }} />
+            style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 11.5, width: '100%' }} />
         </div>
       </div>
       {/* 列表 */}
       <div className="fw-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
         {items.length === 0 && (
-          <div style={{ padding: '26px 10px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 12, lineHeight: 1.8 }}>
+          <div style={{ padding: '26px 10px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 11.5, lineHeight: 1.8 }}>
             {query ? '没有匹配的工作流' : '还没有工作流，点击上方「新建工作流」开始'}
           </div>
         )}
@@ -201,19 +200,20 @@ export function WorkflowPanel({ onOpenPlugin, readOnly = false }: Props) {
             <div key={w.id} onClick={() => open(w.id, w.name)}
               onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: w.id, name: w.name }) }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 9px', borderRadius: 10, cursor: 'pointer',
-                background: cur ? 'var(--accent-soft)' : 'transparent', border: '1px solid ' + (cur ? 'rgba(139,147,255,.18)' : 'transparent'),
-                marginBottom: 2, transition: 'background var(--t-fast)',
+                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 4, cursor: 'pointer',
+                background: cur ? 'var(--brass-soft)' : 'transparent',
+                borderLeft: '2px solid ' + (cur ? 'var(--brass)' : 'transparent'),
+                marginBottom: 1, transition: 'background var(--t-fast)',
               }}
               onMouseEnter={(e) => { if (!cur) e.currentTarget.style.background = 'var(--hover)' }}
               onMouseLeave={(e) => { if (!cur) e.currentTarget.style.background = 'transparent' }}>
-              <FileText size={13} style={{ color: cur ? 'var(--accent)' : 'var(--text-faint)', flexShrink: 0 }} />
+              <FileText size={12} style={{ color: cur ? 'var(--brass)' : 'var(--text-faint)', flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: cur ? 650 : 500, color: cur ? 'var(--text)' : 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 12, fontWeight: cur ? 600 : 450, color: cur ? 'var(--text)' : 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {w.name || w.id}
-                  {cur && dirty && <span style={{ color: 'var(--running)', marginLeft: 5 }}>●</span>}
+                  {cur && dirty && <span style={{ color: 'var(--bronze, var(--brass))', marginLeft: 5 }}>●</span>}
                 </div>
-                <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 1 }}>{fmt(w.updated_at || 0)}</div>
+                <div style={{ fontSize: 9.5, color: 'var(--text-faint)', marginTop: 1, fontFamily: 'var(--font-mono)' }}>{fmt(w.updated_at || 0)}</div>
               </div>
             </div>
           )

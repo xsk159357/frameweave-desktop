@@ -100,7 +100,7 @@ BACKEND_PROTOCOL_MINOR = 1                        # 次版本：v3.1 —— P2-1
 BACKEND_PROTOCOL_VERSION = f"{BACKEND_PROTOCOL}.{BACKEND_PROTOCOL_MINOR}"
 PROTOCOL_COMPAT_MAJOR = BACKEND_PROTOCOL          # 兼容位导出（语义化文档用）
 # 版本唯一真源：desktop/package.json（bump 时同步此常量 + cloud_server.py VERSION + preload/cloud_gateway）
-APP_VERSION = "0.3.11"
+APP_VERSION = "0.3.12"
 app = FastAPI(title="FrameWeave Local Service", version=APP_VERSION)
 
 # ---- 本地 API 鉴权（H3 修复 + P3/t3 ③ 防 dev 绕过） ----

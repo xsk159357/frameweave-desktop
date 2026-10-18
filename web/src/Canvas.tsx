@@ -128,6 +128,13 @@ function CanvasInner({ workflowId, readOnly = false }: { workflowId: string; rea
     return () => window.removeEventListener('fw-nodes-installed', h)
   }, [setSpecs])
 
+  // 左侧图标栏「节点库」入口（App 派发）
+  useEffect(() => {
+    const h = () => setShowLibrary(true)
+    window.addEventListener('fw-open-library', h)
+    return () => window.removeEventListener('fw-open-library', h)
+  }, [])
+
   // WebSocket 事件
   useEffect(() => {
     const ws = connectWS(applyNodeEvent)
@@ -741,25 +748,9 @@ const onAddNode = useCallback((typeId: string) => {
     pushToast('已删除 ' + ids.size + ' 个节点', 'info')
   }, [confirm, pushHistory, nodes, edges, setNodes, setEdges, setSelectedNodeId, setDirty, pushToast])
 
-  const toolbar = {
-    display: 'flex', gap: 8, alignItems: 'center', padding: '9px 14px',
-    borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
-    backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-    boxShadow: 'var(--glass-inner)', flexShrink: 0, position: 'relative' as const, zIndex: 9,
-  }
-  const btn = {
-    padding: '7px 12px', borderRadius: 11, border: 'var(--glass-border)',
-    background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-    boxShadow: 'var(--glass-inner)', color: 'var(--text)', fontSize: 13,
-    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-    transition: 'all .2s ease',
-  }
-  const iconBtn = { ...btn, padding: '7px 9px' }
-  const sep = { width: 1, alignSelf: 'stretch', margin: '4px 2px', background: 'var(--border)' }
-
   const menuItem = (icon: ReactNode, label: string, sub: string, onClick: () => void) => (
     <div
-      style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 7 }}
+      style={{ padding: '6px 12px', fontSize: 12.5, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 7 }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)' }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       onClick={onClick}
@@ -772,47 +763,40 @@ const onAddNode = useCallback((typeId: string) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, position: 'relative' }}>
-      {/* ===== 工具栏（A5 瘦身） ===== */}
-      <div style={toolbar}>
+      {/* ===== 画布命令条 ===== */}
+      <div className="fw-canvas-toolbar">
         <button
           onClick={() => guarded(() => running ? cancelRun() : run('all'))}
-          style={{
-            ...btn, border: 'none',
-            background: running ? 'rgba(248,113,113,.9)' : 'var(--btn-primary-grad)',
-            color: '#fff', fontWeight: 700, padding: '6px 15px',
-            boxShadow: running ? '0 2px 10px rgba(248,113,113,.4)' : '0 2px 12px rgba(108,140,255,.42)',
-          }}
+          className={'fw-btn fw-btn-primary fw-run-btn' + (running ? ' danger' : '')}
         >
-          {running ? <><Square size={13} /> 停止</> : <><Play size={15} /> 一键出片</>}
+          {running ? <><Square size={12} /> 停止</> : <><Play size={13} /> 一键出片</>}
         </button>
-        <button style={btn} onClick={() => guarded(() => run('downstream'))} disabled={readOnly}><ArrowDown size={13} /> 仅下游</button>
-        <button style={btn} onClick={() => guarded(save)} disabled={readOnly}>{saving ? '保存中…' : <><Save size={13} /> 保存</>}</button>
-        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', cursor: 'pointer', userSelect: 'none' }}>
-          <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+        <button className="fw-btn fw-btn-ghost" onClick={() => guarded(() => run('downstream'))} disabled={readOnly}><ArrowDown size={12} /> 仅下游</button>
+        <button className="fw-btn fw-btn-ghost" onClick={() => guarded(save)} disabled={readOnly}>{saving ? '保存中…' : <><Save size={12} /> 保存</>}</button>
+        <label className="fw-auto-layout">
+          <input type="checkbox" checked={autoLayout} onChange={(e) => setAutoLayout(e.target.checked)} />
           自动布局
         </label>
         {running && (() => {
           const vals = Object.values(nodeProgress).filter((v: any) => v !== undefined && v !== null)
           const avg = vals.length > 0 ? (vals as number[]).reduce((a, b) => a + b, 0) / vals.length : 0
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
-              <div style={{ width: 110, height: 7, background: 'var(--bg-panel-2)', borderRadius: 999, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: (avg * 100) + '%', background: 'var(--accent-grad)', transition: 'width .3s', borderRadius: 999 }} />
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>{(avg * 100).toFixed(0)}%</span>
+            <div className="fw-run-progress">
+              <div className="track"><div className="fill" style={{ width: (avg * 100) + '%' }} /></div>
+              <span>{(avg * 100).toFixed(0)}%</span>
             </div>
           )
         })()}
         <div style={{ flex: 1 }} />
         <button
-          style={{ ...iconBtn, ...(showLibrary ? { background: 'var(--accent-soft)', color: 'var(--accent-strong)', borderColor: 'var(--accent)' } : {}) }}
+          className={'fw-icon-btn' + (showLibrary ? ' active' : '')}
           title="节点库 (Library)" onClick={() => setShowLibrary(v => !v)}>
           <Library size={14} />
         </button>
-        <div style={sep} />
-        <button style={iconBtn} title="导入工作流 (JSON)" onClick={() => fileInput.current?.click()}><Upload size={14} /></button>
-        <button style={iconBtn} title="导出工作流 (JSON)" onClick={exportWorkflow}><Download size={14} /></button>
-        <button style={iconBtn} title="快捷键 (?)" onClick={() => setShowHelp(v => !v)}><HelpCircle size={14} /></button>
+        <span className="fw-toolbar-sep" />
+        <button className="fw-icon-btn" title="导入工作流 (JSON)" onClick={() => fileInput.current?.click()}><Upload size={14} /></button>
+        <button className="fw-icon-btn" title="导出工作流 (JSON)" onClick={exportWorkflow}><Download size={14} /></button>
+        <button className="fw-icon-btn" title="快捷键 (?)" onClick={() => setShowHelp(v => !v)}><HelpCircle size={14} /></button>
         <input data-testid="workflow-json-input" ref={fileInput} type="file" accept=".json,.fwflow.json,.fwflow" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importWorkflow(f); e.target.value = '' }} />
       </div>
 
@@ -866,20 +850,20 @@ const onAddNode = useCallback((typeId: string) => {
             onPaneClick={() => { setSelectedNodeId(null); setMenu(null); setShowHelp(false); setAddMenu(null); setConnMenu(null); setShowLibrary(false) }}
             onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null); setAddMenu({ x: e.clientX, y: e.clientY }) }}
           >
-            <Background gap={22} color="var(--canvas-dot)" />
+            <Background gap={24} color="var(--canvas-dot)" />
             <Controls />
             {/* 右下角隐藏式地图：按钮点击从下方升起（条件渲染 + 入场动画；显式 absolute 相对画布容器右下） */}
             {showMiniMap && (
               <MiniMap pannable zoomable maskColor="var(--vignette)"
-                style={{ position: 'absolute', right: 16, bottom: 16, top: 'auto', left: 'auto', zIndex: 22,
-                  width: 208, height: 150, animation: 'fw-minimap-up .32s var(--t-ease)',
-                  background: 'var(--panel-2)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-lg)' }} />
+                style={{ position: 'absolute', right: 14, bottom: 14, top: 'auto', left: 'auto', zIndex: 22,
+                  width: 210, height: 148, animation: 'fw-minimap-up .2s var(--t-ease)',
+                  background: 'var(--ink-800)', border: '1px solid var(--line-strong)', borderRadius: 6, boxShadow: 'var(--shadow-2)' }} />
             )}
             <button onClick={() => setShowMiniMap(v => !v)}
               title={showMiniMap ? '收起地图' : '展开地图'}
               style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 23, display: 'flex', alignItems: 'center', gap: 5,
-                background: showMiniMap ? 'var(--accent-soft)' : 'var(--panel-2)', color: 'var(--text)', border: '1px solid ' + (showMiniMap ? 'var(--accent)' : 'var(--border-strong)'),
-                borderRadius: 999, padding: '5px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', boxShadow: 'var(--shadow-md)', transition: 'background .16s var(--t-ease)' }}>
+                background: showMiniMap ? 'var(--brass-soft)' : 'var(--ink-800)', color: showMiniMap ? 'var(--brass-hi)' : 'var(--paper-dim)', border: '1px solid ' + (showMiniMap ? 'var(--brass)' : 'var(--line-strong)'),
+                borderRadius: 4, padding: '4px 9px', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', transition: 'background .12s' }}>
               <MapIcon size={12} style={{ color: 'var(--accent-strong)' }} />
               地图
             </button>
@@ -1037,7 +1021,7 @@ const onAddNode = useCallback((typeId: string) => {
             <button className="fw-library-close" title="收起" onClick={() => setShowLibrary(false)}><X size={13} /></button>
           </div>
           <div style={{ padding: '0 10px 8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '5px 9px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--ink-600)', border: '1px solid var(--line)', borderRadius: 4, padding: '0 8px', height: 28 }}>
               <Search size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
               <input value={libQuery} onChange={(e) => setLibQuery(e.target.value)} placeholder="搜索节点…"
                 style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, width: '100%' }} />

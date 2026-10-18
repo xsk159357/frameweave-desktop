@@ -1,11 +1,14 @@
 {
   "v": 1,
-  "generated_at": "2026-10-18T03:31:26.412Z",
+  "generated_at": "2026-10-18T15:41:49.428Z",
   "files": {
-    "main.cjs": "0f5cffa48d634794b1fc4633df3007004a13a63121cb34504282968d0387e00f",
-    "preload.cjs": "9a7abe4280d59d9deb3abb4e7f4bbbde3520f43c5a6f7f05bea5f7d2a0aab447",
-    "web/dist/assets/index-BTLHs_fb.css": "d4466ab4f5a21a6909f77358c8f4c1772e59dabf96381c04941bf2571f716870",
-    "web/dist/assets/index-DNh36Elj.js": "93083a2b88689a7bff7fc53c53521342f3b3be6327f638f179ab4733627e7cdf",
-    "web/dist/index.html": "fc9df2802968ff9bb012f2fa7e63d2e653d765170bd0fcd6ab09afbb4f4a1ab8"
+    "main.cjs": "b39d90d47fb0304b85774ee28fe0bcfae3a2f147d709ac547c87903f659cc60d",
+    "preload.cjs": "c89f2779a387c1eedbb15388c9358f732c1577e34090b079d4fd54165a139f33",
+    "web/dist/apple-touch-icon.png": "e708b3c276805a459dd9c16dd0a704957acf61f8b5f4f2ae4e238d7dd175ee6e",
+    "web/dist/assets/index-BMjnrFQ3.css": "4991dd8b9b68c39aee04436cc9655d1bf27efa96d1bc36a85c2fcc1c38435513",
+    "web/dist/assets/index-D43OsqxJ.js": "cd42e2fc9eaac6be868c296458c8f412acf835ed86f00e7a40f5504d02eae7f0",
+    "web/dist/favicon.ico": "b8101b9f31ade6dd65044ed31781c5c9f48ac7fcb566d8fb1db0a6c4e1ce45b8",
+    "web/dist/icon-512.png": "aeedd3142ea248fe089559c607c058c505cb072f5995c76205db518e3ec91235",
+    "web/dist/index.html": "35e23d2bc6ddac208251c350233f447e891bffbb234da25ce7298bd522fb24cd"
   }
 }

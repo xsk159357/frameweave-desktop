@@ -75,16 +75,16 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(8,10,16,.66)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'var(--modal-backdrop)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
         width: 620, maxWidth: '94vw', maxHeight: '84vh', display: 'flex', flexDirection: 'column',
-        background: 'var(--overlay)', border: '1px solid var(--border-strong)', borderRadius: 16, boxShadow: 'var(--shadow-lg)', overflow: 'hidden',
+        background: 'var(--ink-800)', border: '1px solid var(--line-strong)', borderRadius: 8, boxShadow: 'var(--shadow-2)', overflow: 'hidden',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '13px 16px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ width: 26, height: 26, borderRadius: 4, background: 'var(--brass-soft)', color: 'var(--brass-hi)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Puzzle size={14} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>节点插件</span>
+          <span style={{ fontSize: 13.5, fontWeight: 650, flex: 1 }}>节点插件 <span style={{ fontSize: 9.5, letterSpacing: '.14em', color: 'var(--text-faint)', marginLeft: 8 }}>PLUGINS</span></span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 4, lineHeight: 0 }}><X size={15} /></button>
         </div>
         <div className="fw-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -98,14 +98,14 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
           </div>
           {msg && <div style={{ fontSize: 12, color: 'var(--danger)', lineHeight: 1.5 }}>{msg}</div>}
           {/* 目录 */}
-          <div style={{ fontSize: 11.5, color: 'var(--text-faint)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', wordBreak: 'break-all' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text-faint)', background: 'var(--ink-700)', border: '1px solid var(--line)', borderRadius: 4, padding: '8px 10px', wordBreak: 'break-all' }}>
             插件目录：{dir || '…'}
             {dir && <button className="fw-btn fw-btn-ghost" onClick={async () => { try { await api.revealPath(dir) } catch (e: any) { pushToast('无法打开目录: ' + (e.message || e), 'err') } }}
               style={{ marginLeft: 8, padding: '2px 8px', fontSize: 11 }}><><FolderOpen size={11} /> 打开</></button>}
           </div>
           {/* 已装列表 */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: .8, color: 'var(--text-faint)', marginBottom: 6 }}>已安装（{nodes.length}）</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', color: 'var(--text-faint)', marginBottom: 6 }}>已安装（{nodes.length}）</div>
             {nodes.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: '10px 0' }}>暂无第三方插件，请前往商城下载并安装。</div>}
             {nodes.map((n) => {
               const info = infos[n]
@@ -113,7 +113,7 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
               const disabled = state === 'disabled'
               const quarantined = state === 'quarantined'
               return (
-                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--border)', marginBottom: 4, fontSize: 12.5, opacity: disabled ? .72 : 1 }}>
+                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 4, background: 'var(--ink-700)', border: '1px solid var(--line)', marginBottom: 4, fontSize: 12.5, opacity: disabled ? .72 : 1 }}>
                   <FileCode2 size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{n}</span>
                   {info?.version && <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>v{info.version}</span>}
@@ -158,7 +158,7 @@ export function PluginPanel({ onClose }: { onClose: () => void }) {
             })}
           </div>
           {/* 规范说明 */}
-          <div style={{ fontSize: 11.5, color: 'var(--text-faint)', lineHeight: 1.7, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text-faint)', lineHeight: 1.7, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
             插件规范：插件包 = 一个 zip，内含 <span style={{ fontFamily: 'var(--font-mono)' }}>manifest.json</span>（声明 type_id / title / category / kind / inputs / outputs / params / transform）。生命周期：禁用把目录移入 .disabled/（节点从画布卸载，可启用恢复）；升级先备份 3 份再原子替换，失败自动回滚旧版本；回滚恢复最新备份。安全：仅白名单数据变换，不执行任意代码。
           </div>
         </div>

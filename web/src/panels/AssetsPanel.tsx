@@ -243,7 +243,7 @@ export function AssetsPanel() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(8,10,18,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setPreview(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            width: 'min(720px, 92vw)', maxHeight: '80vh', border: '1px solid var(--border-strong)', borderRadius: 14,
+            width: 'min(720px, 92vw)', maxHeight: '80vh', border: '1px solid var(--line-strong)', borderRadius: 8,
             background: 'var(--bg-panel)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
             <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -281,7 +281,7 @@ export function AssetsPanel() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 3001, background: 'rgba(8,10,18,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setConfirmDel(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            width: 'min(460px, 92vw)', border: '1px solid var(--border-strong)', borderRadius: 14, background: 'var(--bg-panel)', padding: 18,
+            width: 'min(460px, 92vw)', border: '1px solid var(--line-strong)', borderRadius: 8, background: 'var(--bg-panel)', padding: 18,
           }}>
             <b style={{ fontSize: 14, display: 'block', marginBottom: 8 }}>资产仍被引用</b>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.7, marginBottom: 10 }}>

@@ -102,8 +102,8 @@ export function ResumeBar() {
     <div className="fw-resume-bar" style={{
       position: 'fixed', top: 62, left: '50%', transform: 'translateX(-50%)', zIndex: 120,
       display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', maxWidth: 'min(860px, calc(100vw - 60px))',
-      border: '1px solid var(--border-strong)', borderRadius: 13,
-      background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
+      border: '1px solid var(--line-strong)', borderRadius: 6,
+      background: 'var(--ink-700)',
       boxShadow: 'var(--elev-3), 0 0 20px rgba(245,165,36,.10)',
       animation: 'fw-pop-in .18s var(--t-ease) both',
       flexWrap: 'wrap' as const,

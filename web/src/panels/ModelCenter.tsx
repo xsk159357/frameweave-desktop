@@ -273,7 +273,7 @@ export function ModelCenter() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 2px 7px', fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: .6 }}>
             <Wifi size={11} /> LLM 配置（用于文案/润色类节点）
           </div>
-          <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, background: 'var(--bg-panel-2)', marginBottom: 6 }}>
+          <div style={{ border: '1px solid var(--line)', borderRadius: 4, padding: 10, background: 'var(--ink-700)', marginBottom: 6 }}>
             {!llmLoaded ? (
               <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>读取配置…</div>
             ) : (

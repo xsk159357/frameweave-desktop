@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拾帧 FrameWeave — 节点式 AI 视频创作工作台</title>
+<meta name="description" content="拾帧 FrameWeave 是节点式 AI 视频创作工作台：在无限画布上编排镜头切分、语音转写、AI 解说、双语翻译、配音合成、字幕排版与成片渲染，一条工作流批量出片。Windows 10/11 x64 桌面端，v0.3.12。">
+<meta name="keywords" content="拾帧,FrameWeave,AI 视频,解说视频,节点工作流,语音转写,AI 配音,字幕排版,批量出片">
+<meta name="author" content="拾帧 FrameWeave">
+<meta name="theme-color" content="#0B0C0E">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://frameweave.top/">
+
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="assets/mark.svg">
+<link rel="apple-touch-icon" href="assets/app-icon-512.png">
+<link rel="preload" as="image" href="assets/workbench.png" fetchpriority="high">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="拾帧 FrameWeave">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:url" content="https://frameweave.top/">
+<meta property="og:title" content="拾帧 FrameWeave — 节点式 AI 视频创作工作台">
+<meta property="og:description" content="把素材、切分、转写、解说、翻译、配音、字幕与渲染连成一条工作流。节点是能力，连线是节奏。">
+<meta property="og:image" content="https://frameweave.top/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="拾帧 FrameWeave 品牌与工作台界面">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="拾帧 FrameWeave — 节点式 AI 视频创作工作台">
+<meta name="twitter:description" content="把素材、切分、转写、解说、翻译、配音、字幕与渲染连成一条工作流。">
+<meta name="twitter:image" content="https://frameweave.top/assets/og.png">
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"拾帧 FrameWeave","alternateName":"FrameWeave","applicationCategory":"MultimediaApplication","operatingSystem":"Windows 10, Windows 11 (x64)","softwareVersion":"0.3.12","url":"https://frameweave.top/","downloadUrl":"https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe","screenshot":"https://frameweave.top/assets/workbench.png","inLanguage":"zh-CN","publisher":{"@type":"Organization","name":"拾帧 FrameWeave","email":"support@frameweave.top","url":"https://frameweave.top/"}}
+</script>
+
+<script>document.documentElement.classList.add('js');</script>
+<style>
+/* ============================================================
+   INKWEAVE v2.0 — 官网
+   底色 石墨 / 强调 黄铜 / 文字 米白 / 衬线英文展示字
+   ============================================================ */
+:root{
+  --ink-950:#060708; --ink-900:#0B0C0E; --ink-800:#101113; --ink-700:#141619;
+  --ink-600:#1A1C20; --ink-500:#212429;
+  --line:rgba(237,232,222,.09); --line-strong:rgba(237,232,222,.17);
+  --paper:#EDE8DE; --paper-dim:#ADA79A; --paper-faint:#79746A;
+  --brass:#D2A45E; --brass-hi:#EAC489; --brass-lo:#A87B3B;
+  --brass-soft:rgba(210,164,94,.13); --on-brass:#171208;
+  --serif:Georgia,"Times New Roman","Songti SC",serif;
+  --sans:"Inter","Segoe UI Variable Text","Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,"Courier New",monospace;
+  --pad:clamp(20px,4.4vw,56px);
+  --maxw:1280px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:84px}
+body{margin:0;background:var(--ink-950);color:var(--paper);font-family:var(--sans);
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  overflow-x:hidden}
+img{display:block;max-width:100%;height:auto}
+a{color:inherit}
+h1,h2,h3,h4,p,figure,blockquote,ol,ul,dl,dd{margin:0;padding:0}
+ol,ul{list-style:none}
+h1,h2,h3{font-weight:700;line-height:1.18;letter-spacing:-.01em}
+button{font:inherit;color:inherit}
+::selection{background:rgba(210,164,94,.26);color:var(--paper)}
+:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 var(--pad)}
+.skip{position:absolute;left:-9999px;top:0;z-index:99;background:var(--brass);color:var(--on-brass);
+  padding:10px 16px;font-size:13px;text-decoration:none;border-radius:0 0 4px 0}
+.skip:focus{left:0}
+
+/* 入场动效：≤8px、160ms */
+.js .reveal{opacity:0;transform:translateY(8px);
+  transition:opacity .18s ease-out,transform .18s ease-out}
+.js .reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .js .reveal{opacity:1;transform:none;transition:none}
+  *{transition-duration:.01ms!important;animation-duration:.01ms!important}
+}
+
+/* ---------- 导航 ---------- */
+.nav{position:sticky;top:0;z-index:50;background:rgba(6,7,8,.95);border-bottom:1px solid var(--line)}
+.nav::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--line);opacity:0;transition:opacity .18s}
+.nav.is-scrolled::after{opacity:1}
+.nav-inner{max-width:var(--maxw);margin:0 auto;padding:0 var(--pad);height:66px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{display:inline-flex;align-items:center;gap:11px;text-decoration:none;flex:none}
+.brand img{width:26px;height:26px}
+.brand-txt{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.brand-zh{font-size:15px;font-weight:700;letter-spacing:.05em}
+.brand-en{font-family:var(--serif);font-size:11px;font-weight:700;letter-spacing:.2em;color:var(--paper-dim)}
+.nav-links{display:flex;align-items:center;gap:2px;margin-left:auto}
+.nav-links a{position:relative;display:inline-block;padding:8px 13px;font-size:13px;color:var(--paper-dim);
+  text-decoration:none;transition:color .15s}
+.nav-links a::after{content:"";position:absolute;left:13px;right:13px;bottom:1px;height:1px;background:var(--brass);
+  transform:scaleX(0);transform-origin:left;transition:transform .16s}
+.nav-links a:hover{color:var(--paper)}
+.nav-links a:hover::after{transform:scaleX(1)}
+.nav-actions{display:flex;align-items:center;gap:14px;flex:none}
+.ver-chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.08em;color:var(--paper-faint);white-space:nowrap}
+.ver-chip i{width:5px;height:5px;border-radius:50%;background:var(--brass);display:block}
+.menu-btn{display:none;align-items:center;justify-content:center;width:38px;height:38px;
+  background:none;border:1px solid var(--line-strong);border-radius:4px;cursor:pointer;padding:0}
+.menu-btn span{position:relative;display:block;width:15px;height:1px;background:var(--paper);transition:background .18s}
+.menu-btn span::before,.menu-btn span::after{content:"";position:absolute;left:0;width:15px;height:1px;
+  background:var(--paper);transition:transform .18s,top .18s}
+.menu-btn span::before{top:-5px}
+.menu-btn span::after{top:5px}
+body.menu-open .menu-btn span{background:transparent}
+body.menu-open .menu-btn span::before{top:0;transform:rotate(45deg)}
+body.menu-open .menu-btn span::after{top:0;transform:rotate(-45deg)}
+
+/* 按钮 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;height:46px;padding:0 22px;
+  border:1px solid transparent;border-radius:4px;font-size:14px;font-weight:600;letter-spacing:.01em;
+  text-decoration:none;white-space:nowrap;cursor:pointer;
+  transition:background .16s,color .16s,border-color .16s}
+.btn svg{width:16px;height:16px;flex:none;transition:transform .16s}
+.btn-primary{background:var(--brass);color:var(--on-brass)}
+.btn-primary:hover{background:var(--brass-hi)}
+.btn-primary:hover svg{transform:translateY(1px)}
+.btn-ghost{border-color:var(--line-strong);color:var(--paper)}
+.btn-ghost:hover{border-color:rgba(210,164,94,.6);color:var(--brass-hi);background:var(--brass-soft)}
+.btn-ghost:hover svg{transform:translateX(2px)}
+.btn-sm{height:34px;padding:0 14px;font-size:12.5px;border-radius:4px}
+.btn-sm svg{width:14px;height:14px}
+
+/* ---------- Hero ---------- */
+.hero{position:relative;overflow:hidden;padding:clamp(22px,2.4vw,34px) 0 clamp(52px,6vw,88px)}
+.hero-grid{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(to right,rgba(237,232,222,.045) 1px,transparent 1px),
+                   linear-gradient(to bottom,rgba(237,232,222,.045) 1px,transparent 1px);
+  background-size:84px 84px;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,rgba(0,0,0,.5) 56%,transparent 92%);
+  mask-image:linear-gradient(to bottom,#000 0,rgba(0,0,0,.5) 56%,transparent 92%)}
+.hero-inner{position:relative}
+.hero-meta{display:flex;justify-content:space-between;align-items:center;gap:16px;
+  font-size:10px;letter-spacing:.16em;color:var(--paper-faint);text-transform:uppercase}
+.hero-meta .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--brass);margin-right:8px;vertical-align:1px}
+.wordmark{margin-top:clamp(26px,3.6vw,46px);font-family:var(--serif);font-weight:700;
+  font-size:clamp(62px,10.8vw,166px);line-height:.83;letter-spacing:.004em}
+.wm-line{display:block;position:relative}
+.wm-weave{color:var(--brass)}
+.wm-tag{position:absolute;right:0;bottom:.26em;font-family:var(--mono);font-size:10.5px;font-weight:400;
+  letter-spacing:.14em;color:var(--paper-faint);font-variant-numeric:tabular-nums}
+.wm-tag::before{content:"";display:inline-block;width:26px;height:1px;background:var(--brass);
+  opacity:.55;vertical-align:3px;margin-right:10px}
+.hero-body{display:grid;grid-template-columns:minmax(0,.88fr) minmax(0,1.12fr);
+  gap:clamp(28px,4vw,60px);align-items:start;margin-top:clamp(28px,3.6vw,48px)}
+.hero-copy{padding-top:4px}
+.kicker{display:flex;align-items:center;gap:12px;font-size:12.5px;font-weight:600;letter-spacing:.06em;color:var(--paper-dim)}
+.kicker::before{content:"";width:26px;height:1px;background:var(--brass);flex:none}
+.hero-zh{margin-top:16px;font-size:clamp(24px,2.9vw,34px);line-height:1.35;letter-spacing:-.015em}
+.hero-desc{margin-top:14px;max-width:40ch;font-size:14.5px;line-height:1.85;color:var(--paper-dim)}
+.hero-cta{display:flex;flex-wrap:wrap;gap:11px;margin-top:clamp(22px,2.8vw,32px)}
+.hero-spec{margin-top:20px;font-size:10px;letter-spacing:.1em;color:var(--paper-faint);line-height:1.9}
+
+/* 截图框（取景框角标） */
+.shot{position:relative;background:var(--ink-900);border:1px solid var(--line-strong);
+  border-radius:2px;box-shadow:0 34px 90px -50px rgba(0,0,0,.95)}
+.shot img{width:100%;display:block}
+.shot-bar,.shot-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:8px 12px;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--paper-faint);
+  text-transform:uppercase;white-space:nowrap}
+.shot-bar{border-bottom:1px solid var(--line)}
+.shot-foot{border-top:1px solid var(--line)}
+.shot-bar b{font-weight:400;color:var(--brass)}
+.corner{position:absolute;width:13px;height:13px;border:1px solid var(--brass);opacity:.75;pointer-events:none}
+.corner.tl{top:-6px;left:-6px;border-right:0;border-bottom:0}
+.corner.tr{top:-6px;right:-6px;border-left:0;border-bottom:0}
+.corner.bl{bottom:-6px;left:-6px;border-right:0;border-top:0}
+.corner.br{bottom:-6px;right:-6px;border-left:0;border-top:0}
+
+/* ---------- 通用章节头 ---------- */
+.section{padding:clamp(64px,8vw,116px) 0}
+.section--band{background:var(--ink-900);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sec-head{display:grid;grid-template-columns:150px minmax(0,1fr);gap:clamp(18px,3vw,40px);align-items:start}
+.sec-label{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--brass);
+  text-transform:uppercase;padding-top:10px;white-space:nowrap}
+.sec-title h2{font-family:var(--serif);font-weight:700;font-size:clamp(32px,4.2vw,54px);
+  line-height:1.06;letter-spacing:.004em;color:var(--paper);max-width:23ch;text-wrap:balance}
+.sec-zh{margin-top:14px;font-size:clamp(15px,1.5vw,18px);font-weight:600;color:var(--paper-dim);letter-spacing:.01em}
+.sec-note{margin-top:12px;max-width:58ch;font-size:13.5px;line-height:1.85;color:var(--paper-faint)}
+.statement{margin-top:clamp(34px,4.6vw,60px);font-size:clamp(20px,2.5vw,31px);line-height:1.6;
+  font-weight:700;letter-spacing:-.015em;max-width:26em;text-wrap:balance}
+.statement em{font-style:normal;color:var(--brass)}
+
+/* ---------- 能力 ---------- */
+.caps{margin-top:clamp(30px,4vw,52px);border-top:1px solid var(--line)}
+.cap{position:relative;display:grid;grid-template-columns:74px minmax(0,1fr) 156px;
+  gap:clamp(14px,2.6vw,36px);padding:clamp(22px,2.7vw,32px) 0;border-bottom:1px solid var(--line)}
+.cap::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:1px;background:var(--brass);
+  transform:scaleY(0);transform-origin:top;transition:transform .18s}
+.cap:hover::before{transform:scaleY(1)}
+.cap-num{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--paper-faint);
+  padding-top:5px;transition:color .16s}
+.cap:hover .cap-num{color:var(--brass)}
+.cap h3{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap;font-size:clamp(17px,1.55vw,20px);letter-spacing:-.005em}
+.cap-en{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.16em;color:var(--brass);opacity:.9}
+.cap p{margin-top:9px;max-width:54ch;font-size:14px;line-height:1.85;color:var(--paper-dim)}
+.cap-meta{padding-top:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  color:var(--paper-faint);text-align:right;text-transform:uppercase;line-height:1.7}
+
+/* ---------- 流水线 ---------- */
+.flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
+  margin-top:clamp(34px,4.4vw,58px);border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line)}
+.flow-step{position:relative;padding:20px 14px 22px 0}
+.flow-step::before{content:"";position:absolute;top:-3px;left:0;width:5px;height:5px;background:var(--brass)}
+.flow-num{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--paper-faint)}
+.flow-name{display:block;margin-top:9px;font-size:15px;font-weight:600;letter-spacing:.01em;transition:color .16s}
+.flow-en{display:block;margin-top:5px;font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--paper-faint)}
+.flow-step:hover .flow-name{color:var(--brass)}
+.flow-step + .flow-step{border-left:1px solid var(--line);padding-left:14px}
+.pipe-figure{margin-top:clamp(32px,4.4vw,56px);max-width:1000px;margin-left:auto;margin-right:auto}
+.figcap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 18px;margin-top:14px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--paper-faint);text-transform:uppercase}
+.figcap b{font-weight:400;color:var(--brass)}
+
+/* ---------- 界面 ---------- */
+.ui-grid{display:grid;grid-template-columns:1.3fr .92fr;gap:clamp(22px,3.4vw,46px);
+  margin-top:clamp(36px,4.8vw,64px);align-items:start}
+.ui-col{display:grid;gap:clamp(26px,3.4vw,48px)}
+.ui-col--offset{padding-top:clamp(20px,5vw,76px)}
+.ui-item .shot{border-color:var(--line)}
+.ui-cap{display:flex;align-items:baseline;gap:13px;margin-top:13px}
+.ui-cap .idx{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--brass);white-space:nowrap}
+.ui-cap p{font-size:13px;line-height:1.75;color:var(--paper-dim)}
+
+/* 界面规格小表 */
+.ui-spec{margin-top:clamp(22px,3vw,34px);border-top:1px solid var(--line);padding-top:16px;max-width:520px}
+.ui-spec-h{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--paper-faint)}
+.ui-spec dl{margin-top:8px}
+.ui-spec dl > div{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.ui-spec dt{color:var(--paper-faint)}
+.ui-spec dd{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--paper-dim)}
+
+/* ---------- 生态 ---------- */
+.eco-layout{display:grid;grid-template-columns:minmax(0,.86fr) minmax(0,1.14fr);
+  gap:clamp(28px,4.4vw,64px);align-items:center;margin-top:clamp(30px,4.2vw,52px)}
+.eco-list{border-top:1px solid var(--line)}
+.eco-item{padding:clamp(18px,2.4vw,26px) 0;border-bottom:1px solid var(--line)}
+.eco-item:last-child{border-bottom:0}
+.eco-item .eco-num{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--brass)}
+.eco-item h3{margin-top:9px;font-size:clamp(16px,1.5vw,18px);display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+.eco-item h3 span{font-family:var(--mono);font-size:9px;font-weight:400;letter-spacing:.16em;color:var(--paper-faint)}
+.eco-item p{margin-top:8px;font-size:13.5px;line-height:1.8;color:var(--paper-dim);max-width:36ch}
+.eco-fig .shot{border-color:var(--line)}
+
+/* ---------- 本地优先 ---------- */
+.local-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  margin-top:clamp(34px,4.4vw,56px);border-top:1px solid var(--line)}
+.local-item{padding:clamp(24px,3vw,36px) clamp(20px,3vw,40px);border-left:1px solid var(--line)}
+.local-item:first-child{border-left:0;padding-left:0}
+.local-item .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;color:var(--brass)}
+.local-item h3{margin-top:12px;font-size:17px;letter-spacing:-.005em}
+.local-item p{margin-top:9px;font-size:13.5px;line-height:1.82;color:var(--paper-dim);max-width:32ch}
+.quote{margin:clamp(52px,7vw,88px) 0 0;padding-left:clamp(18px,2.4vw,30px);border-left:1px solid var(--brass);
+  font-size:clamp(20px,2.3vw,27px);font-weight:700;line-height:1.55;letter-spacing:-.01em}
+.quote cite{display:block;margin-top:10px;font-family:var(--mono);font-style:normal;font-size:10px;
+  font-weight:400;letter-spacing:.12em;color:var(--paper-faint)}
+
+/* ---------- 下载 ---------- */
+.dl{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);
+  gap:clamp(30px,5vw,68px);border:1px solid var(--line);background:var(--ink-900);
+  padding:clamp(24px,3.4vw,48px);border-radius:2px}
+.ver{display:flex;align-items:flex-end;gap:14px;margin-top:18px}
+.ver-v{font-family:var(--serif);font-weight:700;font-size:clamp(54px,7.2vw,92px);line-height:.88;letter-spacing:.005em}
+.ver-en{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--paper-faint);padding-bottom:9px;line-height:1.6}
+.dl-meta{margin-top:clamp(22px,3vw,32px);border-top:1px solid var(--line)}
+.dl-meta > div{display:flex;justify-content:space-between;align-items:baseline;gap:18px;
+  padding:11px 0;border-bottom:1px solid var(--line)}
+.dl-meta dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;color:var(--paper-faint);
+  text-transform:uppercase;white-space:nowrap}
+.dl-meta dd{font-size:13px;color:var(--paper-dim);text-align:right}
+.dl-meta dd a{color:var(--brass-hi);text-decoration:none;border-bottom:1px solid rgba(210,164,94,.35)}
+.dl-meta dd a:hover{border-bottom-color:var(--brass-hi)}
+.dl-cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.dl-note{margin-top:14px;font-size:12px;line-height:1.8;color:var(--paper-faint)}
+.steps-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  padding-bottom:14px;border-bottom:1px solid var(--line-strong)}
+.steps-head h3{font-size:14px;letter-spacing:.02em}
+.steps-head span{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--paper-faint)}
+.step{display:grid;grid-template-columns:42px minmax(0,1fr);gap:clamp(10px,1.6vw,18px);
+  padding:clamp(16px,2.2vw,22px) 0;border-bottom:1px solid var(--line)}
+.step-num{font-family:var(--serif);font-size:26px;line-height:1;color:var(--brass);opacity:.9}
+.step h4{font-size:14.5px;font-weight:600}
+.step p{margin-top:6px;font-size:13px;line-height:1.75;color:var(--paper-dim)}
+
+/* ---------- FAQ ---------- */
+.faq{margin-top:clamp(32px,4.2vw,54px);border-top:1px solid var(--line)}
+.faq details{border-bottom:1px solid var(--line)}
+.faq summary{display:flex;align-items:center;justify-content:space-between;gap:24px;
+  padding:clamp(17px,2.2vw,22px) 0;font-size:15px;font-weight:600;cursor:pointer;
+  list-style:none;transition:color .15s}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:hover{color:var(--brass)}
+.plus{position:relative;flex:none;width:13px;height:13px}
+.plus::before,.plus::after{content:"";position:absolute;background:var(--brass);transition:opacity .16s,transform .16s}
+.plus::before{left:0;top:6px;width:13px;height:1px}
+.plus::after{left:6px;top:0;width:1px;height:13px}
+.faq details[open] .plus::after{opacity:0;transform:rotate(90deg)}
+.faq .a{max-width:70ch;padding:0 0 clamp(18px,2.2vw,24px);font-size:13.8px;line-height:1.9;color:var(--paper-dim)}
+
+/* ---------- 页脚 ---------- */
+.footer{border-top:1px solid var(--line);padding:clamp(46px,6vw,72px) 0 26px}
+.foot-grid{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;gap:clamp(26px,4vw,48px)}
+.foot-brand .brand{margin-bottom:16px}
+.foot-brand p{max-width:30ch;font-size:12.5px;line-height:1.9;color:var(--paper-faint)}
+.foot-brand .mail{display:inline-block;margin-top:16px;font-family:var(--mono);font-size:11.5px;
+  letter-spacing:.04em;color:var(--paper-dim);text-decoration:none;border-bottom:1px solid var(--line-strong);padding-bottom:2px}
+.foot-brand .mail:hover{color:var(--brass-hi);border-bottom-color:var(--brass)}
+.foot-col h4{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.16em;
+  color:var(--paper-faint);text-transform:uppercase;margin-bottom:10px}
+.foot-col a{display:block;padding:5px 0;font-size:13px;color:var(--paper-dim);text-decoration:none;transition:color .15s}
+.foot-col a:hover{color:var(--brass-hi)}
+.foot-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 24px;
+  margin-top:clamp(38px,5vw,56px);padding-top:20px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--paper-faint)}
+.foot-bottom a{color:var(--paper-faint);text-decoration:none}
+.foot-bottom a:hover{color:var(--paper-dim)}
+
+/* ---------- 移动端菜单 ---------- */
+.mobile-menu{display:none;position:fixed;inset:0;z-index:45;background:var(--ink-950);
+  padding:88px var(--pad) 30px;flex-direction:column;visibility:hidden;
+  opacity:0;pointer-events:none;transform:translateY(-8px);transition:opacity .18s,transform .18s,visibility .18s}
+body.menu-open .mobile-menu{visibility:visible;opacity:1;pointer-events:auto;transform:none}
+body.menu-open{overflow:hidden}
+.mm-link{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+  padding:17px 0;border-bottom:1px solid var(--line);text-decoration:none;font-size:21px;font-weight:700}
+.mm-link .en{font-family:var(--mono);font-size:9.5px;font-weight:400;letter-spacing:.16em;color:var(--paper-faint)}
+.mm-actions{display:grid;gap:10px;margin-top:26px}
+.mm-meta{margin-top:auto;padding-top:24px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.12em;color:var(--paper-faint);line-height:2}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1080px){
+  .nav-links{display:none}
+  .menu-btn{display:inline-flex}
+  .mobile-menu{display:flex}
+  .hero-body{grid-template-columns:1fr;gap:clamp(30px,5vw,42px)}
+  .hero-shot{max-width:820px}
+  .hero-desc{max-width:52ch}
+  .ui-grid{grid-template-columns:1fr}
+  .ui-col--offset{padding-top:0}
+  .ui-col{grid-template-columns:1fr 1fr;gap:clamp(18px,3vw,28px)}
+  .ui-col--main{grid-template-columns:1fr}
+  .ui-grid{grid-template-columns:1fr}
+  .ui-col--offset{grid-template-columns:1fr 1fr}
+}
+@media (max-width:900px){
+  .sec-head{grid-template-columns:1fr;gap:12px}
+  .sec-label{padding-top:0}
+  .sec-title h2{max-width:24ch}
+  .cap{grid-template-columns:46px minmax(0,1fr);gap:14px}
+  .cap-meta{display:none}
+  .flow{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .flow-step{border-top:1px solid var(--line);border-left:0!important;padding:18px 12px 18px 0}
+  .flow-step::before{display:none}
+  .flow-step:nth-child(even){border-left:1px solid var(--line)!important;padding-left:16px}
+  .flow-step:last-child{grid-column:1 / -1;border-left:0!important;padding-left:0}
+  .eco-layout{grid-template-columns:1fr;gap:28px;align-items:start}
+  .eco-fig{max-width:640px}
+  .local-grid{grid-template-columns:1fr;border-top:0}
+  .local-item{padding:22px 0;border-left:0;border-top:1px solid var(--line)}
+  .local-item:first-child{padding-top:0;border-top:0}
+  .dl{grid-template-columns:1fr}
+  .foot-grid{grid-template-columns:1fr 1fr}
+  .foot-brand{grid-column:1 / -1}
+}
+@media (max-width:760px){
+  .ui-col,.ui-col--offset{grid-template-columns:1fr}
+  .wordmark{letter-spacing:.002em}
+  .wm-tag{display:none}
+}
+@media (max-width:520px){
+  .ui-cap{display:block}
+  .ui-cap .idx{display:block;margin-bottom:3px}
+  .brand-en{display:none}
+  .ver-chip{display:none}
+  .nav-actions{gap:9px}
+  .hero-meta{font-size:9px;letter-spacing:.12em}
+  .hero-meta-r{display:none}
+  .shot-bar,.shot-foot{font-size:8.5px;letter-spacing:.06em;padding:7px 9px}
+  .shot-foot span:last-child{display:none}
+  .foot-grid{grid-template-columns:1fr 1fr}
+  .foot-bottom{font-size:9px}
+}
+@media (max-width:390px){
+  .wordmark{font-size:60px}
+  .btn{width:100%}
+  .hero-cta .btn{width:100%}
+  .dl-cta .btn{width:100%}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到主要内容</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11.2m0 0 4.4-4.4M12 14.7 7.6 10.3M4 16.8v2.7A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m0 0-6-6m6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.5 5.6v12.8L19 12z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="miter"/></symbol>
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.7-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.93.86.09-.66.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z" fill="currentColor"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><path d="M3.5 6.5h17v11h-17zM4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="miter"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5.5H4.5V6H10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"/></symbol>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top" aria-label="拾帧 FrameWeave 首页">
+      <img src="assets/mark-128.png" width="128" height="128" alt="">
+      <span class="brand-txt"><span class="brand-zh">拾帧</span><span class="brand-en">FRAMEWEAVE</span></span>
+    </a>
+    <nav class="nav-links" aria-label="主导航">
+      <a href="#capabilities">能力</a>
+      <a href="#workflow">工作流</a>
+      <a href="#interface">界面</a>
+      <a href="#ecosystem">生态</a>
+      <a href="https://github.com/xsk159357/frameweave-desktop" rel="noopener" target="_blank">GitHub</a>
+    </nav>
+    <div class="nav-actions">
+      <span class="ver-chip"><i></i>v0.3.12</span>
+      <a class="btn btn-primary btn-sm" href="https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe">
+        <svg aria-hidden="true"><use href="#i-download"/></svg>下载
+      </a>
+      <button class="menu-btn" id="menuBtn" aria-label="打开菜单" aria-expanded="false" aria-controls="mobileMenu">
+        <span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="mobile-menu" id="mobileMenu" aria-hidden="true">
+  <a class="mm-link" href="#capabilities">能力<span class="en">CAPABILITIES</span></a>
+  <a class="mm-link" href="#workflow">工作流<span class="en">PIPELINE</span></a>
+  <a class="mm-link" href="#interface">界面<span class="en">INTERFACE</span></a>
+  <a class="mm-link" href="#ecosystem">生态<span class="en">ECOSYSTEM</span></a>
+  <a class="mm-link" href="#download">下载<span class="en">DOWNLOAD</span></a>
+  <a class="mm-link" href="https://github.com/xsk159357/frameweave-desktop" rel="noopener" target="_blank">GitHub<span class="en">SOURCE</span></a>
+  <div class="mm-actions">
+    <a class="btn btn-primary" href="https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe">
+      <svg aria-hidden="true"><use href="#i-download"/></svg>下载 Windows 版
+    </a>
+    <a class="btn btn-ghost" href="https://github.com/xsk159357/frameweave-desktop/releases" rel="noopener" target="_blank">
+      <svg aria-hidden="true"><use href="#i-github"/></svg>GitHub Releases
+    </a>
+  </div>
+  <p class="mm-meta">V0.3.12 · WINDOWS 10/11 X64<br>SUPPORT@FRAMEWEAVE.TOP</p>
+</div>
+
+<main id="main">
+  <!-- 01 HERO -->
+  <section class="hero" id="top">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="wrap hero-inner">
+      <div class="hero-meta">
+        <span class="mono">01 / INKWEAVE</span>
+        <span class="mono hero-meta-r"><i class="dot"></i>LOCAL ENGINE READY</span>
+      </div>
+
+      <h1 class="wordmark" aria-label="FRAME WEAVE 拾帧">
+        <span class="wm-line"><span class="wm-frame">FRAME</span></span>
+        <span class="wm-line"><span class="wm-weave">WEAVE</span><span class="wm-tag">v0.3.12</span></span>
+      </h1>
+
+      <div class="hero-body">
+        <div class="hero-copy">
+          <p class="kicker">节点式 AI 视频创作工作台</p>
+          <h2 class="hero-zh">把帧编织成故事</h2>
+          <p class="hero-desc">在无限画布上，把素材、切分、转写、解说、翻译、配音、字幕与渲染连成一条工作流。节点是能力，连线是节奏。</p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe">
+              <svg aria-hidden="true"><use href="#i-download"/></svg>下载 Windows 版
+            </a>
+            <a class="btn btn-ghost" href="#workflow">
+              <svg aria-hidden="true"><use href="#i-play"/></svg>查看工作流
+            </a>
+          </div>
+          <p class="hero-spec mono">WINDOWS 10 / 11 · x64 &nbsp;/&nbsp; 约 223 MB &nbsp;/&nbsp; v0.3.12</p>
+        </div>
+
+        <figure class="hero-shot">
+          <div class="shot">
+            <span class="corner tl" aria-hidden="true"></span><span class="corner tr" aria-hidden="true"></span>
+            <span class="corner bl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+            <div class="shot-bar"><span><b>SEQ 01</b> · WORKBENCH</span><span>1600 × 1000</span></div>
+            <img src="assets/workbench.png" width="1600" height="1000" fetchpriority="high" decoding="async"
+                 alt="拾帧工作台主界面：左侧为工作流列表，中间是节点画布上的解说流水线（载入素材、镜头切分、语音转写），右侧为检查器面板，底部为状态栏">
+            <div class="shot-foot"><span>00:00:04:12</span><span>FRAME 01 / 标准解说流水线</span></div>
+          </div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 能力 -->
+  <section class="section" id="capabilities">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">02 / CAPABILITIES</p>
+        <div class="sec-title">
+          <h2>Built for the cut.</h2>
+          <p class="sec-zh">四件事，构成一条创作流水线</p>
+          <p class="sec-note">不是对话框，是编辑台。画布、流水线、本地引擎与节点生态，围绕同一条工作流展开。</p>
+        </div>
+      </header>
+
+      <p class="statement reveal">素材、脚本、解说、字幕与成片，<em>在同一条可复用的工作流里</em>完成。</p>
+
+      <ol class="caps">
+        <li class="cap reveal">
+          <span class="cap-num">01</span>
+          <div>
+            <h3>节点画布 <span class="cap-en">NODE CANVAS</span></h3>
+            <p>无限画布上编排镜头、语音、翻译与渲染节点。端口即数据流，改一个参数，只重跑下游。</p>
+          </div>
+          <span class="cap-meta">CANVAS / GRAPH</span>
+        </li>
+        <li class="cap reveal">
+          <span class="cap-num">02</span>
+          <div>
+            <h3>解说流水线 <span class="cap-en">NARRATION PIPELINE</span></h3>
+            <p>镜头切分、语音转写、AI 解说、双语翻译、配音合成、字幕排版，七个环节连成一条链。</p>
+          </div>
+          <span class="cap-meta">PIPELINE / END-TO-END</span>
+        </li>
+        <li class="cap reveal">
+          <span class="cap-num">03</span>
+          <div>
+            <h3>本地引擎与素材 <span class="cap-en">LOCAL ENGINE</span></h3>
+            <p>解码、切分与成片渲染走本机；素材留在本地磁盘，不上传云端。</p>
+          </div>
+          <span class="cap-meta">ON-DEVICE / PRIVATE</span>
+        </li>
+        <li class="cap reveal">
+          <span class="cap-num">04</span>
+          <div>
+            <h3>工作流与节点生态 <span class="cap-en">ECOSYSTEM</span></h3>
+            <p>保存整条工作流并复用；从节点商城安装社区节点，把新能力接进画布。</p>
+          </div>
+          <span class="cap-meta">REUSE / MARKET</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 03 流水线 -->
+  <section class="section section--band" id="workflow">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">03 / PIPELINE</p>
+        <div class="sec-title">
+          <h2>One pipeline, seven steps.</h2>
+          <p class="sec-zh">从素材到成片，一条链跑完</p>
+          <p class="sec-note">每个环节都是一个可替换的节点。默认链路覆盖解说视频的标准流程，也可以按题材拆开重组。</p>
+        </div>
+      </header>
+
+      <ol class="flow reveal">
+        <li class="flow-step"><span class="flow-num">01</span><span class="flow-name">素材</span><span class="flow-en">INGEST</span></li>
+        <li class="flow-step"><span class="flow-num">02</span><span class="flow-name">镜头切分</span><span class="flow-en">SCENE</span></li>
+        <li class="flow-step"><span class="flow-num">03</span><span class="flow-name">语音转写</span><span class="flow-en">ASR</span></li>
+        <li class="flow-step"><span class="flow-num">04</span><span class="flow-name">解说 · 翻译</span><span class="flow-en">SCRIPT</span></li>
+        <li class="flow-step"><span class="flow-num">05</span><span class="flow-name">配音</span><span class="flow-en">TTS</span></li>
+        <li class="flow-step"><span class="flow-num">06</span><span class="flow-name">字幕排版</span><span class="flow-en">SUBTITLE</span></li>
+        <li class="flow-step"><span class="flow-num">07</span><span class="flow-name">成片渲染</span><span class="flow-en">RENDER</span></li>
+      </ol>
+
+      <figure class="pipe-figure reveal">
+        <div class="shot">
+          <span class="corner tl" aria-hidden="true"></span><span class="corner tr" aria-hidden="true"></span>
+          <span class="corner bl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+          <img src="assets/pipeline.png" width="882" height="332" loading="lazy" decoding="async"
+               alt="节点画布上的解说流水线：载入素材、镜头切分、语音转写、AI 解说、双语翻译、配音合成、字幕排版与成片渲染依次相连">
+        </div>
+        <figcaption class="figcap"><span><b>FIG. 03</b> &nbsp;标准解说流水线 / 画布</span><span>节点与连线，就是分镜与节奏</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 04 界面 -->
+  <section class="section" id="interface">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">04 / INTERFACE</p>
+        <div class="sec-title">
+          <h2>An editing desk, not a console.</h2>
+          <p class="sec-zh">为长时间剪辑而生的界面</p>
+          <p class="sec-note">检查器常驻、节点库触手可及、状态栏只留必要信息。信息密度靠留白与字号区分，不靠卡片堆叠。</p>
+        </div>
+      </header>
+
+      <div class="ui-grid">
+        <div class="ui-col ui-col--main">
+          <figure class="ui-item reveal">
+            <div class="shot">
+              <span class="corner tl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+              <img src="assets/inspector.png" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="选中镜头切分节点后的检查器面板，显示节点 ID、执行状态、灵敏度参数与输出资产">
+            </div>
+            <figcaption class="ui-cap"><span class="idx">A / INSPECTOR</span><p>选中节点即见参数、执行状态与输出资产；结果按节点留存，可单独重跑。</p></figcaption>
+          </figure>
+          <aside class="ui-spec reveal">
+            <p class="ui-spec-h">LAYOUT SPEC / DESKTOP</p>
+            <dl>
+              <div><dt>检查器</dt><dd>320 px 常驻</dd></div>
+              <div><dt>时间线</dt><dd>180 px 可折叠</dd></div>
+              <div><dt>状态栏</dt><dd>28 px</dd></div>
+            </dl>
+          </aside>
+        </div>
+        <div class="ui-col ui-col--offset">
+          <figure class="ui-item reveal">
+            <div class="shot">
+              <span class="corner tr" aria-hidden="true"></span><span class="corner bl" aria-hidden="true"></span>
+              <img src="assets/library.png" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="节点库面板按输入、分析、语义、音频、剪辑、输出分组列出内置节点">
+            </div>
+            <figcaption class="ui-cap"><span class="idx">B / NODE LIBRARY</span><p>节点按输入、分析、语义、音频、剪辑、输出分组，拖进画布即可用。</p></figcaption>
+          </figure>
+          <figure class="ui-item reveal">
+            <div class="shot">
+              <span class="corner tl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+              <img src="assets/login.png" width="1440" height="900" loading="lazy" decoding="async"
+                   alt="登录页：左侧为 FRAME WEAVE 品牌展示与三格帧序列，右侧为登录与注册表单">
+            </div>
+            <figcaption class="ui-cap"><span class="idx">C / SIGN IN</span><p>本地引擎状态与创作空间，一条路径进入工作台。</p></figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 生态 -->
+  <section class="section" id="ecosystem">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">05 / ECOSYSTEM</p>
+        <div class="sec-title">
+          <h2>Make it once, run it again.</h2>
+          <p class="sec-zh">工作流复用与节点生态</p>
+        </div>
+      </header>
+
+      <div class="eco-layout">
+        <div class="eco-list">
+          <div class="eco-item reveal">
+            <span class="eco-num">01</span>
+            <h3>保存工作流 <span>REUSE</span></h3>
+            <p>节点、参数、连线整条存成工作流，下次载入即用；同一套流程可套用多条素材。</p>
+          </div>
+          <div class="eco-item reveal">
+            <span class="eco-num">02</span>
+            <h3>节点商城 <span>MARKET</span></h3>
+            <p>安装官方与社区节点，把新能力接进画布；自定义节点沿用同一套端口协议。</p>
+          </div>
+          <div class="eco-item reveal">
+            <span class="eco-num">03</span>
+            <h3>批量出片 <span>BATCH</span></h3>
+            <p>成片渲染与批量出片成对使用：一次配置，多条素材排队产出。</p>
+          </div>
+        </div>
+        <figure class="eco-fig reveal">
+          <div class="shot">
+            <span class="corner tl" aria-hidden="true"></span><span class="corner tr" aria-hidden="true"></span>
+            <span class="corner bl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+            <img src="assets/market.png" width="1440" height="900" loading="lazy" decoding="async"
+                 alt="节点商城界面：官方与社区节点卡片，含影视镜头检测、语音转写 Whisper、标准解说流水线、智能配音与批量高光混剪">
+          </div>
+          <figcaption class="ui-cap"><span class="idx">D / NODE MARKET</span><p>节点商城：官方与社区节点，一键下载安装到画布。</p></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 本地优先 -->
+  <section class="section section--band" id="local">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">06 / LOCAL FIRST</p>
+        <div class="sec-title">
+          <h2>Your footage stays on your disk.</h2>
+          <p class="sec-zh">本地引擎，素材不上传</p>
+          <p class="sec-note">剪辑与渲染在桌面端完成。只有你主动触发的语义类节点，才需要联网调用所选模型服务。</p>
+        </div>
+      </header>
+
+      <div class="local-grid">
+        <div class="local-item reveal">
+          <span class="lbl">LOCAL ENGINE</span>
+          <h3>本地引擎</h3>
+          <p>解码、切分与成片渲染在本机执行，批量出片不必排队等云端。</p>
+        </div>
+        <div class="local-item reveal">
+          <span class="lbl">ON-DEVICE</span>
+          <h3>素材不上传</h3>
+          <p>视频、音频与图片默认留在你的磁盘；语义能力只发送必要的文本片段。</p>
+        </div>
+        <div class="local-item reveal">
+          <span class="lbl">TRACEABLE</span>
+          <h3>每一步可见</h3>
+          <p>每个节点的输入输出都能单独查看与重跑，改一处不会污染上游结果。</p>
+        </div>
+      </div>
+
+      <blockquote class="quote reveal">节点是能力，连线是节奏。<cite>— 拾帧的设计注解</cite></blockquote>
+    </div>
+  </section>
+
+  <!-- 07 下载 -->
+  <section class="section" id="download">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">07 / DOWNLOAD</p>
+        <div class="sec-title">
+          <h2>Get the workbench.</h2>
+          <p class="sec-zh">下载 Windows 版 v0.3.12</p>
+        </div>
+      </header>
+
+      <div class="dl reveal" style="margin-top:clamp(32px,4.4vw,52px)">
+        <div>
+          <p class="sec-label" style="color:var(--paper-faint)">LATEST RELEASE / WINDOWS</p>
+          <div class="ver">
+            <span class="ver-v">0.3.12</span>
+            <span class="ver-en mono">DESKTOP<br>BUILD</span>
+          </div>
+          <dl class="dl-meta">
+            <div><dt>系统</dt><dd>Windows 10 / 11（x64）</dd></div>
+            <div><dt>体积</dt><dd>约 223 MB</dd></div>
+            <div><dt>版本</dt><dd>v0.3.12 · 2026-10</dd></div>
+            <div><dt>更新日志</dt><dd><a href="https://github.com/xsk159357/frameweave-desktop/releases" rel="noopener" target="_blank">GitHub Releases</a></dd></div>
+            <div><dt>备用下载</dt><dd><a href="https://github.com/xsk159357/frameweave-desktop/releases" rel="noopener" target="_blank">GitHub 直链</a></dd></div>
+          </dl>
+          <div class="dl-cta">
+            <a class="btn btn-primary" href="https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe">
+              <svg aria-hidden="true"><use href="#i-download"/></svg>下载 Windows 版
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/xsk159357/frameweave-desktop/releases" rel="noopener" target="_blank">
+              <svg aria-hidden="true"><use href="#i-github"/></svg>GitHub Releases
+            </a>
+          </div>
+          <p class="dl-note">若系统提示「Windows 已保护你的电脑」，选择「更多信息 → 仍要运行」即可继续安装。</p>
+        </div>
+
+        <div>
+          <div class="steps-head"><h3>安装步骤</h3><span>01 — 03</span></div>
+          <div class="step"><span class="step-num">1</span><div><h4>下载安装包</h4><p>获取 FrameWeave-Setup-0.3.12.exe，保存到本地磁盘。</p></div></div>
+          <div class="step"><span class="step-num">2</span><div><h4>双击安装</h4><p>按向导选择安装目录，等待解压与写入完成。</p></div></div>
+          <div class="step"><span class="step-num">3</span><div><h4>启动并新建工作流</h4><p>本地引擎初始化完成后，从模板或空白画布开始编排。</p></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 FAQ -->
+  <section class="section" id="faq" style="padding-top:0">
+    <div class="wrap">
+      <header class="sec-head reveal">
+        <p class="sec-label">08 / FAQ</p>
+        <div class="sec-title">
+          <h2>Before you install.</h2>
+          <p class="sec-zh">安装前，常见问题</p>
+        </div>
+      </header>
+
+      <div class="faq">
+        <details>
+          <summary>支持哪些系统？<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">Windows 10 / 11 64 位（x64）。安装包约 223 MB，包含桌面端与本地引擎。</p>
+        </details>
+        <details>
+          <summary>素材会被上传吗？<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">默认不会。视频、音频与图片素材保存在本机磁盘，剪辑、切分与渲染都在本地完成；只有你主动触发需要模型服务的语义节点时，才会发送必要的文本片段。</p>
+        </details>
+        <details>
+          <summary>必须联网才能用吗？<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">本地引擎与渲染可离线运行。AI 解说、双语翻译、配音合成等语义能力需要联网调用模型服务。</p>
+        </details>
+        <details>
+          <summary>工作流可以复用吗？<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">可以。整条工作流（节点、参数、连线）可以保存与导入，下次直接载入；也可以在节点商城安装社区节点扩展画布能力。</p>
+        </details>
+        <details>
+          <summary>只适合做影视解说吗？<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">画布不限定题材。口播、混剪、批量成片同样适用，区别只在节点如何组合。</p>
+        </details>
+        <details>
+          <summary>遇到问题怎么反馈？<span class="plus" aria-hidden="true"></span></summary>
+          <p class="a">邮件 support@frameweave.top，或在 GitHub Releases 页面提交 issue。版本更新也会先发布在那里。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="#top" aria-label="拾帧 FrameWeave 首页">
+          <img src="assets/mark-128.png" width="128" height="128" alt="">
+          <span class="brand-txt"><span class="brand-zh">拾帧</span><span class="brand-en">FRAMEWEAVE</span></span>
+        </a>
+        <p>节点式 AI 视频创作工作台。把帧编织成故事。</p>
+        <a class="mail" href="mailto:support@frameweave.top">support@frameweave.top</a>
+      </div>
+      <div class="foot-col">
+        <h4>产品</h4>
+        <a href="#capabilities">能力</a>
+        <a href="#workflow">工作流</a>
+        <a href="#interface">界面</a>
+        <a href="#ecosystem">生态</a>
+      </div>
+      <div class="foot-col">
+        <h4>资源</h4>
+        <a href="#download">下载 v0.3.12</a>
+        <a href="https://github.com/xsk159357/frameweave-desktop/releases" rel="noopener" target="_blank">更新日志</a>
+        <a href="https://github.com/xsk159357/frameweave-desktop" rel="noopener" target="_blank">GitHub</a>
+        <a href="mailto:support@frameweave.top">联系支持</a>
+      </div>
+      <div class="foot-col">
+        <h4>其他</h4>
+        <a href="#faq">常见问题</a>
+        <a href="#top">回到顶部</a>
+        <a href="mailto:support@frameweave.top">商务与合作</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 拾帧 FrameWeave · frameweave.top</span>
+      <!-- 备案号占位：取得后替换 -->
+      <span>ICP 备案：待补充</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var body = document.body;
+  var nav = document.getElementById('nav');
+  var btn = document.getElementById('menuBtn');
+  var menu = document.getElementById('mobileMenu');
+
+  function closeMenu() {
+    if (!body.classList.contains('menu-open')) return;
+    body.classList.remove('menu-open');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', '打开菜单');
+    menu.setAttribute('aria-hidden', 'true');
+  }
+  function toggleMenu() {
+    var open = body.classList.toggle('menu-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', open ? '关闭菜单' : '打开菜单');
+    menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
+  if (btn) btn.addEventListener('click', toggleMenu);
+  Array.prototype.forEach.call(menu.querySelectorAll('a'), function (a) {
+    a.addEventListener('click', closeMenu);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeMenu();
+  });
+
+  var onScroll = function () {
+    if (nav) nav.classList.toggle('is-scrolled', window.scrollY > 6);
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  var items = document.querySelectorAll('.reveal');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !('IntersectionObserver' in window)) {
+    Array.prototype.forEach.call(items, function (el) { el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+  Array.prototype.forEach.call(items, function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>

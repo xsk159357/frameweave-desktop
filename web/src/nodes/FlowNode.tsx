@@ -1,25 +1,21 @@
-// 自定义画布节点组件（v4 节点驱动：类型色端口 / 参数摘要 / 双击打开右侧编辑面板）
-// v046：移除卡片内嵌编辑（表单撑高节点会覆盖相邻节点=穿模），双击统一打开右侧 ParamPanel，节点尺寸恒定
-// t11：D-14 forceInput 可连接徽标（消费 spec.params[].forceInput）、D-17 分类色共享常量、
-//      D-20 错误在节点卡片内可展开（固定节点高度，展开为覆盖层）
+// 画布节点（墨织 v2）：取景框式卡片 · 分类色细条 · 类型色端口 · 固定高度
+// 交互契约保持不变：双击打开右侧检查器；展开参数为卡片内覆盖层（高度仍由 Canvas estNodeH 计算）。
 import { Fragment, memo, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, PencilLine, Zap, Minus, ChevronDown, ChevronUp, Unplug, Copy, X } from 'lucide-react'
+import { AlertTriangle, PencilLine, Zap, ChevronDown, ChevronUp, Unplug, Copy, X } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FlowNodeData, PortType } from '../types'
 import { categoryColor, categoryNormal } from '../types'
 
-// NodeProps 需要 Record<string, unknown> 约束；FlowNodeData 是 interface，
-// 交叉一个索引签名即可满足（同时保留 data.expanded 等画布附加字段）。
 type FlowNodeDataType = FlowNodeData & Record<string, unknown>
 
 const statusColor: Record<string, string> = {
-  pending: '#6b779f',
-  queued: '#8fa3c8',
-  running: '#fbbf24',
-  success: '#34d399',
-  failed: '#f87171',
-  cancelled: '#8b93a9',
-  cached: '#22d3ee',
+  pending: '#79746A',
+  queued: '#8FAEC4',
+  running: '#D2A45E',
+  success: '#8FB996',
+  failed: '#D47B70',
+  cancelled: '#8E8B83',
+  cached: '#9BB7C4',
 }
 
 const statusText: Record<string, string> = {
@@ -27,22 +23,20 @@ const statusText: Record<string, string> = {
   success: '完成', failed: '失败', cancelled: '已取消', cached: '缓存命中',
 }
 
-// D-17：分类色板共享常量（音频/剪辑/用户节点独立颜色；未知名回落 --accent）
 function catSolid(category: string): string {
   return categoryColor(category)
 }
 
-// 端口类型 → 颜色（B1：类型可视化）
+// 端口类型 → 颜色（低饱和，仅作识别）
 const portColor: Record<string, string> = {
-  VIDEO: '#f87171', IMAGE: '#c084fc', AUDIO: '#4dd0e1',
-  SCRIPT: '#34d399', SUBTITLE: '#34d399', SEGMENTS: '#6c8cff',
-  TIMELINE: '#6c8cff', JSON: '#a78bfa', STRING: '#9aa6c8',
-  INT: '#fbbf24', FLOAT: '#fbbf24', BOOL: '#fbbf24', ANY: '#6b779f',
+  VIDEO: '#C08077', IMAGE: '#A08FBE', AUDIO: '#7FA9AC',
+  SCRIPT: '#86A98B', SUBTITLE: '#86A98B', SEGMENTS: '#7E93B8',
+  TIMELINE: '#7E93B8', JSON: '#A08FBE', STRING: '#9B968B',
+  INT: '#C2A05E', FLOAT: '#C2A05E', BOOL: '#C2A05E', ANY: '#8E8B83',
 }
 const pc = (t: string) => portColor[t] || portColor.ANY
 
 function FlowNodeInner({ id, data, selected }: NodeProps) {
-  // NodeProps 默认 data 为宽泛类型；局部断言到画布节点数据结构（含 expanded 附加字段）
   const d = data as FlowNodeDataType
   const { type_id, title, category, params, last_params, status, error, progress, asset_ids, spec } = d
 
@@ -50,13 +44,11 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
   const solid = catSolid(category)
   const isFailed = status === 'failed'
   const isRunning = status === 'running'
+  const isCached = status === 'cached'
 
-  // D-14：可连线参数（后端 object_info forceInput）徽标。
-  // t18 Canvas 持久化到 node.data.forceInputs/force_inputs；旧 window 桥接仅作兼容回退。
   const convertedInputs: Record<string, boolean> = (d.forceInputs || ((window as any).__fw_param_inputs?.[id] || {})) as Record<string, boolean>
   const forceInputParams = (spec?.params || []).filter((p: any) => p.forceInput)
   const activeInputParams = forceInputParams.filter((p: any) => convertedInputs[p.name])
-  // D-20：错误展开态（覆盖层，不撑高节点）
   const [errOpen, setErrOpen] = useState(false)
   const errLong = !!error && error.length > 80
 
@@ -76,7 +68,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
 
   const expanded = !!d.expanded
   const cardRef = useRef<HTMLDivElement>(null)
-  // 点节点外部收起（走 Canvas 的 __fwSetNodeExpanded → data.expanded → 触发整列重排，收起时自动缝合间隙）
   useEffect(() => {
     if (!expanded) return
     const h = (e: MouseEvent) => {
@@ -87,21 +78,22 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [expanded, id])
+
   const paramUpd = (patch: Record<string, string>) => { ;(window as any).__fwUpdateParams?.(id, patch) }
   const renderCompact = (p: any, val: any) => {
     const widget = p.widget || (p.type === 'INT' || p.type === 'FLOAT' ? 'number' : 'text')
     const label = p.label || p.name
     const base = {
-      width: '100%', padding: '4px 7px', borderRadius: 7, fontSize: 11.5, marginTop: 2,
-      border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text)',
+      width: '100%', padding: '4px 7px', borderRadius: 4, fontSize: 11.5, marginTop: 2,
+      border: '1px solid var(--line)', background: 'var(--ink-600)', color: 'var(--paper)',
       outline: 'none', boxSizing: 'border-box' as const,
     }
     if (widget === 'select' || (p.options && p.options.length)) {
       return (
         <div key={p.name} style={{ marginBottom: 5 }}>
-          <div style={{ fontSize: 10.5, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {label}
-            {p.forceInput && <Unplug size={8} color="#4dd0e1" title="可转为输入端口：连接后此参数由上游注入" style={{ flexShrink: 0 }} />}
+            {p.forceInput && <Unplug size={8} color="var(--ink-300)" title="可转为输入端口：连接后此参数由上游注入" style={{ flexShrink: 0 }} />}
           </div>
           <select className="nodrag nopan" style={base} value={String(val ?? '')} onChange={(e) => paramUpd({ [p.name]: e.target.value })}>
             {(p.options || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
@@ -114,10 +106,10 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
         <div key={p.name} style={{ marginBottom: 5, display: 'flex', alignItems: 'center', gap: 7 }}>
           <input className="nodrag nopan" type="checkbox" checked={String(val) === 'true' || val === true}
             onChange={(e) => paramUpd({ [p.name]: String(e.target.checked) })}
-            style={{ accentColor: 'var(--accent)', width: 13, height: 13, margin: 0 }} />
-          <div style={{ fontSize: 10.5, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            style={{ accentColor: 'var(--brass)', width: 13, height: 13, margin: 0 }} />
+          <div style={{ fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {label}
-            {p.forceInput && <Unplug size={8} color="#4dd0e1" title="可转为输入端口：连接后此参数由上游注入" style={{ flexShrink: 0 }} />}
+            {p.forceInput && <Unplug size={8} color="var(--ink-300)" title="可转为输入端口：连接后此参数由上游注入" style={{ flexShrink: 0 }} />}
           </div>
         </div>
       )
@@ -125,9 +117,9 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     const isSecret = /key|token|secret|api/.test((p.name || '').toLowerCase())
     return (
       <div key={p.name} style={{ marginBottom: 5 }}>
-        <div style={{ fontSize: 10.5, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 4 }}>
           {label}
-          {p.forceInput && <Unplug size={8} color="#4dd0e1" title="可转为输入端口：连接后此参数由上游注入" style={{ flexShrink: 0 }} />}
+          {p.forceInput && <Unplug size={8} color="var(--ink-300)" title="可转为输入端口：连接后此参数由上游注入" style={{ flexShrink: 0 }} />}
         </div>
         <input className="nodrag nopan" style={base} type={isSecret ? 'password' : 'text'} value={String(val ?? '')}
           placeholder={p.description || ''} onChange={(e) => paramUpd({ [p.name]: e.target.value })} />
@@ -139,7 +131,6 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
   const outputs = spec?.outputs || []
   const paramsList = spec?.params || []
   const portRows = Math.max(inputs.length + activeInputParams.length, outputs.length, 1)
-  // 参数摘要行：第一个非空参数（B2）
   const summaryItem = (() => {
     for (const pl of paramsList) {
       const v = (params || {})[pl.name]
@@ -150,14 +141,10 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
     }
     return null
   })()
-  // —— v046：节点高度恒定（不随编辑变化，杜绝表单撑高覆盖相邻节点的穿模）；状态区固定 36px ——
-  // 摘要行含 padding + 底部间距，预留完整高度避免第一组端口压住摘要文字
   const summaryH = !expanded && summaryItem ? 28 : 0
   const cfgItems = (spec?.params || []).length
-  // 内镶参数区：全展开不滚动（紧凑行高 44），位于端口圆点下方；高度估算与 Canvas estNodeH 保持一致
   const cfgH = expanded ? 24 + cfgItems * 46 + 12 : 0
   const portH = portRows * 24
-  const bodyH = portH
   const statusH = 36
   const nodeH = 44 + summaryH + portH + cfgH + statusH + 12
   const portY = (i: number) => 44 + summaryH + i * 24
@@ -173,222 +160,129 @@ function FlowNodeInner({ id, data, selected }: NodeProps) {
       }}
       onDoubleClick={(e) => { e.stopPropagation(); openEdit() }}
       ref={cardRef}
+      className={'fw-node' + (selected ? ' selected' : '') + (isRunning ? ' running' : '') + (isFailed ? ' failed' : '') + (isCached ? ' cached' : '')}
       style={{
-        position: 'relative', width: 240, height: nodeH, zIndex: expanded ? 60 : (selected ? 40 : 1),
-        background: 'var(--node-grad)',
-        border: isFailed
-          ? '1.5px solid var(--danger)'
-          : '1px solid ' + (selected ? 'var(--accent-strong)' : 'var(--border)'),
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: isFailed
-          ? '0 0 0 2px var(--danger-soft), 0 0 24px rgba(251,113,133,.25), var(--elev-2)'
-          : selected
-            ? '0 0 0 2px var(--accent-soft), 0 0 28px rgba(124,140,255,.28), var(--elev-2)'
-            : 'var(--card-shadow)',
-        fontSize: 12, color: 'var(--text)',
-        /* ReactFlow positions the wrapper via transform; transitioning transform causes drag lag. */
-        transition: 'box-shadow var(--t-fast) var(--t-ease), border-color var(--t-fast) var(--t-ease)',
-        ...(isRunning ? { animation: 'fw-node-pulse 2.2s ease-in-out infinite' } : {}),
+        position: 'relative', width: 240, height: nodeH,
+        zIndex: expanded ? 60 : (selected ? 40 : 1),
+        ['--node-accent' as any]: solid,
       }}
     >
-      {/* ===== 标题行（v1.2 恢复：纯色图标 + 标题 + GPU + 类别） ===== */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px 6px', height: 44, boxSizing: 'border-box' as const }}>
-        <div style={{
-          width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: solid, color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 800,
-          boxShadow: '0 0 14px rgba(124,140,255,.28), inset 0 1px 0 rgba(255,255,255,.22)',
-        }}>{iconChar}</div>
-        <span style={{
-          fontWeight: 650, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden',
-          textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
-        }}>{title || type_id}</span>
+      {/* 选中 / 运行 顶部指示线 */}
+      <span className="fw-node-edge" aria-hidden="true" />
+
+      {/* 标题行 */}
+      <div className="fw-node-head">
+        <div className="fw-node-icon" style={{ color: solid, borderColor: solid + '55', background: solid + '1a' }}>{iconChar}</div>
+        <span className="fw-node-title">{title || type_id}</span>
         {spec?.gpu_required && (
-          <span title="需要 GPU" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
-            fontSize: 8, fontWeight: 700, color: 'var(--gold)', background: 'rgba(245,165,36,.14)',
-            border: '1px solid rgba(245,165,36,.35)', borderRadius: 999, padding: '1px 5px',
-          }}><Zap size={8} />GPU</span>
+          <span className="fw-node-tag gpu" title="需要 GPU"><Zap size={8} />GPU</span>
         )}
-        {/* D-14：forceInput 可连线徽标（消费 object_info.forceInput） */}
         {forceInputParams.length > 0 && (
-          <span title={'可转为输入端口（forceInput）：' + forceInputParams.map((p: any) => p.name).join('、') + ' 可由上游连线注入'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
-              fontSize: 8, fontWeight: 700, color: '#4dd0e1', background: 'rgba(77,208,225,.12)',
-              border: '1px solid rgba(77,208,225,.4)', borderRadius: 999, padding: '1px 5px',
-            }}><Unplug size={8} />{forceInputParams.length}</span>
+          <span className="fw-node-tag port" title={'可转为输入端口（forceInput）：' + forceInputParams.map((p: any) => p.name).join('、') + ' 可由上游连线注入'}>
+            <Unplug size={8} />{forceInputParams.length}
+          </span>
         )}
-        {category && (
-          <span style={{
-            fontSize: 8.5, padding: '1px 7px', borderRadius: 999, fontWeight: 650, flexShrink: 0,
-            background: 'rgba(255,255,255,.06)', color: 'var(--text-faint)', letterSpacing: .5,
-          }}>{category}</span>
-        )}
-        {(spec?.params || []).length > 0 && (
-          <button className="nodrag nopan" onClick={(e) => { e.stopPropagation(); ;(window as any).__fwSetNodeExpanded?.(id, !expanded) }}
-            title={expanded ? '收起配置' : '展开配置'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 2, lineHeight: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}>
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        {category && <span className="fw-node-cat">{category}</span>}
+        {paramsList.length > 0 && (
+          <button className="nodrag nopan fw-node-expand" onClick={(e) => { e.stopPropagation(); ;(window as any).__fwSetNodeExpanded?.(id, !expanded) }}
+            title={expanded ? '收起配置' : '展开配置'}>
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
         )}
       </div>
 
-      {/* ===== 参数摘要行（首个非空参数） ===== */}
+      {/* 参数摘要 */}
       {summaryItem && !expanded && (
-        <div className="nodrag nopan" onClick={() => { if ((spec?.params || []).length > 0) { ;(window as any).__fwSetNodeExpanded?.(id, !expanded) } }}
-          title={(spec?.params || []).length > 0 ? '点击展开配置' : ''}
-          style={{
-          margin: '0 12px 6px', padding: '3px 9px', borderRadius: 7, cursor: (spec?.params || []).length > 0 ? 'pointer' : 'default',
-          background: 'var(--hover)', border: '1px solid var(--border)', color: 'var(--text-dim)',
-          fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          <span style={{ color: 'var(--text-faint)' }}>{summaryItem.label}: </span>{summaryItem.value}
+        <div className="nodrag nopan fw-node-summary" onClick={() => { if (paramsList.length > 0) { ;(window as any).__fwSetNodeExpanded?.(id, !expanded) } }}
+          title={paramsList.length > 0 ? '点击展开配置' : ''}>
+          <span>{summaryItem.label}</span>{summaryItem.value}
         </div>
       )}
 
-      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}      {/* ===== 端口区（左右轨道 + 类型色，v4.3：圆心内嵌 5px 全收卡内） ===== */}
+      {/* 端口 */}
       {inputs.map((p, i) => (
         <Fragment key={'in-' + p.name}>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id={p.name}
-            className="fw-handle in"
+          <Handle type="target" position={Position.Left} id={p.name} className="fw-handle in"
             title={'输入: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i), left: 5, background: pc(p.type), border: '1px solid var(--handle-ring)' }}
-          />
-          <span
-            style={{
-              position: 'absolute', left: 9, top: portY(i), transform: 'translateY(-50%)',
-              fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
-              pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
-              overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500,
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}
-          >
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc(p.type), flexShrink: 0 }} />
-            {p.name}
+            style={{ top: portY(i), left: 5, background: pc(p.type) }} />
+          <span className="fw-port-label in" style={{ top: portY(i) }}>
+            <span className="fw-port-dot" style={{ background: pc(p.type) }} />{p.name}
           </span>
         </Fragment>
       ))}
-      {/* t18 D-14：ParamPanel 转换后的参数成为真正 target handle；未转换参数仍仅显示 widget。 */}
       {activeInputParams.map((p: any, i: number) => (
         <Fragment key={'param-in-' + p.name}>
-          <Handle
-            type="target" position={Position.Left} id={p.name}
+          <Handle type="target" position={Position.Left} id={p.name}
             className="fw-handle in fw-force-input-handle"
             title={'已转为输入: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(inputs.length + i), left: 5, background: pc(p.type), border: '2px solid #4dd0e1' }}
-          />
-          <span style={{ position: 'absolute', left: 9, top: portY(inputs.length + i), transform: 'translateY(-50%)', fontSize: 9.5, color: '#4dd0e1', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-            ↳ {p.name}
-          </span>
+            style={{ top: portY(inputs.length + i), left: 5, background: pc(p.type) }} />
+          <span className="fw-port-label in forced" style={{ top: portY(inputs.length + i) }}>↳ {p.name}</span>
         </Fragment>
       ))}
       {outputs.map((p, i) => (
         <Fragment key={'out-' + p.name}>
-          <Handle
-            type="source"
-            position={Position.Right}
-            id={p.name}
-            className="fw-handle out"
+          <Handle type="source" position={Position.Right} id={p.name} className="fw-handle out"
             title={'输出: ' + p.name + ' · ' + p.type}
-            style={{ top: portY(i), right: 5, background: pc(p.type), border: '1px solid var(--handle-ring)' }}
-          />
-          <span
-            style={{
-              position: 'absolute', right: 9, top: portY(i), transform: 'translateY(-50%)',
-              fontSize: 9.5, lineHeight: 1, color: 'var(--text-faint)',
-              pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 90,
-              overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right', fontWeight: 500,
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}
-          >
-            {p.name}
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc(p.type), flexShrink: 0 }} />
+            style={{ top: portY(i), right: 5, background: pc(p.type) }} />
+          <span className="fw-port-label out" style={{ top: portY(i) }}>
+            {p.name}<span className="fw-port-dot" style={{ background: pc(p.type) }} />
           </span>
         </Fragment>
       ))}
 
       {expanded && (
-        <div style={{ margin: (portH + 6) + 'px 10px 8px', padding: '6px 9px 8px',
-          background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 5 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .6, color: 'var(--text-faint)', flex: 1 }}>参数配置</span>
-            <span style={{ fontSize: 9.5, color: 'var(--text-faint)' }}>{paramsList.length} 项</span>
+        <div className="fw-node-config" style={{ marginTop: portH + 6 }}>
+          <div className="fw-node-config-head">
+            <span>参数配置</span>
+            <span className="num">{paramsList.length} 项</span>
           </div>
-          {paramsList.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-faint)', padding: '4px 0' }}>此节点无参数</div>}
+          {paramsList.length === 0 && <div className="fw-node-config-empty">此节点无参数</div>}
           {paramsList.map((p: any) => renderCompact(p, (params || {})[p.name] ?? p.default))}
         </div>
       )}
 
-      {/* ===== 状态区：固定 36px，杜绝运行态 reflow（v4.2） ===== */}
-      <div style={{ position: 'absolute', left: 6, right: 6, top: statusTop, height: statusH, fontSize: 10, overflow: 'hidden' }}>
+      {/* 状态区 */}
+      <div className="fw-node-status" style={{ top: statusTop }}>
         {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 17, lineHeight: '17px', overflow: 'hidden' }}>
-            <span style={{ color: 'var(--danger)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={error}>
-              <AlertTriangle size={10} style={{ verticalAlign: '-2px', marginRight: 2 }} /> {error}
-            </span>
-            {/* D-20：长错误在节点卡片内可展开（覆盖层，不撑高节点） */}
+          <div className="fw-node-error-line">
+            <span title={error}><AlertTriangle size={10} /> {error}</span>
             {errLong && (
-              <button className="nodrag nopan" onClick={(e) => { e.stopPropagation(); setErrOpen(true) }} title="展开错误详情"
-                style={{ border: 'none', background: 'transparent', color: 'var(--danger)', cursor: 'pointer', padding: 0, lineHeight: 0, flexShrink: 0 }}>
+              <button className="nodrag nopan" onClick={(e) => { e.stopPropagation(); setErrOpen(true) }} title="展开错误详情">
                 <ChevronDown size={10} />
               </button>
             )}
           </div>
         )}
         {!error && isRunning && progress !== undefined && (
-          <div style={{ height: 17, display: 'flex', alignItems: 'center' }}>
-            <div style={{ flex: 1, height: 4, background: 'var(--bg-panel-2)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: (progress * 100) + '%', background: color, boxShadow: '0 0 8px ' + color + 'aa', transition: 'width .3s' }} />
-            </div>
-            <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>{(progress * 100).toFixed(0)}%</span>
+          <div className="fw-node-progress">
+            <div className="track"><div className="fill" style={{ width: (progress * 100) + '%', background: color }} /></div>
+            <span>{(progress * 100).toFixed(0)}%</span>
           </div>
         )}
         {!error && !isRunning && hasDiff && (
-          <div style={{ color: 'var(--running)', height: 17, lineHeight: '17px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={diffKeys.join(', ')}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: '-1px' }}><PencilLine size={10} /> 已改</span>: {diffKeys.join(', ')}
+          <div className="fw-node-diff" title={diffKeys.join(', ')}>
+            <PencilLine size={10} /> 已改 · {diffKeys.join(', ')}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, height: 17, lineHeight: '17px' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: '0 0 6px ' + color + 'cc', flexShrink: 0 }} />
-          <span style={{ color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {statusText[status] || status}
-          </span>
+        <div className="fw-node-status-line">
+          <span className={'dot' + (isRunning ? ' pulse' : '')} style={{ background: color }} />
+          <span>{statusText[status] || status}</span>
           {Object.keys(asset_ids).length > 0 && (
-            <span className="fw-badge" style={{ marginLeft: 'auto', background: 'var(--bg-panel)', color: 'var(--text-dim)' }}>
-              {Object.keys(asset_ids).length} 输出
-            </span>
+            <span className="fw-node-outputs">{Object.keys(asset_ids).length} 输出</span>
           )}
         </div>
       </div>
 
-      {/* D-20：错误详情展开覆盖层（固定节点高度，覆盖卡片内部） */}
       {errOpen && error && (
-        <div className="nodrag nopan" style={{
-          position: 'absolute', inset: 0, zIndex: 70, borderRadius: 'var(--radius-lg)',
-          background: 'var(--bg-panel)', border: '1px solid var(--danger)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden', fontSize: 11,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderBottom: '1px solid var(--border)', background: 'var(--danger-soft)' }}>
-            <AlertTriangle size={11} color="var(--danger)" />
-            <b style={{ fontSize: 11, color: 'var(--danger)' }}>节点错误详情</b>
+        <div className="nodrag nopan fw-node-errdetail">
+          <div className="head">
+            <AlertTriangle size={11} color="var(--err)" />
+            <b>节点错误详情</b>
             <span style={{ flex: 1 }} />
-            <button onClick={() => { try { navigator.clipboard.writeText(error); } catch { /* ignore */ } }} title="复制错误文本"
-              style={{ border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', padding: 3, lineHeight: 0 }}>
-              <Copy size={11} />
-            </button>
-            <button onClick={() => setErrOpen(false)} title="收起"
-              style={{ border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', padding: 3, lineHeight: 0 }}>
-              <X size={11} />
-            </button>
+            <button onClick={() => { try { navigator.clipboard.writeText(error); } catch { /* ignore */ } }} title="复制错误文本"><Copy size={11} /></button>
+            <button onClick={() => setErrOpen(false)} title="收起"><X size={11} /></button>
           </div>
-          <div className="fw-scroll" style={{
-            flex: 1, overflow: 'auto', padding: '8px 10px', fontFamily: 'var(--font-mono)', fontSize: 10,
-            color: 'var(--danger)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.6,
-          }}>{error}</div>
+          <div className="body fw-scroll">{error}</div>
         </div>
       )}
     </div>

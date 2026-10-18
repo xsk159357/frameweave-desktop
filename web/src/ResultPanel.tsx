@@ -192,7 +192,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
 
   return (
     <div className="fw-scroll" style={{
-      borderTop: 'var(--glass-border)', background: 'var(--glass-strong)',
+      borderTop: '1px solid var(--line)', background: 'var(--ink-850)',
       boxShadow: 'none', padding: '12px 16px', flexShrink: 0,
       maxHeight: 320, overflowY: 'auto',
     }}>
@@ -225,7 +225,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
 
       {/* ===== D-05：错误诊断卡（节点→端口→原因→建议动作；traceback 折叠） ===== */}
       {errEntries.length > 0 && (
-        <div style={{ border: '1px solid rgba(248,113,113,.32)', background: 'rgba(248,113,113,.07)', borderRadius: 10, padding: '9px 11px', marginBottom: 8 }}>
+        <div style={{ border: '1px solid rgba(248,113,113,.32)', background: 'rgba(248,113,113,.07)', borderRadius: 4, padding: '9px 11px', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--danger)', marginBottom: 6 }}>
             <AlertCircle size={13} /> 错误诊断
             <span style={{ fontSize: 10.5, fontWeight: 400, color: 'var(--text-faint)' }}>点击「技术详情」查看堆栈，问题多为节点/连线配置</span>
@@ -275,7 +275,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
         <div key={it.index} style={{
           display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
           padding: '6px 10px', borderRadius: 9, marginBottom: 3,
-          background: 'var(--glass)', border: 'var(--glass-border)', transition: 'all .15s',
+          background: 'var(--ink-700)', border: '1px solid var(--line)', transition: 'all .15s',
         }}>
           <span style={{ color: it.ok ? 'var(--success)' : 'var(--danger)', width: 18, display: 'inline-flex', justifyContent: 'center' }}>{it.ok ? <Check size={13} /> : <XCircle size={13} />}</span>
           <span style={{ fontWeight: 600 }}>{it.name}</span>
@@ -327,7 +327,7 @@ export function ResultPanel({ workflowId, batchNodeId, onRetry, onClose }: Props
               const label = rowLabel(r)
               const icon = label.includes('MP4') ? <FileVideo size={12} /> : label.includes('字幕') ? <Captions size={12} /> : label.includes('XML') ? <FileJson2 size={12} /> : label.includes('草稿') ? <FileJson2 size={12} /> : label.includes('工程') ? <FileArchive size={12} /> : <FileAudio2 size={12} />
               return (
-                <div key={r.aid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 9px', borderRadius: 8, background: 'var(--glass)', border: 'var(--glass-border)' }}>
+                <div key={r.aid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '5px 9px', borderRadius: 8, background: 'var(--ink-700)', border: '1px solid var(--line)' }}>
                   <span style={{ color: 'var(--accent-strong)', display: 'inline-flex', width: 16 }}>{icon}</span>
                   <span className="fw-badge" style={{ background: 'var(--border)', color: 'var(--text-faint)', flexShrink: 0 }}>{label}</span>
                   <span style={{ flex: 1, minWidth: 0, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.path}>{r.name}</span>

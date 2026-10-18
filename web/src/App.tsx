@@ -1,6 +1,9 @@
 // 主应用（v4）：登录门禁 → 工作区；顶栏工作流下拉 + 底部状态栏 + toast
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, Store, Crown, CheckCircle2, AlertCircle, Info, Puzzle, Download, Settings as SettingsIcon, UserCircle } from 'lucide-react'
+import {
+  RefreshCw, Store, Crown, CheckCircle2, AlertCircle, Info, Puzzle, Download,
+  Settings as SettingsIcon, LayoutGrid, Library, Boxes, Activity, Brain, Sun, Moon, UserRound,
+} from 'lucide-react'
 import { api, nodeSpecs } from './api'
 import { useAppStore, expiryMs } from './store'
 import { LoginPage } from './LoginPage'
@@ -21,6 +24,7 @@ export default function App() {
   const specs = useAppStore((s) => s.specs)
   const setSpecs = useAppStore((s) => s.setSpecs)
   const workflowId = useAppStore((s) => s.workflowId)
+  const workflowName = useAppStore((s) => s.workflowName)
   const setWorkflow = useAppStore((s) => s.setWorkflow)
   const timelineNodeId = useAppStore((s) => s.timelineNodeId)
   const nodeAssets = useAppStore((s) => s.nodeAssets)
@@ -37,6 +41,7 @@ export default function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [updateState, setUpdateState] = useState<{ mode: 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'latest'; version?: string; message?: string; progress?: number } | null>(null)
   const [showProfile, setShowProfile] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [subscriptionExpired, setSubscriptionExpired] = useState(() => !!session?.expiresAt && expiryMs(session.expiresAt)! <= Date.now())
 
   // 主题：亮/暗即时生效（CSS 变量覆盖集，无需重启）
@@ -205,18 +210,25 @@ export default function App() {
   if (!engineReady) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--bg-grad)', color: 'var(--text)', gap: 14, WebkitAppRegion: 'drag' as any }}>
-        <div style={{ animation: 'fw-splash-in .6s cubic-bezier(.25,.1,.25,1)' }}>
-          <Logo size={76} color="var(--accent)" />
+        background: 'var(--ink-950)', color: 'var(--text)', gap: 0, WebkitAppRegion: 'drag' as any, position: 'relative', overflow: 'hidden' }}>
+        {/* 取景框角标 */}
+        <div style={{ position: 'absolute', inset: 22, pointerEvents: 'none' }}>
+          <span style={{ position: 'absolute', left: 0, top: 0, width: 34, height: 34, borderLeft: '1px solid rgba(237,232,222,.22)', borderTop: '1px solid rgba(237,232,222,.22)' }} />
+          <span style={{ position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRight: '1px solid rgba(237,232,222,.22)', borderBottom: '1px solid rgba(237,232,222,.22)' }} />
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: .5 }}>拾帧 <span style={{ color: 'var(--accent)', fontWeight: 800 }}>FrameWeave</span></div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>节点式 AI 视频创作工作台</div>
-        <div style={{ width: 220, height: 3, borderRadius: 2, background: 'var(--panel-2)', overflow: 'hidden', marginTop: 6, position: 'relative' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'var(--accent-grad)', animation: 'fw-splash-bar 1.6s ease-in-out infinite' }} />
+        <div style={{ animation: 'fw-splash-in .5s cubic-bezier(.22,.8,.28,1)' }}>
+          <Logo size={64} color="#EDE8DE" />
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--text-faint)', borderTopColor: 'var(--accent)', animation: 'fw-spin .8s linear infinite', display: 'inline-block' }} />
-          正在启动本地引擎…
+        <div style={{ marginTop: 22, fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: '.16em', color: 'var(--paper)' }}>
+          FRAMEWEAVE
+        </div>
+        <div style={{ marginTop: 6, fontSize: 11, letterSpacing: '.3em', color: 'var(--paper-faint)' }}>拾 帧 · 节 点 式 视 频 工 作 台</div>
+        <div style={{ width: 180, height: 1, background: 'rgba(237,232,222,.12)', overflow: 'hidden', marginTop: 34, position: 'relative' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'var(--brass)', animation: 'fw-splash-bar 1.5s ease-in-out infinite' }} />
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--paper-faint)', display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontFamily: 'var(--font-mono)', letterSpacing: '.06em' }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--brass)', animation: 'fw-dot-pulse 1.4s ease-in-out infinite' }} />
+          启动本地引擎
         </div>
       </div>
     )
@@ -246,29 +258,23 @@ export default function App() {
   return (
     <div className="fw-app-shell" style={{ height: '100%', display: 'flex', flexDirection: 'column',
       background: 'var(--bg-grad)', backgroundAttachment: 'fixed', color: 'var(--text)' }}>
-      {/* 顶栏（无边框方案A：整体拖拽区 + 右上预留原生控件区 150px） */}
-      <div className="fw-topbar" style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', paddingRight: 150, height: 52,
-        borderBottom: 'var(--glass-border)', background: 'var(--glass-strong)',
-        backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-        flexShrink: 0, boxShadow: 'var(--glass-inner), 0 1px 12px rgba(0,0,0,.28)',
-        position: 'relative', zIndex: 10,
-      }}>
-        {/* 品牌区（无边框方案A：保留为拖拽窗口的主力区域） */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 8, WebkitAppRegion: 'drag' as any }}>
-          <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Logo size={20} color="var(--accent)" />
-          </div>
-          <span style={{ fontWeight: 750, fontSize: 15, letterSpacing: .2 }}>拾帧 FrameWeave</span>
-          <span className="fw-pill" style={{ border: '1px solid var(--border)', color: 'var(--text-faint)', background: 'transparent', fontWeight: 500 }}>v{__APP_VERSION__}</span>
+      {/* 顶栏：品牌 · 工作流 · 全局操作（右侧预留原生窗口控件区） */}
+      <div className="fw-topbar">
+        <div className="fw-brand">
+          <div className="fw-brand-logo"><Logo size={24} color="#EDE8DE" /></div>
+          <span className="fw-brand-name">拾帧<em>FrameWeave</em></span>
+        </div>
+        <span className="fw-topbar-sep" />
+        <div className="fw-workflow-name">
+          <b>{workflowName || '未命名工作流'}</b>
+          {dirty && <i className="fw-dirty-dot" title="有未保存改动" />}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--paper-faint)', letterSpacing: '.04em' }}>v{__APP_VERSION__}</span>
         </div>
         <span style={{ flex: 1 }} />
-        {/* 右侧操作（分组：更新｜插件/商城｜设置/账户；预留原生控件区 150px） */}
         <div className="fw-topbar-actions fw-topbar-groups" style={{ position: 'relative' }}>
-          {showAccount && <div className="fw-account-popover" style={{ top: 38, right: 0, left: 'auto', bottom: 'auto' }}>
+          {showAccount && <div className="fw-account-popover">
             <div className="fw-account-name">{session.email}</div>
-            <div className="fw-account-plan">{session.plan === 'member' ? '会员账户' : '试用账户'}</div>
-            {/* D-08（t10）：激活入口前置 —— 试用账户在账户菜单直接给「激活会员」CTA，不再藏进个人中心 */}
+            <div className="fw-account-plan">{session.plan === 'member' ? '会员账户 · MEMBER' : '试用账户 · TRIAL'}</div>
             {session.plan !== 'member' && (
               <button className="fw-account-activate" onClick={() => { setShowAccount(false); setShowProfile(true) }}>
                 <><Crown size={12} /> 激活会员</>
@@ -278,26 +284,27 @@ export default function App() {
             <button className="danger" onClick={() => useAppStore.getState().setSession(null)}>退出登录</button>
           </div>}
           <div className="fw-topbar-group">
-            <button className="fw-btn fw-btn-ghost" onClick={triggerUpdateCheck}>
-              <><RefreshCw size={13} /> 更新</>
+            <button className="fw-btn fw-btn-ghost" onClick={triggerUpdateCheck} title="检查更新">
+              <><RefreshCw size={12} /> 更新</>
             </button>
           </div>
           <div className="fw-topbar-group">
             <button className="fw-btn fw-btn-ghost" title="节点插件导入与管理" onClick={() => setShowPlugin(true)}>
-              <><Puzzle size={13} /> 插件</>
+              <><Puzzle size={12} /> 插件</>
             </button>
             <button className="fw-btn fw-btn-ghost" title="打开商城" onClick={() => setShowMarket(true)}>
-              <><Store size={13} /> 商城</>
+              <><Store size={12} /> 商城</>
             </button>
           </div>
           <div className="fw-topbar-group">
             <button className={'fw-btn fw-btn-ghost' + (showAccount ? ' active' : '')} title="账户 · 个人中心" onClick={() => setShowAccount((v) => !v)}>
-              <><UserCircle size={13} /> 账户</>
+              <><UserRound size={12} /> 账户</>
             </button>
             <button className="fw-btn fw-btn-ghost" title="设置" onClick={() => setShowSettings(true)}>
-              <><SettingsIcon size={13} /> 设置</>
+              <><SettingsIcon size={12} /> 设置</>
             </button>
-          </div>        </div>
+          </div>
+        </div>
       </div>
 
       {showMarket && <MarketPage onClose={() => setShowMarket(false)} />}
@@ -326,12 +333,44 @@ export default function App() {
         </div>
       )}
 
-      {/* 模板选择弹层 */}
-      {/* 主体：工作流导航 + 中央画布（方案 B：画布为焦点，导航固定可见） */}
+      {/* 主体：图标栏 + 工作流导航 + 中央画布 */}
       <div className="fw-main-layout">
-        <aside className="fw-workspace-sidebar" aria-label="工作流导航">
-          <WorkflowPanel readOnly={subscriptionExpired} onOpenPlugin={() => { if (!subscriptionExpired) setShowPlugin(true) }} />
-        </aside>
+        <nav className="fw-rail" aria-label="主导航">
+          <button className={'fw-rail-btn' + (sidebarOpen ? ' active' : '')} onClick={() => setSidebarOpen(v => !v)} title="工作流">
+            <LayoutGrid size={17} /><span className="lbl">工作流</span>
+          </button>
+          <button className="fw-rail-btn" onClick={() => window.dispatchEvent(new Event('fw-open-library'))} title="节点库">
+            <Library size={17} /><span className="lbl">节点库</span>
+          </button>
+          <button className="fw-rail-btn" onClick={() => window.dispatchEvent(new CustomEvent('fw-open-pro', { detail: { tab: 'assets' } }))} title="素材">
+            <Boxes size={17} /><span className="lbl">素材</span>
+          </button>
+          <button className="fw-rail-btn" onClick={() => window.dispatchEvent(new CustomEvent('fw-open-pro', { detail: { tab: 'queue' } }))} title="队列">
+            <Activity size={17} /><span className="lbl">队列</span>
+          </button>
+          <button className="fw-rail-btn" onClick={() => window.dispatchEvent(new CustomEvent('fw-open-pro', { detail: { tab: 'models' } }))} title="模型">
+            <Brain size={17} /><span className="lbl">模型</span>
+          </button>
+          <div className="fw-rail-sep" />
+          <button className="fw-rail-btn" onClick={() => setShowMarket(true)} title="商城">
+            <Store size={17} /><span className="lbl">商城</span>
+          </button>
+          <button className="fw-rail-btn" onClick={() => setShowPlugin(true)} title="插件">
+            <Puzzle size={17} /><span className="lbl">插件</span>
+          </button>
+          <div className="fw-rail-spacer" />
+          <button className="fw-rail-btn" onClick={() => settings.theme === 'light' ? useAppStore.getState().setSettings({ theme: 'dark' }) : useAppStore.getState().setSettings({ theme: 'light' })} title="切换主题">
+            {settings.theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}<span className="lbl">主题</span>
+          </button>
+          <button className="fw-rail-btn" onClick={() => setShowProfile(true)} title="账户 · 个人中心">
+            <span className="fw-rail-avatar">{session.email.slice(0, 1).toUpperCase()}</span><span className="lbl">账户</span>
+          </button>
+        </nav>
+        {sidebarOpen && (
+          <aside className="fw-workspace-sidebar" aria-label="工作流导航">
+            <WorkflowPanel readOnly={subscriptionExpired} onOpenPlugin={() => { if (!subscriptionExpired) setShowPlugin(true) }} />
+          </aside>
+        )}
         <main className="fw-canvas-stage">
           <Canvas workflowId={workflowId} readOnly={subscriptionExpired} />
         </main>
@@ -340,17 +379,19 @@ export default function App() {
       {/* 底部时间线（双击有 segments 资产的节点 / 右键查看时间线） */}
       {timelineNodeId && nodeAssets[timelineNodeId]?.segments && <div className="fw-timeline-bar"><Timeline nodeId={timelineNodeId} /></div>}
 
-      {/* 底部状态栏（A4） */}
+      {/* 底部状态栏 */}
       <div className="fw-statusbar">
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span className="dot" style={{ background: backend === null ? 'var(--text-faint)' : backend ? 'var(--success)' : 'var(--danger)', boxShadow: '0 0 6px ' + (backend === null ? 'transparent' : backend ? 'rgba(52,211,153,.7)' : 'rgba(248,113,113,.7)') }} />
-          {backend === null ? '连接中…' : backend ? '服务正常' : '服务离线'}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span className="dot" style={{ background: backend === null ? 'var(--paper-faint)' : backend ? 'var(--ok)' : 'var(--err)' }} />
+          LOCAL ENGINE · {backend === null ? 'CONNECTING' : backend ? 'ONLINE' : 'OFFLINE'}
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {dirty ? <><span style={{ color: 'var(--running)' }}>●</span> 有未保存改动</> : <><CheckCircle2 size={11} color="var(--success)" /> 已保存</>}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          {dirty ? <><span style={{ color: 'var(--brass)' }}>●</span> 未保存</> : <>已保存</>}
         </span>
         <span style={{ flex: 1 }} />
-        <span>Ctrl+S 保存 · Ctrl+Z 撤销 · ? 快捷键</span>
+        <span>FRAMEWEAVE v{__APP_VERSION__}</span>
+        <span style={{ color: 'var(--ink-300)' }}>|</span>
+        <span>CTRL+S 保存 · CTRL+Z 撤销 · ? 快捷键</span>
       </div>
 
       {/* toast 容器 */}

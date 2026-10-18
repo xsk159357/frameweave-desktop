@@ -14,9 +14,9 @@ const overlay: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
 const card: CSSProperties = {
-  width: 460, maxWidth: '92vw', borderRadius: 16, padding: '18px 20px',
-  background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-  border: '1px solid var(--border-strong)', boxShadow: 'var(--glass-inner), var(--shadow-lg)',
+  width: 460, maxWidth: '92vw', borderRadius: 8, padding: '18px 20px',
+  background: 'var(--ink-800)',
+  border: '1px solid var(--border-strong)', boxShadow: 'var(--shadow-2)',
 }
 const btn = (primary = false): CSSProperties => ({
   padding: '6px 13px', borderRadius: 9, fontSize: 12.5, cursor: 'pointer',
@@ -50,7 +50,7 @@ export function MissingNodesModal({ title, typeIds, note, onContinue, onClose }:
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 14 }}>
           {ids.map((tid) => (
             <div key={tid} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 10,
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 4,
               border: '1px solid var(--border)', background: 'var(--bg-panel-2)',
             }}>
               <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, background: 'rgba(224,168,0,.15)', color: '#e0a800', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800 }}>

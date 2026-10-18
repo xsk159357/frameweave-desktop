@@ -1,25 +1,53 @@
-// FrameWeave 流光取景框：取景框 + 播放核心 + 帧线 + 极光渐变
-export function Logo({ size = 40, color = 'currentColor' }: { size?: number; color?: string }) {
-  const id = `fw-logo-${String(size).replace(/[^a-z0-9]/gi, '')}`
+// 拾帧 FrameWeave · 墨织品牌标记
+// 取景框 + 破框的 F：Frame（框）+ F（FrameWeave），黄铜是唯一强调。
+import { useId } from 'react'
+
+export function Logo({
+  size = 40,
+  color = 'currentColor',
+  accent = '#D2A45E',
+  tile = true,
+}: {
+  size?: number
+  color?: string
+  accent?: string
+  tile?: boolean
+}) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const gid = `fw-brass-${uid}`
+  const glowId = `fw-glow-${uid}`
+  const bg = '#0B0C0E'
+
+  const frame = (
+    <rect x="11.5" y="11.5" width="41" height="41" rx="3"
+      fill="none" stroke={color} strokeOpacity={0.9} strokeWidth={2.6} />
+  )
+  const fPath = 'M20 16h31v9H31v7h13.5v8H31v13H20V16Z'
+
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label="拾帧 FrameWeave" role="img">
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none"
+      aria-label="拾帧 FrameWeave" role="img"
+      style={{ display: 'block', flexShrink: 0 }}>
       <defs>
-        <linearGradient id={id} x1="6" y1="5" x2="43" y2="43" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor={color === 'currentColor' ? '#A5B4FF' : color} />
-          <stop offset="0.55" stopColor={color === 'currentColor' ? '#7C8CFF' : color} />
-          <stop offset="1" stopColor={color === 'currentColor' ? '#22D3EE' : color} />
+        <linearGradient id={gid} x1="18" y1="14" x2="52" y2="54" gradientUnits="userSpaceOnUse">
+          <stop stopColor={accent} stopOpacity=".92" />
+          <stop offset=".52" stopColor={accent} />
+          <stop offset="1" stopColor={accent} stopOpacity=".72" />
         </linearGradient>
-        <filter id={`${id}-glow`} x="-35%" y="-35%" width="170%" height="170%">
-          <feGaussianBlur stdDeviation="1.15" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
+        <radialGradient id={glowId} cx="20%" cy="10%" r="95%">
+          <stop stopColor={accent} stopOpacity=".14" />
+          <stop offset=".55" stopColor={accent} stopOpacity="0" />
+        </radialGradient>
       </defs>
-      <path d="M13 5.5h18.7L42.5 16v19A7.5 7.5 0 0 1 35 42.5H13A7.5 7.5 0 0 1 5.5 35V13A7.5 7.5 0 0 1 13 5.5Z" fill={`url(#${id})`} opacity=".14" />
-      <path d="M13 5.5h18.7L42.5 16v19A7.5 7.5 0 0 1 35 42.5H13A7.5 7.5 0 0 1 5.5 35V13A7.5 7.5 0 0 1 13 5.5Z" stroke={`url(#${id})`} strokeWidth="2.8" strokeLinejoin="round" filter={`url(#${id}-glow)`} />
-      <path d="m19 17 13 7-13 7V17Z" fill={`url(#${id})`} />
-      <path d="M11.5 36.5h10M25.5 36.5h9" stroke={`url(#${id})`} strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M32 9.5v6.5h6.5" stroke="#22D3EE" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity=".95" />
-      <circle cx="40.5" cy="7.5" r="1.4" fill="#22D3EE" />
+      {tile && <rect width="64" height="64" rx="14" fill={bg} />}
+      {tile && <rect width="64" height="64" rx="14" fill={`url(#${glowId})`} />}
+      {tile && (
+        <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="12.9"
+          fill="none" stroke={color} strokeOpacity=".10" strokeWidth="1" />
+      )}
+      {frame}
+      {tile && <path d={fPath} fill={bg} stroke={bg} strokeWidth={5} strokeLinejoin="miter" />}
+      <path d={fPath} fill={`url(#${gid})`} />
     </svg>
   )
 }

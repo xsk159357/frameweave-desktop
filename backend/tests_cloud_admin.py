@@ -145,21 +145,21 @@ def main():
     tok_b = cb["token"]
     up3 = cs.admin_market_upsert({"token": tk, "item": {"id": "paid_node", "title": "付费节点", "kind": "node", "price": 10, "author": "author@qq.com", "status": "active"}})
     check("付费条目发布", up3.get("ok"), str(up3)[:120])
-    da = cs.market_download_auth({"item_id": "paid_node", "token": tok_b, "client_version": "0.3.11", "ip": _ip()})
+    da = cs.market_download_auth({"item_id": "paid_node", "token": tok_b, "client_version": "0.3.12", "ip": _ip()})
     check("付费 download-auth 授权", da.get("ok") is True and da.get("price") == 10, str(da)[:160])
     buyer_after = cs.find("buyer@qq.com")["credits"]
     author_after = cs.find("author@qq.com")["credits"]
     check("原子扣积分 buyer 100→90", buyer_after == 90, f"credits={buyer_after}")
     check("作者分成 author +8", author_after == 8, f"credits={author_after}")
     # 重复扣尽：buyer 90 → 扣 10 → 80；再扣 90 应 insufficient 且保持 80
-    da2 = cs.market_download_auth({"item_id": "paid_node", "token": tok_b, "client_version": "0.3.11", "ip": _ip()})
+    da2 = cs.market_download_auth({"item_id": "paid_node", "token": tok_b, "client_version": "0.3.12", "ip": _ip()})
     check("再购一次成功 90→80", da2.get("ok") is True and cs.find("buyer@qq.com")["credits"] == 80, str(da2)[:120])
     cb["credits"] = 5; cs.save(cb)
-    da3 = cs.market_download_auth({"item_id": "paid_node", "token": tok_b, "client_version": "0.3.11", "ip": _ip()})
+    da3 = cs.market_download_auth({"item_id": "paid_node", "token": tok_b, "client_version": "0.3.12", "ip": _ip()})
     check("积分不足 insufficient_credits 且不扣成负", da3.get("ok") is False and da3.get("code") == "insufficient_credits"
           and cs.find("buyer@qq.com")["credits"] == 5, str(da3)[:120])
     # item_id 含不可见字符（防御回归）
-    da4 = cs.market_download_auth({"item_id": "free_x\u200b", "token": "", "client_version": "0.3.11"})
+    da4 = cs.market_download_auth({"item_id": "free_x\u200b", "token": "", "client_version": "0.3.12"})
     check("item_id 含零宽字符 → item_not_found", da4.get("code") == "item_not_found", str(da4)[:80])
 
     # 6) 审计分页/筛选

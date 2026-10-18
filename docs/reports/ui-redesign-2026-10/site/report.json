@@ -1,0 +1,297 @@
+{
+  "base": "https://frameweave.top/",
+  "consoleErrors": [],
+  "pageErrors": [],
+  "requests": [],
+  "shots": [
+    "desktop-1440-fold.png",
+    "desktop-1440-full.png",
+    "desktop-1440-top.png",
+    "desktop-1440-capabilities.png",
+    "desktop-1440-workflow.png",
+    "desktop-1440-interface.png",
+    "desktop-1440-ecosystem.png",
+    "desktop-1440-local.png",
+    "desktop-1440-download.png",
+    "desktop-1440-faq.png",
+    "desktop-1440-footer.png",
+    "faq-open.png",
+    "desktop-1024-fold.png",
+    "desktop-1024-full.png",
+    "desktop-1024-top.png",
+    "desktop-1024-capabilities.png",
+    "desktop-1024-workflow.png",
+    "desktop-1024-interface.png",
+    "desktop-1024-ecosystem.png",
+    "desktop-1024-local.png",
+    "desktop-1024-download.png",
+    "desktop-1024-faq.png",
+    "desktop-1024-footer.png",
+    "tablet-768-fold.png",
+    "tablet-768-full.png",
+    "tablet-768-top.png",
+    "tablet-768-capabilities.png",
+    "tablet-768-workflow.png",
+    "tablet-768-interface.png",
+    "tablet-768-ecosystem.png",
+    "tablet-768-local.png",
+    "tablet-768-download.png",
+    "tablet-768-faq.png",
+    "tablet-768-footer.png",
+    "mobile-390-fold.png",
+    "mobile-390-full.png",
+    "mobile-390-top.png",
+    "mobile-390-capabilities.png",
+    "mobile-390-workflow.png",
+    "mobile-390-interface.png",
+    "mobile-390-ecosystem.png",
+    "mobile-390-local.png",
+    "mobile-390-download.png",
+    "mobile-390-faq.png",
+    "mobile-390-footer.png",
+    "mobile-menu.png"
+  ],
+  "desktop-1440": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHScroll": false,
+    "pageHeight": 8254,
+    "overflow": [],
+    "badImgs": [],
+    "h1": "FRAME WEAVEv0.3.12",
+    "cta": [
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "#workflow",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases"
+    ],
+    "nav": [
+      "#capabilities",
+      "#workflow",
+      "#interface",
+      "#ecosystem",
+      "https://github.com/xsk159357/frameweave-desktop"
+    ],
+    "sections": [
+      {
+        "id": "top",
+        "h": 947
+      },
+      {
+        "id": "capabilities",
+        "h": 1179
+      },
+      {
+        "id": "workflow",
+        "h": 1037
+      },
+      {
+        "id": "interface",
+        "h": 1256
+      },
+      {
+        "id": "ecosystem",
+        "h": 883
+      },
+      {
+        "id": "local",
+        "h": 855
+      },
+      {
+        "id": "download",
+        "h": 979
+      },
+      {
+        "id": "faq",
+        "h": 700
+      }
+    ]
+  },
+  "desktop-1024": {
+    "scrollWidth": 1024,
+    "clientWidth": 1024,
+    "hasHScroll": false,
+    "pageHeight": 8142,
+    "overflow": [],
+    "badImgs": [],
+    "h1": "FRAME WEAVEv0.3.12",
+    "cta": [
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "#workflow",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases"
+    ],
+    "nav": [
+      "#capabilities",
+      "#workflow",
+      "#interface",
+      "#ecosystem",
+      "https://github.com/xsk159357/frameweave-desktop"
+    ],
+    "sections": [
+      {
+        "id": "top",
+        "h": 1247
+      },
+      {
+        "id": "capabilities",
+        "h": 1006
+      },
+      {
+        "id": "workflow",
+        "h": 905
+      },
+      {
+        "id": "interface",
+        "h": 1582
+      },
+      {
+        "id": "ecosystem",
+        "h": 776
+      },
+      {
+        "id": "local",
+        "h": 717
+      },
+      {
+        "id": "download",
+        "h": 867
+      },
+      {
+        "id": "faq",
+        "h": 640
+      }
+    ]
+  },
+  "tablet-768": {
+    "scrollWidth": 768,
+    "clientWidth": 768,
+    "hasHScroll": false,
+    "pageHeight": 8830,
+    "overflow": [],
+    "badImgs": [],
+    "h1": "FRAME WEAVEv0.3.12",
+    "cta": [
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "#workflow",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases"
+    ],
+    "nav": [
+      "#capabilities",
+      "#workflow",
+      "#interface",
+      "#ecosystem",
+      "https://github.com/xsk159357/frameweave-desktop"
+    ],
+    "sections": [
+      {
+        "id": "top",
+        "h": 1078
+      },
+      {
+        "id": "capabilities",
+        "h": 902
+      },
+      {
+        "id": "workflow",
+        "h": 1101
+      },
+      {
+        "id": "interface",
+        "h": 1312
+      },
+      {
+        "id": "ecosystem",
+        "h": 1174
+      },
+      {
+        "id": "local",
+        "h": 901
+      },
+      {
+        "id": "download",
+        "h": 1103
+      },
+      {
+        "id": "faq",
+        "h": 569
+      }
+    ]
+  },
+  "mobile-390": {
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHScroll": false,
+    "pageHeight": 8763,
+    "overflow": [],
+    "badImgs": [],
+    "h1": "FRAME WEAVEv0.3.12",
+    "cta": [
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "#workflow",
+      "https://shouquan.frameweave.top/update/FrameWeave-Setup-0.3.12.exe",
+      "https://github.com/xsk159357/frameweave-desktop/releases"
+    ],
+    "nav": [
+      "#capabilities",
+      "#workflow",
+      "#interface",
+      "#ecosystem",
+      "https://github.com/xsk159357/frameweave-desktop"
+    ],
+    "sections": [
+      {
+        "id": "top",
+        "h": 885
+      },
+      {
+        "id": "capabilities",
+        "h": 952
+      },
+      {
+        "id": "workflow",
+        "h": 1000
+      },
+      {
+        "id": "interface",
+        "h": 1478
+      },
+      {
+        "id": "ecosystem",
+        "h": 1042
+      },
+      {
+        "id": "local",
+        "h": 933
+      },
+      {
+        "id": "download",
+        "h": 1227
+      },
+      {
+        "id": "faq",
+        "h": 568
+      }
+    ]
+  },
+  "menu": {
+    "open": true,
+    "opacity": "1",
+    "expanded": "true",
+    "closed": true
+  },
+  "ok": true
+}

@@ -49,7 +49,7 @@ const TaskRow = memo(function TaskRow({ task, currentWf, showPosition, maxConcur
   const busy = busyId === task.task_id
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10,
+      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 4,
       border: '1px solid ' + (isCur ? 'var(--accent-strong)' : 'var(--border)'),
       background: isCur ? 'var(--accent-soft)' : 'var(--bg-panel-2)',
       marginBottom: 6, fontSize: 11.5,

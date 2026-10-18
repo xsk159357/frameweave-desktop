@@ -108,7 +108,7 @@ const MarketCard = memo(function MarketCard({ item, installed, installing, step,
   onAuthor: (a: string) => void
 }) {
   const [detail, setDetail] = useState(false)
-  const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)', WebkitBackdropFilter: 'var(--glass-blur)' }
+  const frame = { border: '1px solid var(--line)', background: 'var(--ink-800)' }
 
   // D-18：依赖徽章（ffmpeg / 模型 / API Key / GPU / 网络 / 剪映等，从 tags+描述关键词推导）
   const deps: { label: string; tone: 'warn' | 'accent' | 'ok' }[] = []
@@ -120,13 +120,13 @@ const MarketCard = memo(function MarketCard({ item, installed, installing, step,
   if (/剪映|premiere|prxml|draft/.test(hay)) deps.push({ label: '剪映/Premiere', tone: 'ok' })
 
   return (
-    <div style={{ ...frame, borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+    <div style={{ ...frame, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {item.kind === 'node' ? <Package size={15} color={'#9fb4ff'} /> : <GitBranch size={15} color="var(--success)" />}
+        {item.kind === 'node' ? <Package size={14} color={'var(--brass)'} /> : <GitBranch size={14} color="var(--info)" />}
         <b style={{ fontSize: 13.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title}>{item.title}</b>
-        {item.official && <span style={{ fontSize: 10.5, color: '#b8860b', border: '1px solid #e8d48b', borderRadius: 999, padding: '0 6px', background: '#fff8e1', flexShrink: 0 }}>官方</span>}
+        {item.official && <span style={{ fontSize: 9.5, color: 'var(--brass-hi)', border: '1px solid rgba(210,164,94,.35)', borderRadius: 3, padding: '0 5px', background: 'var(--brass-soft)', flexShrink: 0, letterSpacing: '.06em' }}>官方</span>}
         {item.price > 0
-          ? <span style={{ fontSize: 11.5, color: '#e0a800', fontWeight: 600, flexShrink: 0 }}><Coins size={11} style={{ verticalAlign: -1 }} /> {item.price}</span>
+          ? <span style={{ fontSize: 11, color: 'var(--brass)', fontWeight: 600, flexShrink: 0, fontFamily: 'var(--font-mono)' }}><Coins size={11} style={{ verticalAlign: -1 }} /> {item.price}</span>
           : <span style={{ fontSize: 11.5, color: 'var(--success)', flexShrink: 0 }}>免费</span>}
       </div>
       {/* 首屏：用途（两行截断） */}
@@ -140,10 +140,10 @@ const MarketCard = memo(function MarketCard({ item, installed, installing, step,
           {deps.map((d) => (
             <span key={d.label} title={'安装前需准备：' + d.label}
               style={{
-                fontSize: 9.5, fontWeight: 700, padding: '1px 7px', borderRadius: 999,
+                fontSize: 9, fontWeight: 650, padding: '1px 6px', borderRadius: 3,
                 color: d.tone === 'warn' ? 'var(--gold)' : d.tone === 'accent' ? 'var(--accent-strong)' : 'var(--success)',
-                background: d.tone === 'warn' ? 'rgba(245,165,36,.13)' : d.tone === 'accent' ? 'var(--accent-soft)' : 'var(--success-soft)',
-                border: '1px solid ' + (d.tone === 'warn' ? 'rgba(245,165,36,.4)' : d.tone === 'accent' ? 'var(--border)' : 'var(--border)'),
+                background: d.tone === 'warn' ? 'var(--warn-soft)' : d.tone === 'accent' ? 'var(--brass-soft)' : 'var(--ok-soft)',
+                border: '1px solid var(--line)',
               }}>{d.label}</span>
           ))}
         </div>
@@ -161,7 +161,7 @@ const MarketCard = memo(function MarketCard({ item, installed, installing, step,
         {item.kind === 'workflow' && (
           <button onClick={() => onInstall(item.id)} disabled={busy}
             title="下载并导入工作流"
-            style={{ padding: '4px 11px', borderRadius: 8, cursor: busy ? 'default' : 'pointer', fontSize: 11.5, border: 'none', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--success-soft)', color: 'var(--success)' }}>
+            style={{ padding: '3px 9px', borderRadius: 4, cursor: busy ? 'default' : 'pointer', fontSize: 10.5, border: '1px solid rgba(210,164,94,.3)', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--brass-soft)', color: 'var(--brass-hi)' }}>
             <Download size={12} /> 下载并导入
           </button>
         )}
@@ -169,10 +169,10 @@ const MarketCard = memo(function MarketCard({ item, installed, installing, step,
           <button onClick={() => onInstall(item.id)} disabled={busy || installed}
             title={installed ? '该节点已安装' : (item.type_id ? '下载并安装 ' + item.type_id : '下载并安装')}
             style={{
-              padding: '4px 11px', borderRadius: 8, cursor: busy || installed ? 'default' : 'pointer', fontSize: 11.5,
-              border: 'none', display: 'flex', alignItems: 'center', gap: 4,
-              background: installed ? 'var(--success-soft)' : 'var(--accent-soft)',
-              color: installed ? 'var(--success)' : 'var(--accent-strong)',
+              padding: '3px 9px', borderRadius: 4, cursor: busy || installed ? 'default' : 'pointer', fontSize: 10.5,
+              border: '1px solid ' + (installed ? 'rgba(143,185,150,.3)' : 'rgba(210,164,94,.35)'), display: 'flex', alignItems: 'center', gap: 4,
+              background: installed ? 'var(--ok-soft)' : 'var(--brass-soft)',
+              color: installed ? 'var(--ok)' : 'var(--brass-hi)',
             }}>
             {installing ? (
               <><Loader2 size={12} className="fw-spin" /> {step ? step.label : '安装中'}{step && step.pct != null ? ` ${step.pct}%` : ''}</>
@@ -205,7 +205,7 @@ const MarketCard = memo(function MarketCard({ item, installed, installing, step,
       )}
       {installing && step && step.pct != null && (
         <div style={{ height: 4, borderRadius: 999, background: 'var(--bg-panel-2)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: step.pct + '%', background: 'linear-gradient(90deg,#7c8cff,#54d6a0)', transition: 'width .25s ease' }} />
+          <div style={{ height: '100%', width: step.pct + '%', background: 'var(--brass)', transition: 'width .25s ease' }} />
         </div>
       )}
     </div>
@@ -559,7 +559,7 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
     finally { setBusy(false) }
   }
 
-  const frame = { border: 'var(--glass-border)', background: 'var(--glass-strong)',  WebkitBackdropFilter: 'var(--glass-blur)' }
+  const frame = { border: '1px solid var(--line)', background: 'var(--ink-800)' }
 
   // D-17：分类过滤后的可见条目（空态区分「无条目」与「该分类无条目」）
   const visibleItems = items.filter((it) => {
@@ -575,35 +575,35 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
     : ''
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(8,10,18,.72)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ ...frame, width: 860, maxWidth: '92vw', height: '82vh', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 'var(--glass-inner), var(--shadow-lg)' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'var(--modal-backdrop)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...frame, width: 880, maxWidth: '92vw', height: '82vh', borderRadius: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 'var(--glass-inner), var(--shadow-lg)' }}>
         {/* 头部 */}
         <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + ('var(--border)'), display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Boxes size={20} color={'#9fb4ff'} />
-          <b style={{ fontSize: 16 }}>节点商城</b>
-          <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>官方插件免费 · 用户节点积分定价</span>
+          <Boxes size={18} color={'var(--brass)'} />
+          <b style={{ fontSize: 14, letterSpacing: '.02em' }}>节点商城</b>
+          <span style={{ fontSize: 10, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', letterSpacing: '.06em' }}>MARKET · 官方插件免费 · 用户节点积分定价</span>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-faint)' }}><Coins size={14} color="#e0a800" /> {credits} 积分</span>
-          <button onClick={() => setShowPublish(true)} style={{ padding: '5px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, border: 'none', background: 'var(--accent-soft)', color: 'var(--accent-strong)' }}><Upload size={14} /> 发布作品</button>
-          <button onClick={onClose} title="关闭商城" style={{ padding: 6, borderRadius: 8, cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-faint)' }}><X size={18} /></button>
+          <span style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-faint)' }}><Coins size={13} color="var(--brass)" /> {credits} 积分</span>
+          <button onClick={() => setShowPublish(true)} style={{ padding: '5px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 5, border: '1px solid var(--line-strong)', background: 'transparent', color: 'var(--paper-dim)' }}><Upload size={14} /> 发布作品</button>
+          <button onClick={onClose} title="关闭商城" style={{ padding: 5, borderRadius: 4, cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-faint)' }}><X size={17} /></button>
         </div>
 
         {/* 工具栏 */}
         <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid ' + ('var(--border)'), flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + ('var(--border)'), borderRadius: 9, padding: '7px 11px', background: 'var(--input-bg)', minWidth: 200 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid ' + ('var(--border)'), borderRadius: 4, padding: '5px 10px', background: 'var(--ink-600)', minWidth: 200 }}>
             <button onClick={() => void load(true, { useCache: false })} disabled={refreshing} title="刷新商城" style={{ padding: 3, border: 'none', background: 'transparent', color: 'var(--text-faint)', cursor: refreshing ? 'default' : 'pointer' }}><RefreshCw size={15} className={refreshing ? 'fw-spin' : ''} /></button>
             <Search size={15} color="var(--text-faint)" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索节点 / 工作流 / 作者…" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'inherit' }} />
           </div>
           {['', 'node', 'workflow'].map((k) => (
-            <button key={k} onClick={() => setKind(k)} style={{ padding: '6px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, border: '1px solid ' + (kind === k ? ('#3a4a7a') : ('var(--border)')), background: kind === k ? 'var(--accent-soft)' : 'transparent', color: kind === k ? 'var(--accent-strong)' : 'var(--text-faint)' }}>
+            <button key={k} onClick={() => setKind(k)} style={{ padding: '5px 11px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, border: '1px solid ' + (kind === k ? 'var(--brass)' : 'var(--line)'), background: kind === k ? 'var(--brass-soft)' : 'transparent', color: kind === k ? 'var(--brass-hi)' : 'var(--paper-faint)' }}>
               {k === '' ? '全部' : k === 'node' ? '节点' : '工作流'}
             </button>
           ))}
           {/* D-17：同分类筛选（与节点库 manifest 分类顺序一致） */}
           {catOptions.length > 0 && (
             <select value={cat} onChange={(e) => setCat(e.target.value)} title="按分类筛选（与节点库一致）"
-              style={{ padding: '6px 10px', borderRadius: 9, fontSize: 12, border: '1px solid ' + (cat ? '#3a4a7a' : 'var(--border)'), background: cat ? 'var(--accent-soft)' : 'transparent', color: cat ? 'var(--accent-strong)' : 'var(--text-faint)', cursor: 'pointer', outline: 'none' }}>
+              style={{ padding: '5px 9px', borderRadius: 4, fontSize: 11.5, border: '1px solid ' + (cat ? 'var(--brass)' : 'var(--line)'), background: cat ? 'var(--brass-soft)' : 'transparent', color: cat ? 'var(--brass-hi)' : 'var(--paper-faint)', cursor: 'pointer', outline: 'none' }}>
               <option value="">全部分类</option>
               {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -627,8 +627,8 @@ export function MarketPage({ onClose }: { onClose: () => void }) {
           </div>
         )}
         {step && step.pct != null && (
-          <div style={{ height: 3, background: 'var(--bg-panel-2)' }}>
-            <div style={{ height: '100%', width: step.pct + '%', background: 'linear-gradient(90deg,#7c8cff,#54d6a0)', transition: 'width .25s ease' }} />
+          <div style={{ height: 2, background: 'var(--ink-500)' }}>
+            <div style={{ height: '100%', width: step.pct + '%', background: 'var(--brass)', transition: 'width .25s ease' }} />
           </div>
         )}
 

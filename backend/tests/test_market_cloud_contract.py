@@ -112,7 +112,7 @@ def cloud_store(tmp_path, monkeypatch):
 
 def test_download_auth_stable_codes(cloud_store):
     auth_free = cloud_server.market_download_auth(
-        {"item_id": "free_1", "token": "", "client_version": "0.3.11"})
+        {"item_id": "free_1", "token": "", "client_version": "0.3.12"})
     assert auth_free.get("ok") is True
     assert auth_free.get("status") == "authorized"
     dl = auth_free.get("download") or {}
@@ -123,21 +123,21 @@ def test_download_auth_stable_codes(cloud_store):
     assert "stub_path" not in dl  # 云端直链契约：无 stub_path
 
     assert cloud_server.market_download_auth(
-        {"item_id": "paid_1", "token": "", "client_version": "0.3.11"}) == {
+        {"item_id": "paid_1", "token": "", "client_version": "0.3.12"}) == {
         "ok": False, "code": "login_required", "message": "请先登录后再下载付费节点"}
     assert cloud_server.market_download_auth(
-        {"item_id": "paid_1", "token": "no-such-token", "client_version": "0.3.11"}).get("code") == "login_required"
+        {"item_id": "paid_1", "token": "no-such-token", "client_version": "0.3.12"}).get("code") == "login_required"
     assert cloud_server.market_download_auth(
-        {"item_id": "old_1", "token": "", "client_version": "0.3.11"}).get("code") == "client_version_too_old"
+        {"item_id": "old_1", "token": "", "client_version": "0.3.12"}).get("code") == "client_version_too_old"
     assert cloud_server.market_download_auth(
-        {"item_id": "off_1", "token": "", "client_version": "0.3.11"}).get("code") == "item_disabled"
+        {"item_id": "off_1", "token": "", "client_version": "0.3.12"}).get("code") == "item_disabled"
     assert cloud_server.market_download_auth(
-        {"item_id": "nope", "token": "", "client_version": "0.3.11"}).get("code") == "item_not_found"
+        {"item_id": "nope", "token": "", "client_version": "0.3.12"}).get("code") == "item_not_found"
 
 
 def test_install_report_stable_codes(cloud_store):
     rep = cloud_server.market_install_report(
-        {"item_id": "free_1", "token": "", "client_version": "0.3.11", "result": "ok", "error": ""})
+        {"item_id": "free_1", "token": "", "client_version": "0.3.12", "result": "ok", "error": ""})
     assert rep.get("ok") is True and rep.get("recorded") is True
     assert cloud_server.market_install_report(
         {"item_id": "nope", "result": "ok"}).get("code") == "item_not_found"

@@ -212,12 +212,13 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     title: '拾帧 FrameWeave',
-    backgroundColor: '#0e0f14',
+    backgroundColor: '#0B0C0E',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
     // ---- 无边框（方案A）：隐藏系统标题栏 + 原生窗口控件 Overlay（Windows/Linux） ----
     titleBarStyle: 'hidden',
     ...(process.platform !== 'darwin'
-      ? { titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#a2a8b8' : '#596176', height: 52 } }
+      ? { titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#ADA79A' : '#55524B', height: 46 } }
       : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

@@ -81,7 +81,7 @@ else:
     print(run('docker exec 1Panel-openresty-871J sh -c "ls -la /www/sites/shouquan.frameweave.top/update/"'))
     print("=== 公网验证 ===")
     print(run("curl -s -m 25 -o /dev/null -w 'latest.yml: http=%{http_code} size=%{size_download}\\n' https://shouquan.frameweave.top/update/latest.yml"))
-    print(run("curl -s -m 40 -o /dev/null -w 'setup: http=%{http_code} size=%{size_download}\\n' https://shouquan.frameweave.top/update/FrameWeave-Setup-%s.exe" % ver))
+    print(run("curl -s -m 40 -o /dev/null -w 'setup: http=%%{http_code} size=%%{size_download}\\n' https://shouquan.frameweave.top/update/FrameWeave-Setup-%s.exe" % ver))
 c.close(); print("DONE")
 '@
 $env:KR_HOST = $Server; $env:KR_SITE = $SiteRoot; $env:KR_VERSION = $Version

@@ -78,7 +78,7 @@ def gh(method, path, body=None):
     return run(cmd, 90)
 def gh_upload(rid, filepath, asset_name):
     cmd = ('TOKEN=$(cat /tmp/.fw_gh_token); curl -s -m 300 -X POST -H "Authorization: token $TOKEN" '
-           '-H "User-Agent: fw-release" -F "file=@%s" "https://uploads.github.com/repos/%s/%s/releases/%s/assets?name=%s"'
+           '-H "User-Agent: fw-release" -H "Content-Type: application/octet-stream" --data-binary @%s "https://uploads.github.com/repos/%s/%s/releases/%s/assets?name=%s"'
            % (filepath, owner, repo, rid, asset_name))
     return run(cmd, 320)
 def jparse(r):

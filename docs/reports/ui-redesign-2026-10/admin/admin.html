@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>仪表盘 · 拾帧 FrameWeave 运营控制台</title>
+<meta name="description" content="拾帧 FrameWeave 运营控制台 · 墨织 INKWEAVE">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23101113'/%3E%3Cpath d='M10 21V10h9M30 19v11h-9' fill='none' stroke='%23EDE8DE' stroke-width='1.6'/%3E%3Cpath d='M16 12h12v6h-7v4h6v6h-6v6h-5V12Z' fill='%23D2A45E'/%3E%3C/svg%3E">
+<script>
+(function(){try{var t=localStorage.getItem('fw_admin_theme');if(t!=='light'&&t!=='dark')t='dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style>
+/* ============================================================================
+   拾帧 FrameWeave · 运营控制台
+   墨织 INKWEAVE v2.0 — 石墨 / 黄铜 / 米白 · 取景框与帧格
+   规范：docs/specs/design-system-inkweave.md
+   ============================================================================ */
+:root{
+  --ink-950:#060708; --ink-900:#0B0C0E; --ink-850:#0E0F11; --ink-800:#101113;
+  --ink-700:#141619; --ink-600:#1A1C20; --ink-500:#212429; --ink-400:#2B2E34; --ink-300:#3A3E45;
+  --line:rgba(237,232,222,.09); --line-strong:rgba(237,232,222,.17);
+  --paper:#EDE8DE; --paper-dim:#ADA79A; --paper-faint:#8A857A;
+  --brass:#D2A45E; --brass-hi:#EAC489; --brass-lo:#A87B3B;
+  --brass-soft:rgba(210,164,94,.13); --on-brass:#171208;
+  --ok:#8FB996; --ok-soft:rgba(143,185,150,.13);
+  --warn:#D8A657; --warn-soft:rgba(216,166,87,.13);
+  --err:#D47B70; --err-soft:rgba(212,123,112,.14);
+  --info:#8FAEC4; --info-soft:rgba(143,174,196,.13);
+  --font-ui:"Inter","Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;
+  --font-display:Georgia,"Times New Roman","Songti SC",serif;
+  --font-mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+  --r-xs:2px; --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:10px;
+  --shadow-1:0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 18px 50px -12px rgba(0,0,0,.65);
+  --side-w:216px; --head-h:52px;
+  --focus-ring:0 0 0 2px var(--brass-soft),0 0 0 1px var(--brass);
+  --t-fast:.12s; --t-med:.18s; --ease:cubic-bezier(.22,.8,.28,1);
+}
+html[data-theme="light"]{
+  --ink-950:#EDE8DD; --ink-900:#F4F1EA; --ink-850:#F8F5EE; --ink-800:#FCFAF5;
+  --ink-700:#FFFFFF; --ink-600:#F2EEE5; --ink-500:#E8E2D6; --ink-400:#DCD5C7; --ink-300:#C7BFB0;
+  --line:rgba(23,24,26,.11); --line-strong:rgba(23,24,26,.2);
+  --paper:#17181A; --paper-dim:#55524B; --paper-faint:#6F6B62;
+  --brass:#96692A; --brass-hi:#B9853F; --brass-lo:#7A5420;
+  --brass-soft:rgba(150,105,42,.10); --on-brass:#FFF8E9;
+  --ok:#3F7A4C; --ok-soft:rgba(63,122,76,.10);
+  --warn:#9A6A1E; --warn-soft:rgba(154,106,30,.10);
+  --err:#A63F38; --err-soft:rgba(166,63,56,.10);
+  --info:#46687D; --info-soft:rgba(70,104,125,.10);
+  --shadow-1:0 1px 2px rgba(30,34,44,.1);
+  --shadow-2:0 18px 50px -12px rgba(30,34,44,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark}
+html[data-theme="light"]{color-scheme:light}
+html,body{height:100%}
+body{
+  background:var(--ink-900);color:var(--paper);
+  font-family:var(--font-ui);font-size:13px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+::selection{background:rgba(210,164,94,.28);color:var(--paper)}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:2px}
+[hidden]{display:none !important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip-link{position:fixed;left:12px;top:-48px;z-index:500;height:32px;padding:0 14px;display:inline-flex;align-items:center;background:var(--brass);color:var(--on-brass);font-size:12px;font-weight:600;border-radius:4px;box-shadow:var(--shadow-2);transition:top var(--t-fast)}
+.skip-link:focus{top:10px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right}
+.dim{color:var(--paper-dim)}.faint{color:var(--paper-faint)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}
+.nowrap{white-space:nowrap}
+
+/* ---------- 滚动条 ---------- */
+*{scrollbar-width:thin;scrollbar-color:var(--ink-400) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--ink-400);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-300);border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+
+/* ---------- 壳层 ---------- */
+.app{display:flex;height:100dvh;overflow:hidden;background:var(--ink-900)}
+.sidebar{
+  width:var(--side-w);flex:0 0 var(--side-w);min-height:0;z-index:70;
+  background:var(--ink-950);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;
+}
+.main-col{flex:1;min-width:0;height:100dvh;display:flex;flex-direction:column}
+
+/* ---------- 品牌锁定 ---------- */
+.brand{height:64px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);overflow:hidden}
+.brand .mark{width:30px;height:30px;flex:none;display:block}
+.brand .bt{min-width:0}
+.brand .bn{font-size:12.5px;font-weight:700;letter-spacing:.015em;white-space:nowrap;line-height:1.25}
+.brand .bf{font-family:var(--font-display);font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass);margin-top:2px;white-space:nowrap}
+.brand .bp{font-size:10px;color:var(--paper-faint);margin-top:2px;white-space:nowrap}
+
+/* ---------- 导航 ---------- */
+.nav{flex:1;min-height:0;overflow-y:auto;padding:10px 8px 14px}
+.nav-label{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-faint);padding:9px 9px 6px}
+.nav-label + .nav-label{margin-top:6px}
+.navbtn{
+  position:relative;display:flex;align-items:center;gap:10px;width:100%;height:34px;
+  padding:0 9px;border-radius:4px;color:var(--paper-dim);font-size:12.5px;text-align:left;
+  transition:background var(--t-fast),color var(--t-fast);white-space:nowrap;
+}
+.navbtn svg{width:16px;height:16px;flex:none;opacity:.8;transition:opacity var(--t-fast),color var(--t-fast)}
+.navbtn:hover{background:var(--ink-800);color:var(--paper)}
+.navbtn:hover svg{opacity:1}
+.navbtn[aria-current="page"]{background:var(--brass-soft);color:var(--paper);font-weight:600}
+.navbtn[aria-current="page"]::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;border-radius:2px;background:var(--brass)}
+.navbtn[aria-current="page"] svg{color:var(--brass);opacity:1}
+.navdiv{height:1px;background:var(--line);margin:8px 9px}
+
+/* ---------- 侧栏底部运行状态 ---------- */
+.sidefoot{flex:none;border-top:1px solid var(--line);padding:10px 14px 11px;display:grid;gap:5px}
+.svc{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--paper-dim);min-width:0}
+.svc .dot{width:5px;height:5px;border-radius:50%;background:var(--paper-faint);flex:none;box-shadow:0 0 0 2px var(--ink-900)}
+.svc .dot.ok{background:var(--ok)}.svc .dot.err{background:var(--err)}.svc .dot.warn{background:var(--warn)}
+.svc .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.svc .lat{margin-left:auto;font-family:var(--font-mono);font-size:9.5px;color:var(--paper-faint)}
+.sidefoot .ver{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;color:var(--paper-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 页头 52 ---------- */
+.pagehead{
+  height:var(--head-h);flex:0 0 var(--head-h);display:flex;align-items:center;gap:14px;
+  padding:0 20px;border-bottom:1px solid var(--line);background:var(--ink-900);
+  position:relative;z-index:50;min-width:0;
+}
+.ph-l{display:flex;align-items:baseline;gap:10px;min-width:0}
+.ph-l h1{font-size:14px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;margin:0}
+.ph-l .sep{width:1px;height:12px;background:var(--line-strong);flex:none;transform:translateY(1px)}
+.ph-l p{font-size:11.5px;color:var(--paper-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0;max-width:460px}
+.ph-r{margin-left:auto;display:flex;align-items:center;gap:5px;flex:none}
+.hstat{display:flex;align-items:center;gap:8px;height:26px;padding:0 11px;border-left:1px solid var(--line);font-size:10.5px;color:var(--paper-dim);white-space:nowrap}
+.hstat .mono{font-size:10px;color:var(--paper-faint)}
+.hstat b{font-family:var(--font-mono);font-weight:500;color:var(--paper-dim);font-variant-numeric:tabular-nums}
+.iconbtn{
+  width:28px;height:28px;border-radius:4px;border:1px solid transparent;color:var(--paper-dim);
+  display:inline-grid;place-items:center;transition:background var(--t-fast),color var(--t-fast),border-color var(--t-fast);flex:none;
+}
+.iconbtn svg{width:15px;height:15px}
+.iconbtn:hover{background:var(--ink-700);border-color:var(--line);color:var(--paper)}
+.iconbtn[aria-pressed="true"]{color:var(--brass);border-color:var(--line)}
+.iconbtn.spin svg{animation:spin .5s var(--ease)}
+.menubtn{display:none}
+.logoutbtn{height:28px;color:var(--paper-dim);padding:0 7px}
+.logoutbtn:hover{color:var(--paper);background:var(--ink-700)}
+.logoutbtn svg{width:13px;height:13px}
+
+/* ---------- 主区 ---------- */
+main#main{flex:1;min-height:0;overflow-y:auto;padding:20px 24px 44px;scroll-behavior:smooth}
+.page{max-width:1420px;margin:0 auto;display:grid;gap:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-48%)}}
+@keyframes slide{from{transform:translateX(24px);opacity:0}}
+@keyframes toastin{from{opacity:0;transform:translateY(6px)}}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+
+/* ---------- 面板 ---------- */
+.panel{background:var(--ink-800);border:1px solid var(--line);border-radius:var(--r-lg);min-width:0;position:relative}
+.ph{height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--ink-850);min-width:0}
+.ph .lbl{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-dim);white-space:nowrap}
+.ph .hint{font-size:10.5px;color:var(--paper-faint);font-weight:400;letter-spacing:0;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none}
+.ph svg{width:14px;height:14px;color:var(--brass);flex:none}
+.pbody{padding:12px}
+.pbody.flush{padding:0}
+.grid-2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:stretch}
+.grid-2b{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr);gap:16px;align-items:stretch}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+
+/* ---------- KPI ---------- */
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--ink-800)}
+.kpi{padding:12px 14px 13px;border-right:1px solid var(--line);min-width:0;position:relative}
+.kpi:last-child{border-right:0}
+.kpi .kl{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.kpi .kl svg{width:12px;height:12px;color:var(--paper-faint)}
+.kpi .kval{font-family:var(--font-mono);font-size:24px;line-height:1.15;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-top:7px;color:var(--paper)}
+.kpi .ks{font-size:10.5px;color:var(--paper-faint);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .ks b{font-family:var(--font-mono);font-weight:500;color:var(--paper-dim)}
+.kpi.accent .kval{color:var(--brass)}
+.kpi .bar{position:absolute;left:14px;right:14px;bottom:0;height:2px;background:var(--ink-600);overflow:hidden;display:none}
+.kpi.accent .bar{display:block}
+.kpi .bar i{display:block;height:100%;background:var(--brass)}
+
+/* ---------- 按钮 ---------- */
+.btn{
+  height:28px;padding:0 11px;border-radius:var(--r-sm);border:1px solid transparent;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  font-size:12px;font-weight:500;white-space:nowrap;line-height:1;
+  transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast),opacity var(--t-fast);
+}
+.btn svg{width:13px;height:13px;flex:none}
+.btn.pri{background:var(--brass);color:var(--on-brass);font-weight:600}
+.btn.pri:hover{background:var(--brass-hi)}
+.btn.sec{border-color:var(--line-strong);color:var(--paper);background:transparent}
+.btn.sec:hover{background:var(--ink-700);border-color:var(--line-strong)}
+.btn.ghost{color:var(--paper-dim)}
+.btn.ghost:hover{background:var(--ink-700);color:var(--paper)}
+.btn.danger{border-color:rgba(212,123,112,.42);color:var(--err)}
+.btn.danger:hover{background:var(--err-soft);border-color:var(--err)}
+.btn.sm{height:24px;padding:0 8px;font-size:11px;border-radius:4px}
+.btn.lg{height:34px;padding:0 14px;font-size:12.5px}
+.btn.block{width:100%}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn .spin{width:11px;height:11px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.linkbtn{font-size:11.5px;color:var(--paper-dim);padding:2px 0;border-bottom:1px solid transparent;transition:color var(--t-fast),border-color var(--t-fast)}
+.linkbtn:hover{color:var(--paper);border-bottom-color:var(--line-strong)}
+.linkbtn.danger{color:var(--err)}
+.linkbtn.danger:hover{border-bottom-color:var(--err)}
+.rowacts{display:flex;align-items:center;gap:11px;white-space:nowrap}
+
+/* ---------- 表单 ---------- */
+.input,.select,.textarea{
+  height:30px;padding:0 9px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--ink-600);color:var(--paper);font-size:12.5px;outline:none;min-width:0;
+  transition:border-color var(--t-fast),box-shadow var(--t-fast);width:100%;
+}
+.input:hover,.select:hover,.textarea:hover{border-color:var(--line-strong)}
+.input:focus,.select:focus,.textarea:focus{border-color:var(--brass);box-shadow:0 0 0 2px var(--brass-soft)}
+.input::placeholder,.textarea::placeholder{color:var(--paper-faint)}
+.textarea{height:auto;min-height:64px;padding:8px 9px;line-height:1.55;resize:vertical}
+.select{
+  appearance:none;-webkit-appearance:none;padding-right:26px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23ADA79A' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;
+}
+html[data-theme="light"] .select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2355524B' stroke-width='1.2'/%3E%3C/svg%3E")}
+.input.sm,.select.sm{height:26px;font-size:11.5px}
+.field{display:grid;gap:5px;min-width:0}
+.field label,.flabel{font-size:11px;color:var(--paper-dim);font-weight:500}
+.field .note{font-size:10.5px;color:var(--paper-faint);line-height:1.5}
+.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
+.formgrid .full{grid-column:1/-1}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--ink-850)}
+.toolbar .grow{flex:1 1 200px;min-width:160px;max-width:330px}
+.toolbar .spacer{flex:1}
+.searchwrap{position:relative;flex:1 1 220px;min-width:170px;max-width:340px}
+.searchwrap svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--paper-faint);pointer-events:none}
+.searchwrap .input{padding-left:28px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;height:28px;background:var(--ink-600)}
+.seg label{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:0 11px;font-size:11.5px;color:var(--paper-dim);cursor:pointer;border-right:1px solid var(--line)}
+.seg label:last-child{border-right:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:hover{color:var(--paper);background:var(--ink-500)}
+.seg input:checked + span{color:var(--paper)}
+.seg label:has(input:checked){background:var(--brass-soft);box-shadow:inset 0 -2px 0 var(--brass);color:var(--paper)}
+.seg label:focus-within{outline:2px solid var(--brass);outline-offset:-2px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chipbtn{height:22px;padding:0 7px;border:1px solid var(--line);border-radius:4px;font-family:var(--font-mono);font-size:10.5px;color:var(--paper-dim)}
+.chipbtn:hover{border-color:var(--line-strong);color:var(--paper);background:var(--ink-700)}
+
+/* ---------- 表格 ---------- */
+.tblwrap{overflow:auto;position:relative;max-width:100%}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;white-space:nowrap}
+.tbl caption{text-align:left}
+.tbl thead th{
+  position:sticky;top:0;z-index:2;background:var(--ink-850);color:var(--paper-faint);
+  font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;text-align:left;
+  height:30px;padding:0 10px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+.tbl tbody td{height:36px;padding:0 10px;border-bottom:1px solid var(--line);color:var(--paper-dim);vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:0}
+.tbl tbody tr:hover td{background:var(--ink-700);color:var(--paper)}
+.tbl td.mono,.tbl td .mono{font-family:var(--font-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.tbl td.num,.tbl th.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:11.5px}
+.tbl .strong{color:var(--paper)}
+.tbl .sub{display:block;font-family:var(--font-mono);font-size:10px;color:var(--paper-faint);margin-top:1px;letter-spacing:.02em}
+.tbl .trunc{display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.tbl .wraptext{white-space:normal;min-width:180px;max-width:340px;line-height:1.45}
+.tbl .emptyrow td{height:auto}
+.tbl tbody tr.rowlink{cursor:pointer}
+.pager{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--line);background:var(--ink-850);font-size:11px;color:var(--paper-faint);flex-wrap:wrap}
+.pager .grow{flex:1}
+.pager .mono{font-size:10.5px}
+.pager .btn{height:24px;min-width:24px;padding:0 7px}
+.pager .input{width:48px;height:24px;text-align:center;font-family:var(--font-mono);font-size:11px;padding:0 4px}
+.mini{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--ink-850)}
+.mini .m{padding:8px 12px;border-right:1px solid var(--line);min-width:0}
+.mini .m:last-child{border-right:0}
+.mini .ml{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--paper-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .mv{font-family:var(--font-mono);font-size:15px;font-variant-numeric:tabular-nums;margin-top:3px;color:var(--paper)}
+
+/* ---------- 状态 ---------- */
+.st{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--paper-dim);white-space:nowrap}
+.st::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--paper-faint);flex:none}
+.st.ok::before{background:var(--ok)} .st.err::before{background:var(--err)}
+.st.warn::before{background:var(--warn)} .st.info::before{background:var(--info)}
+.st.ok{color:var(--ok)} .st.err{color:var(--err)} .st.warn{color:var(--warn)} .st.info{color:var(--info)}
+.st.plain{color:var(--paper-dim)} .st.plain::before{background:var(--paper-faint)}
+.tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;letter-spacing:.03em;color:var(--paper-faint);border:1px solid var(--line);border-radius:3px;padding:1px 5px;white-space:nowrap}
+.tag.brass{color:var(--brass);border-color:rgba(210,164,94,.32)}
+.tag.err{color:var(--err);border-color:rgba(212,123,112,.32)}
+.tag.ok{color:var(--ok);border-color:rgba(143,185,150,.32)}
+.tag.info{color:var(--info);border-color:rgba(143,174,196,.32)}
+
+/* ---------- 空态 / 错误 / 骨架 ---------- */
+.empty{display:grid;justify-items:center;gap:5px;padding:32px 16px;text-align:center}
+.empty .em{width:30px;height:30px;position:relative;margin-bottom:5px;opacity:.8}
+.empty .em::before,.empty .em::after{content:"";position:absolute;width:9px;height:9px;border-color:var(--paper-faint);border-style:solid}
+.empty .em::before{left:0;top:0;border-width:1px 0 0 1px}
+.empty .em::after{right:0;bottom:0;border-width:0 1px 1px 0}
+.empty b{font-size:12.5px;font-weight:600;color:var(--paper-dim)}
+.empty span{font-size:11px;color:var(--paper-faint);line-height:1.6;max-width:340px}
+.empty .eact{margin-top:7px}
+.errbox{display:grid;justify-items:center;gap:5px;padding:26px 16px;text-align:center}
+.errbox .em{width:30px;height:30px;position:relative;margin-bottom:4px}
+.errbox .em::before,.errbox .em::after{content:"";position:absolute;left:50%;top:50%;width:18px;height:1px;background:var(--err)}
+.errbox .em::before{transform:translate(-50%,-50%) rotate(45deg)}
+.errbox .em::after{transform:translate(-50%,-50%) rotate(-45deg)}
+.errbox b{font-size:12.5px;color:var(--err);font-weight:600}
+.errbox span{font-size:11px;color:var(--paper-faint);max-width:420px;line-height:1.6}
+.errbox .eact{margin-top:7px}
+.sk{background:var(--ink-700);border-radius:2px;animation:pulse 1.4s ease-in-out infinite}
+.sklines{display:grid;gap:9px;padding:12px}
+.skrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;align-items:center}
+.skrow .sk{height:12px}
+.skrow .sk:first-child{height:18px}
+.loadingline{display:flex;align-items:center;gap:8px;padding:10px 12px;color:var(--paper-faint);font-size:11.5px}
+.loadingline .spin{width:11px;height:11px;border:1.5px solid var(--brass);border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+
+/* ---------- 图表 ---------- */
+.chartwrap{padding:10px 12px 8px;display:grid;grid-template-columns:28px minmax(0,1fr);gap:2px 8px}
+.chart-y{display:flex;flex-direction:column;justify-content:space-between;padding-bottom:18px;font-family:var(--font-mono);font-size:9px;color:var(--paper-faint);text-align:right;line-height:1}
+.chart-plot{
+  position:relative;height:230px;display:flex;align-items:flex-end;gap:4px;padding:0 1px;border-bottom:1px solid var(--line-strong);
+  background-image:linear-gradient(to top,var(--line) 1px,transparent 1px);
+  background-size:100% 33.333%;
+}
+.cbar{flex:1;min-width:3px;height:100%;display:flex;flex-direction:column-reverse;justify-content:flex-start;gap:1px;position:relative}
+.cbar .seg{width:100%;transition:height var(--t-med) var(--ease)}
+.cbar .seg.ok{background:var(--brass)}
+.cbar .seg.err{background:var(--err)}
+.cbar:hover .seg.ok{background:var(--brass-hi)}
+.cbar.zero{background:linear-gradient(to top,var(--paper-faint),var(--paper-faint)) bottom/100% 1px no-repeat;opacity:.55}
+.chart-x{grid-column:2;display:flex;gap:4px;padding-top:5px}
+.chart-x span{flex:1;min-width:0;text-align:center;font-family:var(--font-mono);font-size:8.5px;color:var(--paper-faint);white-space:nowrap;overflow:hidden}
+.legend{display:flex;align-items:center;gap:12px;font-size:10.5px;color:var(--paper-faint)}
+.legend i{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:4px;vertical-align:0}
+.legend .a i{background:var(--brass)} .legend .b i{background:var(--err)}
+.chart-empty{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:var(--paper-faint);pointer-events:none}
+
+/* ---------- 构成条 ---------- */
+.comp{display:grid;gap:13px;padding:13px 12px 12px}
+.comp-row{display:grid;gap:5px}
+.comp-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:11.5px;color:var(--paper-dim)}
+.comp-top b{font-family:var(--font-mono);font-weight:500;color:var(--paper);font-size:11.5px;font-variant-numeric:tabular-nums}
+.comp-top .pct{font-family:var(--font-mono);font-size:10px;color:var(--paper-faint);margin-left:5px}
+.track{height:4px;background:var(--ink-600);border-radius:1px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--brass)}
+.track i.dim{background:var(--paper-faint)}
+.track i.ok{background:var(--ok)}
+.track i.err{background:var(--err)}
+.track i.info{background:var(--info)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.mgrid .m{padding:8px 12px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);min-width:0}
+.mgrid .m:nth-child(2n){border-right:0}
+.mgrid .ml{font-size:10px;color:var(--paper-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mgrid .mv{font-family:var(--font-mono);font-size:13px;font-variant-numeric:tabular-nums;color:var(--paper);margin-top:1px}
+.metricstrip{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));background:var(--ink-800)}
+.metricstrip .m{padding:7px 10px 8px;border-right:1px solid var(--line);min-width:0}
+.metricstrip .m:last-child{border-right:0}
+.metricstrip .ml{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--paper-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metricstrip .mv{font-family:var(--font-mono);font-size:13px;font-variant-numeric:tabular-nums;color:var(--paper);margin-top:1px}
+.issuebar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.issuebar .field{width:180px}
+.issuebar .field.narrow{width:104px}
+.issuebar .chips{padding-bottom:6px}
+.issuebar .actions{margin-left:auto;display:flex;align-items:flex-end;gap:8px}
+.quick{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px;border-top:1px solid var(--line)}
+.qbtn{height:30px;border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;gap:7px;padding:0 9px;font-size:11.5px;color:var(--paper-dim);transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);min-width:0}
+.qbtn svg{width:13px;height:13px;flex:none;color:var(--paper-faint)}
+.qbtn:hover{background:var(--ink-700);border-color:var(--line-strong);color:var(--paper)}
+.qbtn:hover svg{color:var(--brass)}
+.qbtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.marketline{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--line);font-size:10.5px;color:var(--paper-faint);flex-wrap:wrap}
+.marketline b{font-family:var(--font-mono);font-weight:500;color:var(--paper-dim)}
+
+/* ---------- 标签页 ---------- */
+.tabs{display:flex;align-items:center;gap:0;height:36px;min-width:0}
+.tab{height:36px;padding:0 2px;margin-right:16px;font-size:12px;color:var(--paper-faint);border-bottom:2px solid transparent;white-space:nowrap;transition:color var(--t-fast),border-color var(--t-fast)}
+.tab:hover{color:var(--paper-dim)}
+.tab[aria-selected="true"]{color:var(--paper);border-bottom-color:var(--brass);font-weight:600}
+.subtabs{display:flex;gap:0;border-bottom:1px solid var(--line);padding:0 12px;background:var(--ink-850)}
+.subtab{height:34px;padding:0 2px;margin-right:18px;font-size:11.5px;color:var(--paper-faint);border-bottom:2px solid transparent}
+.subtab[aria-selected="true"]{color:var(--paper);border-bottom-color:var(--brass)}
+
+/* ---------- 布局专用 ---------- */
+.dash-top{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px}
+.dash-bottom{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:16px}
+.users-layout{display:grid;gap:16px}
+.cards-layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:16px;align-items:start}
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.span2{grid-column:1/-1}
+.panel .pbody + .pbody{border-top:1px solid var(--line)}
+.panel .pfoot{border-top:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--ink-850)}
+.split-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ---------- 用户详情 ---------- */
+.detail-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.detail-head .avatar{width:34px;height:34px;border-radius:4px;border:1px solid var(--line-strong);display:grid;place-items:center;font-family:var(--font-mono);font-size:13px;color:var(--brass);flex:none}
+.detail-head .avatar svg{width:16px;height:16px}
+.detail-head .who{min-width:0;flex:1}
+.detail-head .who b{display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-head .who span{display:block;font-family:var(--font-mono);font-size:10.5px;color:var(--paper-faint);margin-top:2px}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;background:var(--ink-800);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.kv > div{background:var(--ink-800);padding:8px 10px;min-width:0;box-shadow:inset -1px -1px 0 var(--line)}
+.kv b{display:block;font-size:10px;font-weight:500;letter-spacing:.04em;color:var(--paper-faint);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv span{display:block;font-size:12px;color:var(--paper);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv span.mono{font-family:var(--font-mono);font-size:11px}
+.sect{margin-top:16px}
+.sect-h{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.sect-h .lbl{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-dim)}
+.sect-h .hint{font-size:10.5px;color:var(--paper-faint)}
+.sect-h .right{margin-left:auto}
+.mini-tbl{border:1px solid var(--line);border-radius:4px;max-height:190px;overflow:auto}
+.mini-tbl .tbl thead th{height:26px;background:var(--ink-850)}
+.mini-tbl .tbl tbody td{height:30px;font-size:11.5px}
+
+/* ---------- 登录 ---------- */
+.login-root{min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.04fr) minmax(440px,.96fr);background:var(--ink-900)}
+.login-brand{position:relative;overflow:hidden;background:var(--ink-950);border-right:1px solid var(--line);padding:36px 44px 30px;display:flex;flex-direction:column;justify-content:space-between;min-height:100dvh}
+.login-frame{position:absolute;inset:22px;pointer-events:none}
+.login-frame::before,.login-frame::after{content:"";position:absolute;width:26px;height:26px;border-color:var(--line-strong);border-style:solid}
+.login-frame::before{left:0;top:0;border-width:1px 0 0 1px}
+.login-frame::after{right:0;bottom:0;border-width:0 1px 1px 0}
+.login-watermark{position:absolute;right:-28px;bottom:-70px;width:360px;height:360px;opacity:.035;pointer-events:none}
+.login-watermark svg{width:100%;height:100%}
+.lb-top{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
+.lb-top .mark{width:40px;height:40px;flex:none}
+.lb-top .bn{font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1.25}
+.lb-top .bf{font-family:var(--font-display);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--brass);margin-top:3px}
+.lb-mid{position:relative;z-index:1;max-width:500px;margin:6vh 0}
+.lb-kicker{font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--brass)}
+.lb-mid h2{font-size:clamp(26px,2.6vw,34px);line-height:1.22;letter-spacing:-.02em;font-weight:700;margin:13px 0 12px;color:var(--paper)}
+.lb-mid p{font-size:12.5px;line-height:1.75;color:var(--paper-dim);max-width:420px}
+.lb-notes{margin-top:30px;border-top:1px solid var(--line);max-width:440px}
+.lb-note{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--paper-dim);line-height:1.55}
+.lb-note .n{font-family:var(--font-mono);font-size:9.5px;color:var(--brass);flex:none;padding-top:2px;letter-spacing:.04em}
+.lb-note b{color:var(--paper);font-weight:600}
+.lb-bottom{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:10.5px;color:var(--paper-faint);flex-wrap:wrap}
+.lb-bottom .svc{font-size:10.5px;color:var(--paper-faint)}
+.login-panel{display:flex;align-items:center;justify-content:center;padding:30px;position:relative}
+.login-theme{position:absolute;right:18px;top:16px}
+.login-card{width:100%;max-width:356px}
+.login-mobile-brand{display:none;align-items:center;gap:10px;margin-bottom:28px}
+.login-mobile-brand .mark{width:36px;height:36px}
+.login-card .kicker{font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--paper-faint)}
+.login-card h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:8px 0 6px;line-height:1.25}
+.login-card .sub{font-size:12px;color:var(--paper-faint);line-height:1.65;margin-bottom:24px}
+.login-field{display:grid;gap:6px;margin-bottom:12px}
+.login-field label{font-size:11.5px;color:var(--paper-dim);font-weight:500}
+.login-inputwrap{position:relative}
+.login-inputwrap .input{height:36px;font-size:13px;padding-right:42px;background:var(--ink-800)}
+.login-show{position:absolute;right:4px;top:4px;height:28px;width:32px;display:grid;place-items:center;color:var(--paper-faint);border-radius:3px}
+.login-show:hover{color:var(--paper);background:var(--ink-600)}
+.login-show svg{width:15px;height:15px}
+.login-submit{width:100%;height:36px;font-size:12.5px;margin-top:4px}
+.login-err{display:flex;align-items:flex-start;gap:7px;margin-top:10px;padding:8px 10px;border-left:2px solid var(--err);background:var(--err-soft);color:var(--err);font-size:11.5px;line-height:1.5;border-radius:0 4px 4px 0}
+.login-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:10.5px;color:var(--paper-faint)}
+.login-meta .mono{font-size:9.5px;letter-spacing:.04em}
+.login-foot{margin-top:22px;font-size:10px;color:var(--paper-faint);line-height:1.7}
+
+/* ---------- 弹层 ---------- */
+.scrim{position:fixed;inset:0;background:rgba(4,5,6,.66);z-index:100;animation:fade .15s var(--ease)}
+.sheet{
+  position:fixed;top:0;right:0;bottom:0;width:min(var(--w,620px),94vw);z-index:110;
+  background:var(--ink-800);border-left:1px solid var(--line-strong);box-shadow:var(--shadow-2);
+  display:flex;flex-direction:column;animation:slide .18s var(--ease);
+}
+.sheet-head{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--ink-850);min-width:0}
+.sheet-head h3{font-size:13.5px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-head .sub{font-family:var(--font-mono);font-size:10px;color:var(--paper-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-head .right{margin-left:auto;display:flex;gap:4px;flex:none}
+.sheet-body{flex:1;min-height:0;overflow:auto;padding:14px 16px}
+.sheet-foot{flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--line);background:var(--ink-850)}
+.sheet-foot .right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.modal{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,92vw);z-index:120;
+  background:var(--ink-800);border:1px solid var(--line-strong);border-radius:var(--r-xl);
+  box-shadow:var(--shadow-2);animation:pop .16s var(--ease);display:flex;flex-direction:column;
+}
+.modal-head{display:flex;align-items:flex-start;gap:10px;padding:15px 17px 0}
+.modal-head .mic{width:28px;height:28px;border-radius:4px;display:grid;place-items:center;flex:none;background:var(--warn-soft);color:var(--warn)}
+.modal-head .mic.danger{background:var(--err-soft);color:var(--err)}
+.modal-head .mic svg{width:15px;height:15px}
+.modal-head h3{font-size:13.5px;font-weight:600;line-height:1.4;margin:2px 0 0}
+.modal-body{padding:9px 17px 2px;font-size:12px;line-height:1.7;color:var(--paper-dim);word-break:break-word}
+.modal-body .mmute{margin-top:9px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--ink-850);font-size:11px;color:var(--paper-faint);line-height:1.6}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 17px 15px;flex-wrap:wrap}
+
+/* ---------- Toast ---------- */
+body.login-mode .toasts{left:50%;right:auto;transform:translateX(-50%);bottom:20px;align-items:center;max-width:min(420px,calc(100vw - 32px))}
+.toasts{position:fixed;left:calc(var(--side-w) + 16px);bottom:16px;z-index:300;display:flex;flex-direction:column;gap:8px;max-width:min(420px,calc(100vw - 32px));pointer-events:none}
+.toast{
+  pointer-events:auto;display:flex;align-items:flex-start;gap:8px;padding:9px 12px;
+  background:var(--ink-700);border:1px solid var(--line);border-left:2px solid var(--brass);
+  border-radius:var(--r-md);box-shadow:var(--shadow-2);font-size:12px;line-height:1.5;color:var(--paper);
+  animation:toastin .16s var(--ease);cursor:pointer;
+}
+.toast.ok{border-left-color:var(--ok)} .toast.err{border-left-color:var(--err)}
+.toast.warn{border-left-color:var(--warn)} .toast.info{border-left-color:var(--info)}
+.toast svg{width:13px;height:13px;margin-top:2px;flex:none;color:var(--paper-dim)}
+.toast span{min-width:0;word-break:break-word}
+.toast.ok svg{color:var(--ok)} .toast.err svg{color:var(--err)} .toast.warn svg{color:var(--warn)} .toast.info svg{color:var(--info)}
+
+/* ---------- 侧栏抽屉 ---------- */
+.side-scrim{display:none;position:fixed;inset:0;background:rgba(4,5,6,.6);z-index:65;animation:fade .15s}
+.app.drawer-open .side-scrim{display:block}
+html.lock,html.lock body{overflow:hidden}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1279px){
+  .kpi .kval{font-size:22px}
+  .ph-l p{max-width:360px}
+  .metricstrip{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .metricstrip .m:nth-child(5n){border-right:0}
+  .metricstrip .m:nth-child(-n+5){border-bottom:1px solid var(--line)}
+}
+@media (max-width:1099px) and (min-width:861px){
+  :root{--side-w:64px}
+  .brand{justify-content:center;padding:0}
+  .brand .bt,.nav-label,.navbtn span,.sidefoot .svc .lbl,.sidefoot .svc .lat,.sidefoot .ver{display:none}
+  .nav{padding:10px 8px}
+  .navbtn{justify-content:center;padding:0}
+  .navbtn svg{width:17px;height:17px}
+  .navbtn[aria-current="page"]::before{left:-8px}
+  .navdiv{margin:8px 4px}
+  .sidefoot{padding:10px 0;justify-items:center}
+  .sidefoot .svc{justify-content:center}
+  .toasts{left:80px}
+  .ph-l p{max-width:280px}
+}
+@media (max-width:1150px){
+  .summary-grid{grid-template-columns:1fr}
+}
+@media (max-width:980px){
+  .dash-top,.dash-bottom,.grid-2,.grid-2b,.grid-3,.cards-layout,.settings-grid{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .kpi:nth-child(3n){border-right:0}
+  .kpi:nth-child(-n+3){border-bottom:1px solid var(--line)}
+  .login-root{grid-template-columns:1fr}
+  .login-brand{display:none}
+  .login-mobile-brand{display:flex}
+  .login-panel{min-height:100dvh}
+  .login-card{max-width:380px}
+  .ph-l p{display:none}
+  .hstat{display:none}
+  .logoutbtn span{display:none}
+}
+@media (max-width:860px){
+  :root{--side-w:0px}
+  .metricstrip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metricstrip .m:nth-child(5n){border-right:1px solid var(--line)}
+  .metricstrip .m:nth-child(2n){border-right:0}
+  .metricstrip .m:nth-child(-n+8){border-bottom:1px solid var(--line)}
+  .issuebar .field,.issuebar .field.narrow{width:100%}
+  .issuebar .actions{margin-left:0;width:100%}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:248px;flex-basis:248px;transform:translateX(-100%);transition:transform var(--t-med) var(--ease);box-shadow:var(--shadow-2);border-right:1px solid var(--line-strong)}
+  .app.drawer-open .sidebar{transform:none}
+  .brand{justify-content:flex-start;padding:0 14px}
+  .brand .bt,.sidefoot .svc .lbl,.sidefoot .svc .lat,.sidefoot .ver{display:block}
+  .navbtn{justify-content:flex-start;padding:0 9px}
+  .navbtn span{display:inline}
+  .navbtn[aria-current="page"]::before{left:0}
+  .sidefoot{justify-items:stretch;padding:10px 14px 11px}
+  .sidefoot .svc{justify-content:flex-start}
+  .menubtn{display:inline-grid}
+  .pagehead{padding:0 12px;gap:8px}
+  .ph-r{gap:2px}
+  .ph-l h1{font-size:13.5px}
+  main#main{padding:14px 12px 36px}
+  .toasts{left:16px;right:16px;max-width:none}
+  .tbl{min-width:760px}
+  .mini{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .mini .m:nth-child(3n){border-right:0}
+  .mini .m:nth-child(-n+3){border-bottom:1px solid var(--line)}
+  .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .formgrid,.split-2{grid-template-columns:1fr}
+  .sheet{width:100%;max-width:100vw}
+  .toolbar{padding:9px 10px}
+  .searchwrap{max-width:none;flex-basis:100%}
+  .ph .hint{display:none}
+  .login-panel{padding:22px}
+  .login-theme{right:10px;top:10px}
+}
+@media (max-width:560px){
+  .chart-x .xm,.chart-x .xlast{display:none}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi:nth-child(3n){border-right:1px solid var(--line)}
+  .kpi:nth-child(2n){border-right:0}
+  .kpi:nth-child(-n+4){border-bottom:1px solid var(--line)}
+  .ph-l .sep{display:none}
+  .hstat{display:none}
+  .iconbtn{width:30px;height:30px}
+  .logoutbtn span{display:none}
+  .logoutbtn{padding:0 6px}
+  .mini{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mini .m:nth-child(3n){border-right:1px solid var(--line)}
+  .mini .m:nth-child(2n){border-right:0}
+  .kpi .kv{font-size:22px}
+  .detail-head{padding:12px}
+  .sheet-body{padding:12px}
+  .quick{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;scroll-behavior:auto !important}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<!-- ================= 登录 ================= -->
+<div class="login-root" id="loginRoot" hidden>
+  <section class="login-brand" aria-label="品牌信息">
+    <div class="login-frame" aria-hidden="true"></div>
+    <div class="login-watermark" aria-hidden="true">
+      <svg viewBox="0 0 40 40" fill="none"><path d="M16 12h12v6h-7v4h6v6h-6v6h-5V12Z" fill="currentColor"/></svg>
+    </div>
+    <div class="lb-top">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><rect x=".5" y=".5" width="39" height="39" rx="9" fill="#101113" stroke="rgba(237,232,222,.14)"/><path d="M10 21V10h9M30 19v11h-9" fill="none" stroke="#EDE8DE" stroke-width="1.6"/><path d="M16 12h12v6h-7v4h6v6h-6v6h-5V12Z" fill="#D2A45E"/></svg>
+      <div><div class="bn">拾帧 FrameWeave</div><div class="bf">INKWEAVE · FRAMEWEAVE</div></div>
+    </div>
+    <div class="lb-mid">
+      <div class="lb-kicker">Operations Console / 运营控制台</div>
+      <h2>把授权、卡密与商城<br>收进一张桌面。</h2>
+      <p>石墨底色上的取景框。账号、订阅、卡密、商城与审计共用一套信息层级，长时间值守也不刺眼。</p>
+      <div class="lb-notes">
+        <div class="lb-note"><span class="n">01</span><div><b>管理会话 8 小时</b> · 到期自动失效，可随时吊销其他会话。</div></div>
+        <div class="lb-note"><span class="n">02</span><div><b>登录失败 5 次锁定 15 分钟</b> · 管理密钥由服务端校验，不在前端落盘。</div></div>
+        <div class="lb-note"><span class="n">03</span><div><b>操作全部留痕</b> · 加时、积分、踢线、签发与轮换写入审计日志。</div></div>
+      </div>
+    </div>
+    <div class="lb-bottom">
+      <span class="svc"><span class="dot ok" id="loginDot" aria-hidden="true"></span><span>云端授权服务</span></span>
+      <span class="mono">FRAMEWEAVE / 2026.10</span>
+    </div>
+  </section>
+
+  <section class="login-panel">
+    <button class="iconbtn login-theme" type="button" data-act="theme" aria-label="切换主题" title="切换主题"><span data-theme-icon></span></button>
+    <div class="login-card">
+      <div class="login-mobile-brand">
+        <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><rect x=".5" y=".5" width="39" height="39" rx="9" fill="#101113" stroke="rgba(237,232,222,.14)"/><path d="M10 21V10h9M30 19v11h-9" fill="none" stroke="#EDE8DE" stroke-width="1.6"/><path d="M16 12h12v6h-7v4h6v6h-6v6h-5V12Z" fill="#D2A45E"/></svg>
+        <div><div class="bn" style="font-size:13px;font-weight:700">拾帧 FrameWeave</div><div class="bf" style="font-family:var(--font-display);font-size:8.5px;letter-spacing:.18em;color:var(--brass);margin-top:2px">运营控制台</div></div>
+      </div>
+      <div class="kicker">Admin Access / 管理入口</div>
+      <h1>管理员登录</h1>
+      <p class="sub">输入管理密钥以进入运营控制台。密钥只用于本次登录请求。</p>
+      <form data-form="login" novalidate>
+        <div class="login-field">
+          <label for="adminKey">管理密钥</label>
+          <div class="login-inputwrap">
+            <input class="input" id="adminKey" name="admin_key" type="password" autocomplete="current-password" placeholder="输入管理密钥" aria-describedby="loginHint" spellcheck="false" required>
+            <button class="login-show" type="button" data-act="toggle-pass" aria-label="显示管理密钥" aria-pressed="false"><span data-pass-icon></span></button>
+          </div>
+        </div>
+        <button class="btn pri lg block login-submit" type="submit" id="loginSubmit">进入控制台</button>
+        <p class="login-err" id="loginErr" role="alert" hidden></p>
+      </form>
+      <p class="login-hint" id="loginHint" style="font-size:10.5px;color:var(--paper-faint);line-height:1.6;margin-top:10px">连续 5 次失败将限制登录 15 分钟。若已启用 IP 白名单，仅允许列表内地址访问。</p>
+      <div class="login-meta">
+        <span>会话有效期 <span class="mono">08:00:00</span></span>
+        <span class="mono">INKWEAVE / v3.0</span>
+      </div>
+      <p class="login-foot">拾帧 FrameWeave · 云端授权运营控制台<br>仅限授权运营人员使用，所有操作写入审计日志。</p>
+    </div>
+  </section>
+</div>
+
+<!-- ================= 应用 ================= -->
+<div class="app" id="app" hidden>
+  <div class="side-scrim" data-act="drawer-close" aria-hidden="true"></div>
+  <aside class="sidebar" id="sidebar" aria-label="侧栏">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><rect x=".5" y=".5" width="39" height="39" rx="9" fill="#101113" stroke="rgba(237,232,222,.14)"/><path d="M10 21V10h9M30 19v11h-9" fill="none" stroke="#EDE8DE" stroke-width="1.6"/><path d="M16 12h12v6h-7v4h6v6h-6v6h-5V12Z" fill="#D2A45E"/></svg>
+      <div class="bt"><div class="bn">拾帧 FrameWeave</div><div class="bf">INKWEAVE</div><div class="bp">运营控制台</div></div>
+    </div>
+    <nav class="nav" id="navBox" aria-label="主导航"></nav>
+    <div class="sidefoot">
+      <div class="svc"><span class="dot" id="svcDot" aria-hidden="true"></span><span class="lbl" id="svcLabel">云端授权服务</span><span class="lat" id="svcLat">—</span></div>
+      <div class="ver" id="svcMeta">INKWEAVE / 2026.10</div>
+    </div>
+  </aside>
+  <div class="main-col">
+    <header class="pagehead">
+      <button class="iconbtn menubtn" type="button" data-act="drawer-open" aria-label="打开导航" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="ph-l">
+        <h1 id="pageTitle">仪表盘</h1><span class="sep" aria-hidden="true"></span>
+        <p id="pageDesc">授权、卡密、商城与审计的总览</p>
+      </div>
+      <div class="ph-r">
+        <span class="hstat" id="headEnv"><span class="dot ok" aria-hidden="true"></span><span class="mono">连接中</span></span>
+        <button class="iconbtn" type="button" data-act="refresh" aria-label="刷新当前页面" title="刷新当前页面"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/></svg></button>
+        <button class="iconbtn" type="button" data-act="theme" aria-label="切换主题" title="切换主题"><span data-theme-icon></span></button>
+        <button class="btn ghost sm logoutbtn" type="button" data-act="logout" aria-label="退出登录" title="退出登录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h9"/></svg><span>退出登录</span></button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1"></main>
+  </div>
+</div>
+
+<div class="toasts" id="toastBox" role="status" aria-live="polite" aria-atomic="false"></div>
+<div id="layerRoot"></div>
+
+<script>
+'use strict';
+/* ============================================================================
+   拾帧 FrameWeave · 运营控制台
+   接口契约保持 /api/admin/*：所有请求 POST JSON，带 token 字段。
+   ============================================================================ */
+const API='/api/admin';
+const TOKEN_KEY='fw_admin_token';
+const THEME_KEY='fw_admin_theme';
+const TTL_MS=8000; // 管理会话 8 小时（服务端 ADMIN_TOKEN_TTL）
+const S={
+  token:'',view:'dash',stats:null,lastSync:0,latency:0,online:false,seq:0,
+  loginBusy:false,expiredNotified:false,settings:null,
+  users:{q:'',status:-1,page:1,per:50,total:0,pages:1,tab:'users'},
+  devices:{q:'',page:1,per:50,total:0,pages:1},
+  cards:{q:'',status:'',page:1,per:50,total:0,pages:1,counts:{unused:null,used:null,revoked:null}},
+  market:{q:'',kind:'',page:1,per:50,items:[]},
+  audit:{q:'',scene:'',result:'',page:1,per:100,total:0,pages:1},
+  ops:{tag:'health',path:'/api/health',data:null,error:''}
+};
+let ISSUED_CARDS=[];
+const ICONS={
+  dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><circle cx="16.5" cy="9" r="2.4"/><path d="M16 14.6c2 .3 3.7 1.6 4.4 4.4"/></svg>',
+  cards:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M3 11h18"/><path d="M7 15.5h4"/></svg>',
+  market:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1.2 11a2 2 0 0 1-2 1.8H9.2a2 2 0 0 1-2-1.8L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg>',
+  audit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 13h5"/></svg>',
+  settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5.1 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>',
+  ops:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" opacity=".5"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>',
+  eyeoff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A10.6 10.6 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3.2 3.7M6.2 7.7A16.5 16.5 0 0 0 2.5 12S6 18 12 18c1.5 0 2.8-.4 4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="11" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v10A1.5 1.5 0 0 0 5.5 17H8"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L22 20H2L12 3z"/><path d="M12 9v5M12 17.2v.1"/></svg>',
+  key:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M17 4l3 3M14 7l3 3"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 7.6-8 9-4.6-1.4-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg>',
+  device:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="13" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M8 17V11M12 17V7M16 17v-4"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>',
+  chevron:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
+};
+const NAV=[
+  {k:'dash',label:'仪表盘',icon:'dash',desc:'授权、卡密、商城与审计的总览'},
+  {k:'users',label:'用户管理',icon:'users',desc:'检索账号、订阅、积分与设备绑定'},
+  {k:'cards',label:'卡密管理',icon:'cards',desc:'签发、筛选与作废授权卡密'},
+  {k:'market',label:'商城管理',icon:'market',desc:'维护节点与工作流条目'},
+  {k:'audit',label:'审计日志',icon:'audit',desc:'账号事件与管理操作的完整留痕'},
+  {k:'settings',label:'系统设置',icon:'settings',desc:'安全、邮件、接入与数据备份',group:'系统'},
+  {k:'ops',label:'运维视图',icon:'ops',desc:'本地服务只读代理与健康检查',group:'系统'}
+];
+const TITLES={}; NAV.forEach(n=>TITLES[n.k]=n);
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const attr=esc;
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+const nfmt=n=>{if(n===null||n===undefined||n==='')return '—';const v=Number(n);return Number.isFinite(v)?v.toLocaleString('zh-CN'):'—'};
+const pad=n=>String(n).padStart(2,'0');
+function fmt(ts){if(!ts)return '—';const d=new Date(Number(ts)*1000);if(Number.isNaN(d.getTime()))return '—';return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())}
+function fmtDate(ts){if(!ts)return '—';const d=new Date(Number(ts)*1000);if(Number.isNaN(d.getTime()))return '—';return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function fmtClock(ts){if(!ts)return '—';const d=new Date(Number(ts));if(Number.isNaN(d.getTime()))return '—';return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())}
+function rel(ts){
+  if(!ts)return '—';
+  const d=Number(ts)*1000;
+  const now=(S.stats&&S.stats.now)?Number(S.stats.now)*1000:Date.now();
+  const diff=now-d;
+  if(diff<0)return diff>-90000?'刚刚':fmt(ts);
+  if(diff<60000)return Math.max(1,Math.floor(diff/1000))+' 秒前';
+  if(diff<3600000)return Math.floor(diff/60000)+' 分钟前';
+  if(diff<86400000)return Math.floor(diff/3600000)+' 小时前';
+  if(diff<604800000)return Math.floor(diff/86400000)+' 天前';
+  return fmtDate(ts);
+}
+function maskToken(t){t=String(t||'');return t.length>14?t.slice(0,6)+'…'+t.slice(-4):t||'—'}
+function shortId(v,n=16){v=String(v||'');if(!v)return '—';return v.length<=n?v:v.slice(0,Math.max(4,n-6))+'…'+v.slice(-5)}
+function pct(a,b){a=Number(a)||0;b=Number(b)||0;if(b<=0)return 0;return clamp(Math.round(a/b*100),0,100)}
+function toast(msg,kind='info',ms=3600){
+  const box=$('#toastBox'); if(!box)return;
+  while(box.childElementCount>=4)box.firstElementChild.remove();
+  const el=document.createElement('div'); el.className='toast '+kind;
+  const ic=kind==='ok'?'check':kind==='err'?'alert':kind==='warn'?'alert':'clock';
+  el.innerHTML=(ICONS[ic]||ICONS.clock)+'<span>'+esc(msg)+'</span>';
+  el.addEventListener('click',()=>el.remove());
+  box.appendChild(el); setTimeout(()=>el.remove(),ms);
+}
+function copyText(text,okMsg='已复制到剪贴板'){
+  const t=String(text==null?'':text);
+  const done=()=>toast(okMsg,'ok');
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(()=>fallback());}
+  else fallback();
+  function fallback(){
+    try{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();done();}
+    catch(e){toast('复制失败，请手动选择','err')}
+  }
+}
+function downloadFile(name,text,type='text/plain;charset=utf-8'){
+  const blob=new Blob([text],{type});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+function csv(rows){
+  return '\ufeff'+rows.map(r=>r.map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+}
+
+/* ---------- 主题 ---------- */
+function currentTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
+function applyTheme(t,persist=true){
+  t=t==='light'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',t);
+  if(persist){try{localStorage.setItem(THEME_KEY,t)}catch(e){}}
+  $$('[data-theme-icon]').forEach(el=>{el.innerHTML=t==='light'?ICONS.moon:ICONS.sun});
+  $$('[data-act="theme"]').forEach(el=>{
+    el.setAttribute('aria-pressed',t==='light'?'true':'false');
+    el.setAttribute('title',t==='light'?'切换到深色':'切换到亮色');
+    el.setAttribute('aria-label',t==='light'?'切换到深色主题':'切换到亮色主题');
+  });
+}
+applyTheme(currentTheme(),false);
+
+/* ---------- 请求 ---------- */
+async function api(path,body,opt={}){
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),20000);
+  const payload={...(body||{})};
+  if(opt.auth!==false)payload.token=S.token;
+  try{
+    const res=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl.signal});
+    const data=await res.json().catch(()=>({ok:false,message:'HTTP '+res.status}));
+    if(!data.ok&&opt.auth!==false&&S.token&&(data.code==='unauthorized'||/未授权|登录已过期/.test(data.message||'')))handleExpired(data.message);
+    return data;
+  }catch(e){
+    return {ok:false,message:e&&e.name==='AbortError'?'请求超时（20 秒）':'网络错误：'+(e&&e.message||'连接失败')};
+  }finally{clearTimeout(timer)}
+}
+function handleExpired(msg){
+  if(S.expiredNotified)return; S.expiredNotified=true;
+  S.token=''; try{localStorage.removeItem(TOKEN_KEY)}catch(e){}
+  closeLayers(); showLogin(msg||'登录已过期，请重新登录');
+  toast(msg||'登录已过期，请重新登录','warn');
+}
+
+/* ---------- 壳层 / 登录 ---------- */
+function showLogin(msg){
+  $('#app').hidden=true; $('#loginRoot').hidden=false;
+  document.body.classList.add('login-mode');
+  document.title='登录 · 拾帧 FrameWeave 运营控制台';
+  const err=$('#loginErr');
+  if(err){ if(msg){err.textContent=msg;err.hidden=false;}else{err.hidden=true;} }
+  stopPolling();
+  setTimeout(()=>{const k=$('#adminKey');if(k){k.focus();k.select&&k.select()}},60);
+}
+function showApp(){
+  $('#loginRoot').hidden=true; $('#app').hidden=false;
+  document.body.classList.remove('login-mode');
+  S.expiredNotified=false;
+  renderNav();
+  updateThemeButtons();
+  startPolling();
+}
+function renderNav(){
+  const box=$('#navBox'); if(!box)return;
+  let html='<div class="nav-label">运营</div>',lastGroup='';
+  NAV.forEach(n=>{
+    if(n.group&&n.group!==lastGroup){
+      html+='<div class="navdiv"></div><div class="nav-label">'+esc(n.group)+'</div>'; lastGroup=n.group;
+    }
+    html+='<button class="navbtn" type="button" data-nav="'+n.k+'" aria-current="'+(S.view===n.k?'page':'false')+'" title="'+esc(n.label)+'">'+ICONS[n.icon]+'<span>'+esc(n.label)+'</span></button>';
+  });
+  box.innerHTML=html;
+}
+function updateThemeButtons(){applyTheme(currentTheme(),false)}
+function updateChrome(){
+  const meta=TITLES[S.view]||TITLES.dash;
+  $('#pageTitle').textContent=meta.label;
+  $('#pageDesc').textContent=meta.desc;
+  document.title=meta.label+' · 拾帧 FrameWeave 运营控制台';
+  $$('#navBox .navbtn').forEach(b=>b.setAttribute('aria-current',b.dataset.nav===S.view?'page':'false'));
+}
+function updateHeaderEnv(){
+  const st=S.stats,b=$('#headEnv'); if(!b)return;
+  if(!st){b.innerHTML='<span class="dot warn" aria-hidden="true"></span><span class="mono">等待数据</span>';return}
+  b.innerHTML='<span class="dot '+(S.online?'ok':'err')+'" aria-hidden="true"></span><span>用户 <b>'+nfmt(st.users)+'</b></span><span class="mono">在线 '+nfmt(st.online_60m)+'/60m</span><span class="mono">卡密 '+nfmt(st.cards_unused)+'</span>';
+}
+function updateStatus(err){
+  const dot=$('#svcDot'),lab=$('#svcLabel'),lat=$('#svcLat'),meta=$('#svcMeta');
+  if(!dot)return;
+  dot.className='dot '+(S.online?'ok':'err');
+  if(lab)lab.textContent=S.online?'云端授权 · 在线':'云端授权 · 离线';
+  if(lat)lat.textContent=S.online&&S.latency?S.latency+'ms':'—';
+  if(meta)meta.textContent=S.online?('上次同步 '+fmtClock(S.stats&&S.stats.now?Number(S.stats.now)*1000:S.lastSync)+' · INKWEAVE'):(err?String(err).slice(0,28):'INKWEAVE / 2026.10');
+}
+async function loadStats(silent){
+  const t0=performance.now();
+  const r=await api('/stats');
+  if(r.ok&&r.stats){
+    S.stats=r.stats;S.online=true;S.latency=Math.round(performance.now()-t0);S.lastSync=Date.now();
+    updateHeaderEnv();updateStatus();
+    return r;
+  }
+  if(r.code!=='unauthorized'){
+    S.online=false;updateStatus(r.message||'连接失败');
+    if(!silent)toast(r.message||'统计加载失败','err');
+  }
+  return r;
+}
+let pollTimer=null;
+function startPolling(){stopPolling();pollTimer=setInterval(()=>{if(!document.hidden&&S.token)loadStats(true)},120000)}
+function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null}}
+
+/* ---------- 弹层 ---------- */
+let lastFocus=null,layerOpen=false;
+function layerEls(){return $$('#layerRoot .scrim,#layerRoot .sheet,#layerRoot .modal')}
+function openSheet(opt){
+  closeLayers();
+  lastFocus=document.activeElement;
+  const scrim=document.createElement('div');scrim.className='scrim';scrim.addEventListener('click',closeLayers);
+  const sheet=document.createElement('section');sheet.className='sheet';sheet.style.setProperty('--w',(opt.width||620)+'px');
+  sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-label',opt.title||'面板');
+  sheet.innerHTML='<div class="sheet-head"><h3>'+esc(opt.title||'')+'</h3>'+(opt.sub?'<span class="sub">'+esc(opt.sub)+'</span>':'')+'<div class="right"><button class="iconbtn" type="button" data-act="close-layer" aria-label="关闭">'+ICONS.close+'</button></div></div>'
+    +'<div class="sheet-body">'+(opt.body||'')+'</div>'
+    +'<div class="sheet-foot">'+(opt.foot||'<div class="right"><button class="btn sec" type="button" data-act="close-layer">关闭</button></div>')+'</div>';
+  $('#layerRoot').appendChild(scrim);$('#layerRoot').appendChild(sheet);
+  layerOpen=true;document.documentElement.classList.add('lock');
+  setTimeout(()=>{const f=sheet.querySelector('input,select,textarea,button:not([data-act="close-layer"])');if(f)f.focus()},50);
+  if(typeof opt.onMount==='function')opt.onMount(sheet);
+  return sheet;
+}
+function openModal(opt){
+  closeLayers();
+  lastFocus=document.activeElement;
+  const scrim=document.createElement('div');scrim.className='scrim';scrim.addEventListener('click',closeLayers);
+  const m=document.createElement('section');m.className='modal';
+  m.setAttribute('role','alertdialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-label',opt.title||'确认');
+  m.innerHTML='<div class="modal-head"><span class="mic '+(opt.danger?'danger':'')+'">'+ICONS.alert+'</span><h3>'+esc(opt.title||'确认操作')+'</h3></div>'
+    +'<div class="modal-body">'+(opt.body||'')+(opt.note?'<div class="mmute">'+opt.note+'</div>':'')+'</div>'
+    +'<div class="modal-foot"><button class="btn sec" type="button" data-act="close-layer">取消</button><button class="btn '+(opt.danger?'danger':'pri')+'" type="button" id="modalOk">'+esc(opt.okLabel||'确认')+'</button></div>';
+  $('#layerRoot').appendChild(scrim);$('#layerRoot').appendChild(m);
+  layerOpen=true;document.documentElement.classList.add('lock');
+  const ok=m.querySelector('#modalOk');
+  ok.addEventListener('click',()=>{closeLayers();if(typeof opt.onOk==='function')opt.onOk()});
+  setTimeout(()=>ok.focus(),40);
+  return m;
+}
+function closeLayers(){
+  const els=layerEls(); if(!els.length){layerOpen=false;document.documentElement.classList.remove('lock');return}
+  els.forEach(e=>e.remove()); layerOpen=false; document.documentElement.classList.remove('lock');
+  if(lastFocus&&lastFocus.isConnected){try{lastFocus.focus({preventScroll:true})}catch(e){}}
+  lastFocus=null;
+}
+function trapFocus(e){
+  if(!layerOpen||e.key!=='Tab')return;
+  const scope=$('#layerRoot .sheet')||$('#layerRoot .modal'); if(!scope)return;
+  const f=$$('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]',scope).filter(el=>el.offsetParent!==null);
+  if(!f.length)return;
+  const first=f[0],last=f[f.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+}
+
+/* ---------- 视图路由 ---------- */
+function go(view){
+  if(!TITLES[view])view='dash';
+  S.view=view;
+  if(location.hash!=='#/'+view)location.hash='#/'+view;
+  else route();
+}
+function route(){
+  if(!S.token){showLogin();return}
+  const m=(location.hash||'').match(/^#\/([a-z]+)/);
+  const v=m&&TITLES[m[1]]?m[1]:'dash';
+  S.view=v; updateChrome(); renderView();
+}
+function refreshCurrent(){
+  const btn=$('[data-act="refresh"]');
+  if(btn){btn.classList.add('spin');setTimeout(()=>btn.classList.remove('spin'),600)}
+  loadStats(true).then(()=>renderView());
+}
+async function renderView(){
+  if(!S.token)return;
+  const seq=++S.seq;
+  const map={dash:viewDash,users:viewUsers,cards:viewCards,market:viewMarket,audit:viewAudit,settings:viewSettings,ops:viewOps};
+  const fn=map[S.view]||viewDash;
+  try{await fn(seq)}catch(e){if(seq===S.seq){$('#main').innerHTML='<div class="page"><div class="panel"><div class="errbox"><b>页面渲染失败</b><span>'+esc(e.message||String(e))+'</span><div class="eact"><button class="btn sec" type="button" data-act="refresh">重试</button></div></div></div></div>';}}
+}
+
+/* ---------- 通用片段 ---------- */
+function emptyState(title,hint,action){
+  return '<div class="empty"><div class="em" aria-hidden="true"></div><b>'+esc(title)+'</b><span>'+esc(hint||'')+'</span>'+(action?'<div class="eact">'+action+'</div>':'')+'</div>';
+}
+function errorState(title,msg,retryAct){
+  return '<div class="errbox"><div class="em" aria-hidden="true"></div><b>'+esc(title)+'</b><span>'+esc(msg||'')+'</span>'+(retryAct?'<div class="eact"><button class="btn sec" type="button" data-act="'+attr(retryAct)+'">重试</button></div>':'')+'</div>';
+}
+function skeletonRows(n=5,cols=4){
+  let rows='';
+  for(let i=0;i<n;i++)rows+='<div class="skrow">'+Array.from({length:cols},(_,j)=>'<span class="sk" style="width:'+(j===0?'100%':(55+j*8)+'%')+'"></span>').join('')+'</div>';
+  return '<div class="sklines" aria-hidden="true">'+rows+'</div>';
+}
+function statusBadge(st){
+  if(st===1)return '<span class="st ok">启用</span>';
+  if(st===0)return '<span class="st err">禁用</span>';
+  return '<span class="st plain">未知</span>';
+}
+function planText(p){return p==='member'? '<span class="strong">会员</span>' : '<span class="dim">试用</span>'}
+function hashText(h){return h==='scrypt'?'<span class="mono dim">scrypt</span>':(h==='sha256'?'<span class="mono warn">sha256 弱</span>':'<span class="mono faint">—</span>')}
+function resultText(r){
+  const s=String(r||'');
+  if(['ok','sent','success','installed'].includes(s))return '<span class="st ok">成功</span>';
+  if(['failed','fail','error','rejected'].includes(s))return '<span class="st err">失败</span>';
+  return '<span class="st plain">'+esc(s||'—')+'</span>';
+}
+function sceneTag(scene){
+  const s=String(scene||'');
+  if(s.startsWith('admin_'))return '<span class="tag brass">'+esc(s)+'</span>';
+  return '<span class="mono dim" style="font-size:11px">'+esc(s||'—')+'</span>';
+}
+function pagerHtml(kind,page,pages,total,label,per,perOptions){
+  const safePages=Math.max(1,Number(pages)||1),pg=clamp(Number(page)||1,1,safePages);
+  const opts=(perOptions||[20,50,100]).map(n=>'<option value="'+n+'"'+(Number(per)===n?' selected':'')+'>'+n+'</option>').join('');
+  return '<div class="pager"><span>共 <b class="mono">'+nfmt(total)+'</b> '+esc(label||'条')+' · 第 <b class="mono">'+pg+'</b> / '+safePages+' 页</span>'
+    +'<span class="grow"></span>'
+    +'<label class="faint" for="per-'+kind+'" style="font-size:10.5px">每页</label><select class="select sm" id="per-'+kind+'" data-change="per" data-kind="'+kind+'" style="width:60px">'+opts+'</select>'
+    +'<button class="btn sec" type="button" data-act="pg" data-kind="'+kind+'" data-page="'+(pg-1)+'" '+(pg<=1?'disabled':'')+' aria-label="上一页">‹</button>'
+    +'<button class="btn sec" type="button" data-act="pg" data-kind="'+kind+'" data-page="'+(pg+1)+'" '+(pg>=safePages?'disabled':'')+' aria-label="下一页">›</button>'
+    +'<input class="input" type="number" min="1" max="'+safePages+'" value="'+pg+'" aria-label="跳转页码" id="go-'+kind+'" data-go="'+kind+'">'
+    +'<button class="btn sec" type="button" data-act="pg-go" data-kind="'+kind+'">跳转</button></div>';
+}
+
+/* ---------- 仪表盘 ---------- */
+async function viewDash(seq){
+  const main=$('#main');
+  main.innerHTML='<div class="page">'
+    +'<div class="panel"><div class="kpis">'+Array.from({length:6},()=>'<div class="kpi"><div class="sk" style="width:56px;height:10px"></div><div class="sk" style="width:74px;height:24px;margin-top:7px"></div><div class="sk" style="width:90px;height:9px;margin-top:5px"></div></div>').join('')+'</div></div>'
+    +'<div class="dash-top"><div class="panel"><div class="ph"><span class="lbl">授权活动</span><span class="hint">近 14 天 · 来自审计日志</span></div>'+skeletonRows(4,1)+'</div><div class="panel"><div class="ph"><span class="lbl">运营构成</span></div>'+skeletonRows(4,2)+'</div></div>'
+    +'<div class="dash-bottom"><div class="panel"><div class="ph"><span class="lbl">到期提醒</span></div>'+skeletonRows(3,3)+'</div><div class="panel"><div class="ph"><span class="lbl">最近审计</span></div>'+skeletonRows(3,3)+'</div></div>'
+    +'</div>';
+  const [stats,audit,users,mkt]=await Promise.all([
+    loadStats(true),
+    api('/audit',{page:1,per_page:300}),
+    api('/users',{page:1,per_page:100}),
+    api('/market/stats',{})
+  ]);
+  if(seq!==S.seq)return;
+  if(!S.stats&&!stats.ok){main.innerHTML='<div class="page"><div class="panel">'+errorState('统计加载失败',stats.message||'无法连接到云端授权服务','refresh')+'</div></div>';return}
+  const st=S.stats||{};
+  const kpis=[
+    {l:'用户总数',v:st.users,s:'今日 +'+nfmt(st.today_regs)+' · 7 日 +'+nfmt(st.weekly_regs),accent:false},
+    {l:'会员',v:st.members,s:'占比 '+pct(st.members,st.users)+'% · 到期 7 日内 '+nfmt(st.expiring_7d)},
+    {l:'在线用户',v:st.online_60m,s:'15 分钟 '+nfmt(st.online_15m)+' · 禁用 '+nfmt(st.disabled)},
+    {l:'未用卡密',v:st.cards_unused,s:'存量 '+nfmt(st.cards_total)+' · 今日签发 '+nfmt(st.cards_today)},
+    {l:'市场条目',v:st.market_items,s:'下载 '+nfmt(st.paid_downloads)+' · 安装 '+nfmt(st.install_records)},
+    {l:'授权事件',v:st.auth_events,s:'邮件成功 '+nfmt(st.mail_ok)+' · 失败 '+nfmt(st.mail_fail)}
+  ];
+  const kpiHtml=kpis.map(k=>'<div class="kpi'+(k.accent?' accent':'')+'"><div class="kl">'+esc(k.l)+'</div><div class="kval">'+nfmt(k.v)+'</div><div class="ks">'+esc(k.s)+'</div></div>').join('');
+  const logs=audit.ok?(audit.logs||[]):[];
+  const chart=renderChart(logs);
+  const comp=renderComposition(st);
+  const metricstrip=renderMetricStrip(st);
+  const expiringHtml=renderExpiring(users.ok?(users.users||[]):[],users.ok,users.message);
+  const auditHtml=renderRecentAudit(logs,audit.ok,audit.message);
+  const mst=mkt.ok?(mkt.stats||{}):{};
+  main.innerHTML='<div class="page">'
+    +'<div class="panel"><div class="kpis">'+kpiHtml+'</div></div>'
+    +'<div class="dash-top">'
+      +'<div class="panel"><div class="ph"><span class="lbl">授权活动</span><span class="hint">近 14 天 · 审计日志</span><div class="right"><div class="legend"><span class="a"><i></i>成功</span><span class="b"><i></i>失败</span></div></div></div>'+chart+'</div>'
+      +'<div class="panel"><div class="ph"><span class="lbl">运营构成</span><span class="hint">实时</span></div>'+comp+'<div class="quick">'
+        +'<button class="qbtn" type="button" data-nav="cards">'+ICONS.cards+'<span>签发卡密</span></button>'
+        +'<button class="qbtn" type="button" data-act="market-new">'+ICONS.plus+'<span>新增商城条目</span></button>'
+        +'<button class="qbtn" type="button" data-nav="settings">'+ICONS.key+'<span>轮换管理密钥</span></button>'
+        +'<button class="qbtn" type="button" data-nav="ops">'+ICONS.ops+'<span>运维健康检查</span></button>'
+      +'</div><div class="marketline"><span>商城</span><b>'+nfmt(mst.items)+'</b><span>下载</span><b>'+nfmt(mst.downloads)+'</b><span>安装</span><b>'+nfmt(mst.installs)+'</b><span class="grow" style="flex:1"></span><button class="linkbtn" type="button" data-nav="market">管理商城</button></div></div>'
+    +'</div>'
+    +'<div class="panel" aria-label="运营指标"><div class="metricstrip">'+metricstrip+'</div></div>'
+    +'<div class="dash-bottom">'
+      +'<div class="panel"><div class="ph"><span class="lbl">到期提醒</span><span class="hint">7 天内到期与已过期会员</span><div class="right"><button class="linkbtn" type="button" data-nav="users">用户管理</button></div></div>'+expiringHtml+'</div>'
+      +'<div class="panel"><div class="ph"><span class="lbl">最近审计</span><span class="hint">最近 8 条</span><div class="right"><button class="linkbtn" type="button" data-nav="audit">全部审计</button></div></div>'+auditHtml+'</div>'
+    +'</div>'
+  +'</div>';
+  updateHeaderEnv();updateStatus();
+}
+function renderChart(logs){
+  const days=14,map={};
+  const today=new Date();today.setHours(0,0,0,0);
+  const buckets=[];
+  for(let i=days-1;i>=0;i--){
+    const d=new Date(today);d.setDate(today.getDate()-i);
+    const key=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    const b={key,label:(d.getMonth()+1)+'-'+pad(d.getDate()),ok:0,err:0};
+    map[key]=b;buckets.push(b);
+  }
+  logs.forEach(x=>{
+    const d=new Date(Number(x.created_at)*1000);if(Number.isNaN(d.getTime()))return;
+    const key=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    const b=map[key];if(!b)return;
+    const r=String(x.result||'');
+    if(['ok','sent','success','installed'].includes(r))b.ok++;else b.err++;
+  });
+  const max=Math.max(1,...buckets.map(b=>b.ok+b.err));
+  const ticks=[max,Math.round(max/2),0];
+  const total=buckets.reduce((a,b)=>a+b.ok+b.err,0);
+  let bars='',labels='';
+  buckets.forEach((b,i)=>{
+    const t=b.ok+b.err;
+    const ho=t?Math.max(2,Math.round(b.ok/max*100)):0;
+    const he=t?Math.max(b.err?2:0,Math.round(b.err/max*100)):0;
+    bars+='<div class="cbar'+(t?'':' zero')+'" title="'+b.label+' · 成功 '+b.ok+' · 失败 '+b.err+'" aria-label="'+b.label+' 成功 '+b.ok+' 失败 '+b.err+'">'
+      +(he?'<span class="seg err" style="height:'+he+'%"></span>':'')
+      +(ho?'<span class="seg ok" style="height:'+ho+'%"></span>':'')
+      +'</div>';
+    labels+='<span class="'+(i%2===0?('xl'+(i%4===2?' xm':'')):(i===days-1?'xlast':''))+'">'+(i%2===0||i===days-1?b.label:'')+'</span>';
+  });
+  return '<div class="chartwrap" role="img" aria-label="近 14 天授权活动，共 '+total+' 条">'
+    +'<div class="chart-y">'+ticks.map(t=>'<span>'+t+'</span>').join('')+'</div>'
+    +'<div class="chart-plot">'+bars+(total?'':'<div class="chart-empty">近 14 天没有审计事件</div>')+'</div>'
+    +'<div class="chart-x">'+labels+'</div></div>';
+}
+function compRow(label,a,b,c,note){
+  const p=pct(a,b);
+  return '<div class="comp-row"><div class="comp-top"><span>'+esc(label)+'</span><span><b>'+esc(note)+'</b><span class="pct">'+p+'%</span></span></div><div class="track"><i class="'+(c||'')+'" style="width:'+p+'%"></i></div></div>';
+}
+function renderComposition(st){
+  return '<div class="comp">'
+    +compRow('会员占比',st.members,st.users,'',nfmt(st.members)+' / '+nfmt(st.users))
+    +compRow('60 分钟在线',st.online_60m,st.users,'info',nfmt(st.online_60m)+' / '+nfmt(st.users))
+    +compRow('未用卡密',st.cards_unused,st.cards_total,'ok',nfmt(st.cards_unused)+' / '+nfmt(st.cards_total))
+    +compRow('邮件送达',st.mail_ok,Number(st.mail_ok||0)+Number(st.mail_fail||0),'',nfmt(st.mail_ok)+' / '+nfmt(Number(st.mail_ok||0)+Number(st.mail_fail||0)))
+    +'</div>';
+}
+function renderMetricStrip(st){
+  const metrics=[
+    ['今日注册',st.today_regs],['7 日注册',st.weekly_regs],['禁用账号',st.disabled],['7 日到期',st.expiring_7d],
+    ['已过期',st.expired],['卡密存量',st.cards_total],['今日签发',st.cards_today],['付费下载',st.paid_downloads],
+    ['安装记录',st.install_records],['管理会话',st.admin_sessions]
+  ];
+  return metrics.map(([l,v])=>'<div class="m"><div class="ml">'+esc(l)+'</div><div class="mv">'+nfmt(v)+'</div></div>').join('');
+}
+function renderExpiring(users,ok,msg){
+  if(!ok)return errorState('到期列表加载失败',msg||'','refresh');
+  const now=Date.now()/1000;
+  const soon=users.filter(x=>x.expiring_soon);
+  const expired=users.filter(x=>x.plan==='member'&&x.expires_at&&Number(x.expires_at)<=now);
+  if(!soon.length&&!expired.length)return emptyState('未来 7 天没有到期会员','已过期与 7 日内到期的会员会出现在这里，可直接加时续订。');
+  const rows=[...soon.map(x=>({x,tag:'7 日内到期',cls:'warn'})),...expired.map(x=>({x,tag:'已过期',cls:'err'}))].slice(0,30);
+  return '<div class="tblwrap" style="max-height:248px"><table class="tbl"><caption class="sr-only">即将到期与已过期会员</caption><thead><tr><th>邮箱</th><th>套餐</th><th>到期时间</th><th>状态</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+    +rows.map(o=>'<tr><td class="strong">'+esc(o.x.email)+'</td><td>'+planText(o.x.plan)+'</td><td class="mono">'+fmt(o.x.expires_at)+'</td><td><span class="st '+o.cls+'">'+esc(o.tag)+'</span></td><td style="text-align:right"><button class="linkbtn" type="button" data-act="user-extend" data-email="'+attr(o.x.email)+'">加时</button></td></tr>').join('')
+    +'</tbody></table></div><div class="pfoot" style="border-top:1px solid var(--line);padding:8px 12px;font-size:10.5px;color:var(--paper-faint)">共 '+soon.length+' 例即将到期 · '+expired.length+' 例已过期'+(rows.length<soon.length+expired.length?'（仅显示前 30）':'')+'</div>';
+}
+function renderRecentAudit(logs,ok,msg){
+  if(!ok)return errorState('审计加载失败',msg||'','refresh');
+  const rows=logs.slice(0,8);
+  if(!rows.length)return emptyState('暂无审计记录','登录、注册、管理操作与邮件事件都会记录在这里。');
+  return '<div class="tblwrap" style="max-height:248px"><table class="tbl"><caption class="sr-only">最近审计记录</caption><thead><tr><th>时间</th><th>对象</th><th>场景</th><th>结果</th></tr></thead><tbody>'
+    +rows.map(x=>'<tr><td class="mono" title="'+attr(fmt(x.created_at))+'">'+esc(rel(x.created_at))+'</td><td><span class="trunc" title="'+attr(x.email)+'">'+esc(x.email||'—')+'</span></td><td>'+sceneTag(x.scene)+'</td><td>'+resultText(x.result)+'</td></tr>').join('')
+    +'</tbody></table></div>';
+}
+
+/* ---------- 用户管理 ---------- */
+async function viewUsers(seq){
+  const main=$('#main');
+  const st=S.stats||{};
+  main.innerHTML='<div class="page users-layout">'
+    +'<div class="panel"><div class="mini">'
+      +miniCell('用户总数',st.users)+miniCell('会员',st.members)+miniCell('在线 60 分',st.online_60m)+miniCell('禁用',st.disabled)+miniCell('7 日到期',st.expiring_7d)+miniCell('已过期',st.expired)
+    +'</div>'
+    +'<div class="ph" style="height:auto;min-height:44px;align-items:center"><div class="tabs" role="tablist" aria-label="用户与设备">'
+      +'<button class="tab" role="tab" aria-selected="'+(S.users.tab==='users')+'" type="button" data-act="users-tab" data-tab="users">用户</button>'
+      +'<button class="tab" role="tab" aria-selected="'+(S.users.tab==='devices')+'" type="button" data-act="users-tab" data-tab="devices">设备</button>'
+    +'</div><span class="hint">'+(S.users.tab==='users'?'服务端搜索 / 分页 · /api/admin/users':'跨账号设备绑定 · /api/admin/devices')+'</span></div>'
+    +(S.users.tab==='users'?usersToolbar():devicesToolbar())
+    +'<div id="usersBody" aria-busy="true">'+skeletonRows(6,5)+'</div>'
+    +'</div>'
+    +'<div class="summary-grid">'
+      +'<div class="panel"><div class="ph"><span class="lbl">账号构成</span><span class="hint">实时</span></div><div id="userComp"><div class="comp">'+skeletonRows(3,1)+'</div></div></div>'
+      +'<div class="panel"><div class="ph"><span class="lbl">设备概览</span><span class="hint">最近活跃</span><div class="right"><button class="linkbtn" type="button" data-act="users-tab" data-tab="devices">全部设备</button></div></div><div id="userDevicesBox">'+skeletonRows(3,3)+'</div></div>'
+    +'</div>'
+    +'</div>';
+  if(!S.stats)loadStats(true).then(()=>{if(seq===S.seq)viewUsers(seq)});
+  if(S.users.tab==='users'){loadUsers(seq);loadUserSummary(seq)}else{loadDevices(seq);loadUserSummary(seq)}
+}
+function miniCell(l,v){return '<div class="m"><div class="ml">'+esc(l)+'</div><div class="mv">'+nfmt(v)+'</div></div>'}
+function usersToolbar(){
+  return '<form class="toolbar" data-form="users-filter">'
+    +'<div class="searchwrap">'+ICONS.search+'<input class="input" name="q" value="'+attr(S.users.q)+'" placeholder="搜索邮箱 / 用户 ID / 设备" aria-label="搜索用户"></div>'
+    +'<select class="select" name="status" aria-label="账号状态" style="width:110px"><option value="-1"'+(S.users.status===-1?' selected':'')+'>全部状态</option><option value="1"'+(S.users.status===1?' selected':'')+'>启用</option><option value="0"'+(S.users.status===0?' selected':'')+'>禁用</option></select>'
+    +'<button class="btn pri" type="submit">查询</button><button class="btn ghost" type="button" data-act="users-reset">重置</button>'
+    +'<span class="spacer"></span><button class="btn sec" type="button" data-act="users-export">'+ICONS.download+'导出 CSV</button></form>';
+}
+function devicesToolbar(){
+  return '<form class="toolbar" data-form="devices-filter">'
+    +'<div class="searchwrap">'+ICONS.search+'<input class="input" name="q" value="'+attr(S.devices.q)+'" placeholder="搜索邮箱 / device_id" aria-label="搜索设备"></div>'
+    +'<button class="btn pri" type="submit">查询</button><button class="btn ghost" type="button" data-act="devices-reset">重置</button>'
+    +'<span class="spacer"></span><span class="faint" style="font-size:10.5px">设备解踢会重置 kicked 标记</span></form>';
+}
+async function loadUsers(seq){
+  const box=$('#usersBody'); if(!box)return;
+  if(seq!==S.seq)return;
+  const q=S.users.q,status=S.users.status,page=S.users.page,per=S.users.per;
+  box.setAttribute('aria-busy','true');box.innerHTML=skeletonRows(6,5);
+  const r=await api('/users',{q,status,page,per_page:per});
+  if(seq!==S.seq||!$('#usersBody'))return;
+  box.setAttribute('aria-busy','false');
+  if(!r.ok){box.innerHTML=errorState('用户加载失败',r.message||'','refresh');return}
+  S.users.total=r.total||0;S.users.pages=r.pages||1;S.users.page=r.page||page;
+  const users=r.users||[];
+  box.innerHTML='<div class="tblwrap" style="max-height:calc(100dvh - 330px)"><table class="tbl"><caption class="sr-only">用户列表</caption><thead><tr><th>用户</th><th>套餐</th><th>到期</th><th class="num">积分</th><th>状态</th><th>设备</th><th>注册</th><th>哈希</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+    +(users.length?users.map(x=>'<tr>'
+      +'<td><button class="linkbtn strong" type="button" data-act="user-detail" data-email="'+attr(x.email)+'" style="text-align:left">'+esc(x.email)+'</button><span class="sub">'+esc(x.user_id||'—')+'</span></td>'
+      +'<td>'+planText(x.plan)+(x.expiring_soon?' <span class="st warn" style="font-size:10px">7 日</span>':'')+'</td>'
+      +'<td class="mono">'+fmtDate(x.expires_at)+'</td>'
+      +'<td class="num">'+nfmt(x.credits)+'</td>'
+      +'<td>'+statusBadge(x.status)+'</td>'
+      +'<td class="mono"><span class="trunc" title="'+attr(x.device_id||'')+'" style="max-width:140px">'+esc(shortId(x.device_id||'—',18))+'</span></td>'
+      +'<td class="mono">'+fmtDate(x.created_at)+'</td>'
+      +'<td>'+hashText(x.hash_type)+'</td>'
+      +'<td><div class="rowacts" style="justify-content:flex-end">'
+        +'<button class="linkbtn" type="button" data-act="user-detail" data-email="'+attr(x.email)+'">详情</button>'
+        +'<button class="linkbtn" type="button" data-act="user-extend" data-email="'+attr(x.email)+'">加时</button>'
+        +'<button class="linkbtn" type="button" data-act="user-credits" data-email="'+attr(x.email)+'" data-credits="'+attr(x.credits)+'">积分</button>'
+        +'<button class="linkbtn" type="button" data-act="user-toggle" data-email="'+attr(x.email)+'" data-status="'+attr(x.status)+'">'+(x.status===1?'禁用':'启用')+'</button>'
+        +'<button class="linkbtn danger" type="button" data-act="user-kick" data-email="'+attr(x.email)+'">踢线</button>'
+      +'</div></td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="9">'+emptyState('没有匹配的用户','尝试更换关键词或状态筛选。','<button class="btn sec sm" type="button" data-act="users-reset">重置筛选</button>')+'</td></tr>')
+    +'</tbody></table></div>'
+    +pagerHtml('users',S.users.page,S.users.pages,S.users.total,'位',S.users.per,[20,50,100]);
+}
+async function loadDevices(seq){
+  const box=$('#usersBody'); if(!box||seq!==S.seq)return;
+  const q=S.devices.q,page=S.devices.page,per=S.devices.per;
+  box.setAttribute('aria-busy','true');box.innerHTML=skeletonRows(6,4);
+  const r=await api('/devices',{q,page,per_page:per});
+  if(seq!==S.seq||!$('#usersBody'))return;
+  box.setAttribute('aria-busy','false');
+  if(!r.ok){box.innerHTML=errorState('设备加载失败',r.message||'','refresh');return}
+  S.devices.total=r.total||0;S.devices.pages=r.pages||1;S.devices.page=r.page||page;
+  const devs=r.devices||[];
+  box.innerHTML='<div class="tblwrap" style="max-height:calc(100dvh - 300px)"><table class="tbl"><caption class="sr-only">设备列表</caption><thead><tr><th>账号</th><th>device_id</th><th>首次出现</th><th>最近活跃</th><th>状态</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+    +(devs.length?devs.map(x=>'<tr>'
+      +'<td class="strong">'+esc(x.email)+'</td>'
+      +'<td class="mono"><span class="trunc" title="'+attr(x.device_id)+'" style="max-width:260px">'+esc(x.device_id)+'</span></td>'
+      +'<td class="mono">'+fmt(x.first_seen)+'</td>'
+      +'<td class="mono">'+fmt(x.last_seen)+'</td>'
+      +'<td>'+(Number(x.kicked)===1?'<span class="st err">已踢除</span>':'<span class="st ok">活跃</span>')+'</td>'
+      +'<td style="text-align:right"><button class="linkbtn" type="button" data-act="device-reset" data-email="'+attr(x.email)+'" data-device="'+attr(x.device_id)+'">重置解踢</button></td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="6">'+emptyState('没有匹配的设备','设备在首次授权校验时写入。','<button class="btn sec sm" type="button" data-act="devices-reset">重置筛选</button>')+'</td></tr>')
+    +'</tbody></table></div>'
+    +pagerHtml('devices',S.devices.page,S.devices.pages,S.devices.total,'台',S.devices.per,[50,100,200]);
+}
+async function loadUserSummary(seq){
+  const st=S.stats||{};
+  const comp=$('#userComp');
+  if(comp){
+    comp.innerHTML='<div class="comp">'
+      +compRow('会员占比',st.members,st.users,'',nfmt(st.members)+' / '+nfmt(st.users))
+      +compRow('启用账号',Number(st.users||0)-Number(st.disabled||0),st.users,'ok',nfmt(Number(st.users||0)-Number(st.disabled||0))+' / '+nfmt(st.users))
+      +compRow('60 分钟在线',st.online_60m,st.users,'info',nfmt(st.online_60m)+' / '+nfmt(st.users))
+      +compRow('7 日到期',st.expiring_7d,st.members,'',nfmt(st.expiring_7d)+' / '+nfmt(st.members))
+      +compRow('已过期',st.expired,st.members,'err',nfmt(st.expired)+' / '+nfmt(st.members))
+      +'</div>';
+  }
+  const r=await api('/devices',{page:1,per_page:4});
+  if(seq!==S.seq)return;
+  const box=$('#userDevicesBox');if(!box)return;
+  if(!r.ok){box.innerHTML=emptyState('设备概览不可用',r.message||'');return}
+  const list=r.devices||[],total=r.total||0;
+  const kicked=list.filter(x=>Number(x.kicked)===1).length;
+  const latest=list.length?fmt(list[0].last_seen):'—';
+  box.innerHTML='<div class="mini" style="grid-template-columns:repeat(3,minmax(0,1fr))">'
+    +miniCell('设备总数',total)+miniCell('已踢除',kicked)+'<div class="m"><div class="ml">最近活跃</div><div class="mv" style="font-size:11px">'+esc(latest)+'</div></div></div>'
+    +'<div class="mini-tbl"><table class="tbl"><caption class="sr-only">最近活跃设备</caption><thead><tr><th>账号</th><th>设备</th><th>最近活跃</th><th>状态</th></tr></thead><tbody>'
+    +(list.length?list.map(x=>'<tr><td class="strong"><span class="trunc" title="'+attr(x.email)+'" style="max-width:150px">'+esc(x.email)+'</span></td><td class="mono"><span class="trunc" title="'+attr(x.device_id)+'" style="max-width:150px">'+esc(shortId(x.device_id,20))+'</span></td><td class="mono">'+fmt(x.last_seen)+'</td><td>'+(Number(x.kicked)===1?'<span class="st err">已踢除</span>':'<span class="st ok">活跃</span>')+'</td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="4">'+emptyState('暂无设备','授权校验后写入。')+'</td></tr>')
+    +'</tbody></table></div>';
+}
+async function openUserDetail(email){
+  const sheet=openSheet({title:'用户详情',sub:email,width:700,body:'<div class="loadingline"><span class="spin"></span>加载用户详情…</div>',foot:'<div class="right"><button class="btn sec" type="button" data-act="close-layer">关闭</button></div>'});
+  const r=await api('/user/get',{email});
+  if(!sheet.isConnected)return;
+  if(!r.ok){sheet.querySelector('.sheet-body').innerHTML=errorState('用户详情加载失败',r.message||'',null);return}
+  const u=r.user,d=r.devices||[],t=r.trail||[],c=r.cards||[],dl=r.downloads||[];
+  const body='<div class="detail-head"><div class="avatar" aria-hidden="true">'+ICONS.users+'</div><div class="who"><b>'+esc(u.email)+'</b><span>'+esc(u.user_id)+' · 注册于 '+fmtDate(u.created_at)+'</span></div>'+statusBadge(u.status)+'</div>'
+    +'<div class="kv" style="margin-top:14px">'
+      +kv('套餐',planText(u.plan))+kv('订阅到期','<span class="mono">'+fmt(u.expires_at)+'</span>')
+      +kv('积分','<span class="mono">'+nfmt(u.credits)+'</span>')+kv('密码哈希',hashText(u.hash_type))
+      +kv('注册 IP','<span class="mono">'+esc(u.created_ip||'—')+'</span>')+kv('最近验证','<span class="mono">'+fmt(u.last_verified)+'</span>')
+      +kv('绑定设备','<span class="mono">'+esc(shortId(u.device_id||'—',24))+'</span>')+kv('激活卡密','<span class="mono">'+nfmt(c.length)+'</span>')
+      +kv('下载记录','<span class="mono">'+nfmt(dl.length)+'</span>')+kv('审计轨迹','<span class="mono">'+nfmt(t.length)+'</span>')
+    +'</div>'
+    +sectionTable('设备',d.length+' 条',[
+      ['device_id',x=>'<span class="mono">'+esc(x.device_id)+'</span>'],
+      ['首次出现',x=>'<span class="mono">'+fmt(x.first_seen)+'</span>'],
+      ['最近活跃',x=>'<span class="mono">'+fmt(x.last_seen)+'</span>'],
+      ['状态',x=>Number(x.kicked)===1?'<span class="st err">已踢除</span>':'<span class="st ok">活跃</span>']
+    ],d,'暂无设备记录')
+    +sectionTable('已使用卡密',c.length+' 张',[
+      ['卡密',x=>'<span class="mono">'+esc(x.card)+'</span>'],
+      ['套餐',x=>esc(x.plan)],
+      ['天数',x=>'<span class="num">'+nfmt(x.days)+'</span>'],
+      ['使用时间',x=>'<span class="mono">'+fmt(x.used_at)+'</span>']
+    ],c,'暂无卡密记录')
+    +sectionTable('商城下载',dl.length+' 条',[
+      ['条目',x=>'<span class="mono">'+esc(x.item_id)+'</span>'],
+      ['类型',x=>esc(x.kind||'—')],
+      ['价格',x=>'<span class="num">'+nfmt(x.price)+'</span>'],
+      ['付费',x=>Number(x.paid)===1?'<span class="tag brass">付费</span>':'<span class="tag">免费</span>'],
+      ['时间',x=>'<span class="mono">'+fmt(x.created_at)+'</span>']
+    ],dl,'暂无下载记录')
+    +sectionTable('审计轨迹',t.length+' 条',[
+      ['时间',x=>'<span class="mono">'+fmt(x.created_at)+'</span>'],
+      ['场景',x=>sceneTag(x.scene)],
+      ['IP',x=>'<span class="mono">'+esc(x.ip||'—')+'</span>'],
+      ['结果',x=>resultText(x.result)],
+      ['原因',x=>'<span class="wraptext" style="display:inline-block;max-width:260px;white-space:normal">'+esc(x.reason||'—')+'</span>']
+    ],t,'暂无审计记录');
+  sheet.querySelector('.sheet-body').innerHTML=body;
+  sheet.querySelector('.sheet-foot').innerHTML='<button class="btn sm" type="button" data-act="user-extend" data-reopen="1" data-email="'+attr(email)+'">加时</button>'
+    +'<button class="btn sec sm" type="button" data-act="user-credits" data-reopen="1" data-email="'+attr(email)+'" data-credits="'+attr(u.credits)+'">积分</button>'
+    +'<button class="btn sec sm" type="button" data-act="user-toggle" data-reopen="1" data-email="'+attr(email)+'" data-status="'+attr(u.status)+'">'+(u.status===1?'禁用账号':'启用账号')+'</button>'
+    +'<button class="btn danger sm" type="button" data-act="user-kick" data-reopen="1" data-email="'+attr(email)+'">踢全部设备</button>'
+    +'<div class="right"><button class="btn sec" type="button" data-act="close-layer">关闭</button></div>';
+}
+function kv(l,v){return '<div><b>'+esc(l)+'</b><span>'+v+'</span></div>'}
+function sectionTable(title,hint,cols,rows,emptyText){
+  if(!rows.length)return '<div class="sect"><div class="sect-h"><span class="lbl">'+esc(title)+'</span><span class="hint">'+esc(hint)+'</span></div><div class="mini-tbl">'+emptyState(emptyText,'')+'</div></div>';
+  return '<div class="sect"><div class="sect-h"><span class="lbl">'+esc(title)+'</span><span class="hint">'+esc(hint)+'</span></div><div class="mini-tbl"><table class="tbl"><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'
+    +rows.map(x=>'<tr>'+cols.map(c=>'<td>'+c[1](x)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div></div>';
+}
+function openExtend(email,reopen){
+  openSheet({title:'延长订阅',sub:email,width:460,body:'<form data-form="extend" data-email="'+attr(email)+'" data-reopen="'+(reopen?'1':'0')+'" id="extendForm"><div class="formgrid">'
+    +'<div class="field"><label for="extDays">增加天数</label><input class="input" id="extDays" name="days" type="number" min="1" max="3650" value="30" required><span class="note">1 – 3650 天；从当前到期时间与现在取较晚者顺延。</span></div>'
+    +'<div class="field"><label>快捷选择</label><div class="chips"><button class="chipbtn" type="button" data-act="set-days" data-days="30">+30</button><button class="chipbtn" type="button" data-act="set-days" data-days="90">+90</button><button class="chipbtn" type="button" data-act="set-days" data-days="365">+365</button></div></div>'
+    +'</div><div class="pfoot" style="margin-top:14px;padding:10px 0 0;background:none;border-top:1px solid var(--line);justify-content:flex-end"><button class="btn sec" type="button" data-act="close-layer">取消</button><button class="btn pri" type="submit" id="extendBtn">确认加时</button></div></form>'});
+}
+function openCredits(email,cur,reopen){
+  openSheet({title:'调整积分',sub:email+' · 当前 '+nfmt(cur),width:460,body:'<form data-form="credits" data-email="'+attr(email)+'" data-reopen="'+(reopen?'1':'0')+'" id="creditsForm"><div class="formgrid">'
+    +'<div class="field full"><label for="creditsDelta">调整值（正数加分 / 负数扣分）</label><input class="input" id="creditsDelta" name="delta" type="number" value="100" min="-100000" max="100000" required><span class="note">单次绝对值不超过 100,000；积分不会低于 0。</span></div>'
+    +'<div class="field full"><label>快捷调整</label><div class="chips"><button class="chipbtn" type="button" data-act="add-credits" data-days="100">+100</button><button class="chipbtn" type="button" data-act="add-credits" data-days="-100">−100</button><button class="chipbtn" type="button" data-act="add-credits" data-days="500">+500</button><button class="chipbtn" type="button" data-act="add-credits" data-days="-500">−500</button></div></div>'
+    +'</div><div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px"><button class="btn sec" type="button" data-act="close-layer">取消</button><button class="btn pri" type="submit" id="creditsBtn">保存积分</button></div></form>'});
+}
+
+/* ---------- 卡密管理 ---------- */
+async function viewCards(seq){
+  const main=$('#main');
+  main.innerHTML='<div class="page">'
+    +'<div class="panel"><div class="ph"><span class="lbl">签发卡密</span><span class="hint">单批 1–50 张 · /issue-card</span><div class="right"><span class="faint" style="font-size:10px">作废后不可恢复</span></div></div><div class="pbody">'
+      +'<form data-form="issue" id="issueForm"><div class="issuebar">'
+        +'<div class="field"><label>套餐</label><div class="seg" role="radiogroup" aria-label="套餐">'
+          +'<label><input type="radio" name="plan" value="month" checked><span>月卡</span></label>'
+          +'<label><input type="radio" name="plan" value="quarter"><span>季卡</span></label>'
+          +'<label><input type="radio" name="plan" value="year"><span>年卡</span></label>'
+        +'</div></div>'
+        +'<div class="field narrow"><label for="cardDays">天数</label><input class="input" id="cardDays" name="days" type="number" min="1" max="3650" value="30"></div>'
+        +'<div class="field narrow"><label for="cardCount">数量</label><input class="input" id="cardCount" name="count" type="number" min="1" max="50" value="1"></div>'
+        +'<div class="chips"><button class="chipbtn" type="button" data-act="set-card-days" data-days="30">30 天</button><button class="chipbtn" type="button" data-act="set-card-days" data-days="90">90 天</button><button class="chipbtn" type="button" data-act="set-card-days" data-days="365">365 天</button></div>'
+        +'<div class="actions"><button class="btn pri lg" type="submit" id="issueBtn">签发卡密</button></div>'
+      +'</div></form>'
+      +'<div id="issuedBox" hidden style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px"></div>'
+    +'</div></div>'
+    +'<div class="panel"><div class="mini" id="cardMini">'+cardMiniHtml(S.stats||{})+'</div>'
+      +'<form class="toolbar" data-form="cards-filter">'
+        +'<div class="searchwrap">'+ICONS.search+'<input class="input" name="q" value="'+attr(S.cards.q)+'" placeholder="搜索卡密 / 使用者" aria-label="搜索卡密"></div>'
+        +'<select class="select" name="status" aria-label="卡密状态" style="width:110px"><option value=""'+(S.cards.status===''?' selected':'')+'>全部状态</option><option value="unused"'+(S.cards.status==='unused'?' selected':'')+'>未使用</option><option value="used"'+(S.cards.status==='used'?' selected':'')+'>已使用</option><option value="revoked"'+(S.cards.status==='revoked'?' selected':'')+'>已作废</option></select>'
+        +'<button class="btn pri" type="submit">查询</button><button class="btn ghost" type="button" data-act="cards-reset">重置</button>'
+        +'<span class="spacer"></span><button class="btn sec" type="button" data-act="cards-export">'+ICONS.download+'导出 CSV</button></form>'
+      +'<div id="cardsBody" aria-busy="true">'+skeletonRows(7,5)+'</div></div>'
+    +'<div class="summary-grid" style="align-items:stretch">'
+      +'<div class="panel"><div class="ph"><span class="lbl">卡密构成</span><span class="hint">实时</span></div><div id="cardComp"><div class="comp">'+skeletonRows(3,1)+'</div></div></div>'
+      +'<div class="panel"><div class="ph"><span class="lbl">最近使用</span><span class="hint">最近激活的卡密</span><div class="right"><button class="linkbtn" type="button" data-act="cards-filter-used">查看全部</button></div></div><div id="cardUsedBox">'+skeletonRows(3,3)+'</div></div>'
+    +'</div>'
+    +'</div>';
+  loadStats(true).then(()=>{const m=$('#cardMini');if(m&&S.stats)m.innerHTML=cardMiniHtml(S.stats)});
+  loadCards(seq); loadCardCounts().then(()=>{if(seq===S.seq)loadCardsSummary(seq)});
+}
+function cardMiniHtml(st){
+  return miniCell('卡密总量',st.cards_total)+miniCell('未使用',st.cards_unused)+miniCell('已使用',st.cards_total-st.cards_unused)+miniCell('已作废',S.cards.counts.revoked)+miniCell('今日签发',st.cards_today)+miniCell('授权事件',st.auth_events);
+}
+async function loadCardCounts(){
+  const [u,d,rv]=await Promise.all([
+    api('/cards',{status:'unused',page:1,per_page:1}),
+    api('/cards',{status:'used',page:1,per_page:1}),
+    api('/cards',{status:'revoked',page:1,per_page:1})
+  ]);
+  if(u.ok)S.cards.counts.unused=u.total||0;
+  if(d.ok)S.cards.counts.used=d.total||0;
+  if(rv.ok)S.cards.counts.revoked=rv.total||0;
+  const c=S.cards.counts;const mini=$('#cardMini');
+  if(mini&&u.ok&&d.ok&&rv.ok){
+    mini.innerHTML=miniCell('卡密总量',c.unused+c.used+c.revoked)+miniCell('未使用',c.unused)+miniCell('已使用',c.used)+miniCell('已作废',c.revoked)+miniCell('今日签发',S.stats&&S.stats.cards_today)+miniCell('授权事件',S.stats&&S.stats.auth_events);
+  }
+}
+async function loadCardsSummary(seq){
+  const c=S.cards.counts,total=Number(c.unused||0)+Number(c.used||0)+Number(c.revoked||0);
+  const comp=$('#cardComp');
+  if(comp){
+    comp.innerHTML='<div class="comp">'
+      +compRow('未使用',c.unused,total,'ok',nfmt(c.unused)+' / '+nfmt(total))
+      +compRow('已使用',c.used,total,'info',nfmt(c.used)+' / '+nfmt(total))
+      +compRow('已作废',c.revoked,total,'err',nfmt(c.revoked)+' / '+nfmt(total))
+      +'</div><div class="marketline"><span>今日签发</span><b>'+nfmt(S.stats&&S.stats.cards_today)+'</b><span>卡密总量</span><b>'+nfmt(total)+'</b><span style="flex:1"></span><button class="linkbtn" type="button" data-nav="cards">刷新</button></div>';
+  }
+  const r=await api('/cards',{status:'used',page:1,per_page:4});
+  if(seq!==S.seq)return;
+  const box=$('#cardUsedBox');if(!box)return;
+  if(!r.ok){box.innerHTML=emptyState('最近使用不可用',r.message||'');return}
+  const list=r.cards||[];
+  box.innerHTML='<div class="mini-tbl"><table class="tbl"><caption class="sr-only">最近使用的卡密</caption><thead><tr><th>卡密</th><th>使用者</th><th>使用时间</th></tr></thead><tbody>'
+    +(list.length?list.map(x=>'<tr><td class="mono"><button class="linkbtn" type="button" data-act="copy" data-copy="'+attr(x.card)+'" title="'+attr(x.card)+'" style="font-family:var(--font-mono);font-size:10.5px;max-width:260px;overflow:hidden;text-overflow:ellipsis;display:inline-block;white-space:nowrap;text-align:left">'+esc(x.card)+'</button></td><td><span class="trunc" title="'+attr(x.used_by||'')+'" style="max-width:180px">'+esc(x.used_by||'—')+'</span></td><td class="mono">'+fmt(x.used_at)+'</td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="3">'+emptyState('暂无已使用卡密','激活后的卡密会显示在这里。')+'</td></tr>')
+    +'</tbody></table></div>';
+}
+async function loadCards(seq){
+  const box=$('#cardsBody'); if(!box||seq!==S.seq)return;
+  box.setAttribute('aria-busy','true');box.innerHTML=skeletonRows(7,5);
+  const r=await api('/cards',{q:S.cards.q,status:S.cards.status,page:S.cards.page,per_page:S.cards.per});
+  if(seq!==S.seq||!$('#cardsBody'))return;
+  box.setAttribute('aria-busy','false');
+  if(!r.ok){box.innerHTML=errorState('卡密加载失败',r.message||'','refresh');return}
+  S.cards.total=r.total||0;S.cards.pages=r.pages||1;S.cards.page=r.page||S.cards.page;
+  const list=r.cards||[];
+  box.innerHTML='<div class="tblwrap" style="max-height:calc(100dvh - 390px)"><table class="tbl"><caption class="sr-only">卡密列表</caption><thead><tr><th class="num">ID</th><th>卡密</th><th>套餐</th><th class="num">天数</th><th>签发时间</th><th>使用者</th><th>状态</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+    +(list.length?list.map(x=>'<tr>'
+      +'<td class="num">'+nfmt(x.id)+'</td>'
+      +'<td class="mono"><button class="linkbtn" type="button" data-act="copy" data-copy="'+attr(x.card)+'" title="'+attr(x.card)+'" style="font-family:var(--font-mono);font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;display:inline-block;white-space:nowrap;text-align:left">'+esc(x.card)+'</button></td>'
+      +'<td>'+esc({month:'月卡',quarter:'季卡',year:'年卡'}[x.plan]||x.plan)+'</td>'
+      +'<td class="num">'+nfmt(x.days)+'</td>'
+      +'<td class="mono">'+fmt(x.created_at)+'</td>'
+      +'<td><span class="trunc" title="'+attr(x.used_by||'')+'" style="max-width:190px">'+esc(x.used_by||'—')+'</span>'+(x.used_by?'<span class="sub">使用于 '+fmt(x.used_at)+'</span>':'<span class="sub">尚未激活</span>')+'</td>'
+      +'<td>'+(Number(x.revoked)===1?'<span class="st err">已作废</span>':(x.used_by?'<span class="st ok">已使用</span>':'<span class="st plain">未使用</span>'))+'</td>'
+      +'<td style="text-align:right">'+(Number(x.revoked)===1?'<span class="faint">—</span>':'<button class="linkbtn danger" type="button" data-act="card-revoke" data-id="'+attr(x.id)+'" data-card="'+attr(x.card)+'">作废</button>')+'</td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="8">'+emptyState('没有匹配的卡密','调整筛选条件，或在上方签发一批新卡密。','<button class="btn sec sm" type="button" data-act="cards-reset">重置筛选</button>')+'</td></tr>')
+    +'</tbody></table></div>'+pagerHtml('cards',S.cards.page,S.cards.pages,S.cards.total,'张',S.cards.per,[20,50,100]);
+}
+function showIssued(cards){
+  const box=$('#issuedBox');if(!box)return;
+  ISSUED_CARDS=cards.slice();
+  box.hidden=false;
+  box.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="flabel" style="flex:1">已签发 '+cards.length+' 张</span><button class="btn sec sm" type="button" data-act="copy-issued">'+ICONS.copy+'复制全部</button></div>'
+    +'<pre class="mono" style="margin:0;max-height:180px;overflow:auto;background:var(--ink-600);border:1px solid var(--line);border-radius:4px;padding:9px 10px;font-size:10.5px;line-height:1.7;white-space:pre-wrap;word-break:break-all;color:var(--paper-dim)">'+esc(cards.join('\n'))+'</pre>';
+}
+
+/* ---------- 商城管理 ---------- */
+async function viewMarket(seq){
+  const main=$('#main');
+  main.innerHTML='<div class="page"><div class="panel"><div class="mini" id="marketMini">'+miniCell('条目',0)+miniCell('节点',0)+miniCell('工作流',0)+miniCell('下载',0)+miniCell('安装',0)+miniCell('官方',0)+'</div>'
+    +'<form class="toolbar" data-form="market-filter">'
+      +'<div class="searchwrap">'+ICONS.search+'<input class="input" name="q" value="'+attr(S.market.q)+'" placeholder="搜索标题 / ID / 描述" aria-label="搜索商城条目"></div>'
+      +'<select class="select" name="kind" aria-label="条目类型" style="width:120px"><option value=""'+(S.market.kind===''?' selected':'')+'>全部类型</option><option value="node"'+(S.market.kind==='node'?' selected':'')+'>节点</option><option value="workflow"'+(S.market.kind==='workflow'?' selected':'')+'>工作流</option></select>'
+      +'<button class="btn pri" type="submit">筛选</button><button class="btn ghost" type="button" data-act="market-reset">重置</button>'
+      +'<span class="spacer"></span><button class="btn pri" type="button" data-act="market-new">'+ICONS.plus+'新增条目</button><button class="btn sec" type="button" data-act="market-export">'+ICONS.download+'导出统计</button></form>'
+    +'<div id="marketBody" aria-busy="true">'+skeletonRows(7,5)+'</div></div></div>';
+  const mst=await api('/market/stats',{});
+  if(seq!==S.seq)return;
+  if(mst.ok){const s=mst.stats||{};const mini=$('#marketMini');if(mini)mini.innerHTML=miniCell('条目',s.items)+miniCell('节点',s.by_kind&&s.by_kind.node)+miniCell('工作流',s.by_kind&&s.by_kind.workflow)+miniCell('下载',s.downloads)+miniCell('安装',s.installs)+miniCell('官方',(S.market.items||[]).filter(x=>x.official).length)}
+  loadMarket(seq);
+}
+async function loadMarket(seq){
+  const box=$('#marketBody'); if(!box||seq!==S.seq)return;
+  box.setAttribute('aria-busy','true');box.innerHTML=skeletonRows(7,5);
+  const r=await api('/market/list',{q:S.market.q,kind:S.market.kind});
+  if(seq!==S.seq||!$('#marketBody'))return;
+  box.setAttribute('aria-busy','false');
+  if(!r.ok){box.innerHTML=errorState('商城条目加载失败',r.message||'','refresh');return}
+  S.market.items=r.items||[];S.market.page=1;
+  renderMarketTable();
+}
+function renderMarketTable(){
+  const box=$('#marketBody');if(!box)return;
+  const all=S.market.items||[];const per=S.market.per;const pages=Math.max(1,Math.ceil(all.length/per));const pg=clamp(S.market.page,1,pages);S.market.page=pg;
+  const list=all.slice((pg-1)*per,pg*per);
+  const official=all.filter(x=>x.official).length;
+  box.innerHTML='<div class="tblwrap" style="max-height:calc(100dvh - 290px)"><table class="tbl"><caption class="sr-only">商城条目列表</caption><thead><tr><th>ID</th><th>标题</th><th>类型</th><th>作者</th><th class="num">价格</th><th>版本</th><th>状态</th><th>来源</th><th class="num">下载</th><th class="num">安装</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+    +(list.length?list.map(x=>'<tr>'
+      +'<td class="mono"><span class="trunc" title="'+attr(x.id)+'" style="max-width:150px">'+esc(x.id)+'</span></td>'
+      +'<td><span class="strong">'+esc(x.title)+'</span>'+(x.tags&&x.tags.length?'<span class="sub">'+esc(x.tags.slice(0,4).join(' · '))+'</span>':'')+'</td>'
+      +'<td>'+(x.kind==='workflow'?'<span class="tag info">工作流</span>':'<span class="tag">节点</span>')+'</td>'
+      +'<td><span class="trunc" title="'+attr(x.author||'')+'" style="max-width:100px">'+esc(x.author||'—')+'</span></td>'
+      +'<td class="num">'+nfmt(x.price)+'</td>'
+      +'<td class="mono">'+esc(x.version||'—')+'</td>'
+      +'<td>'+(x.status==='active'?'<span class="st ok">上架</span>':'<span class="st err">下架</span>')+'</td>'
+      +'<td>'+(x.official?'<span class="tag brass">官方</span>':'<span class="tag">社区</span>')+'</td>'
+      +'<td class="num">'+nfmt(x.downloads)+'</td>'
+      +'<td class="num">'+nfmt(x.installs)+'</td>'
+      +'<td style="text-align:right"><div class="rowacts" style="justify-content:flex-end"><button class="linkbtn" type="button" data-act="market-edit" data-id="'+attr(x.id)+'">编辑</button><button class="linkbtn '+(x.status==='active'?'danger':'')+'" type="button" data-act="market-toggle" data-id="'+attr(x.id)+'">'+(x.status==='active'?'下架':'上架')+'</button></div></td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="11">'+emptyState('没有匹配的条目','调整筛选条件，或新增一个节点 / 工作流条目。','<button class="btn sec sm" type="button" data-act="market-new">新增条目</button>')+'</td></tr>')
+    +'</tbody></table></div>'
+    +'<div class="pager"><span>共 <b class="mono">'+nfmt(all.length)+'</b> 条 · 第 <b class="mono">'+pg+'</b> / '+pages+' 页</span><span class="grow"></span><span class="faint">官方 '+official+' · 社区 '+(all.length-official)+'</span>'
+    +'<button class="btn sec" type="button" data-act="market-page" data-page="'+(pg-1)+'" '+(pg<=1?'disabled':'')+' aria-label="上一页">‹</button><button class="btn sec" type="button" data-act="market-page" data-page="'+(pg+1)+'" '+(pg>=pages?'disabled':'')+' aria-label="下一页">›</button></div>';
+  const mini=$('#marketMini');
+  if(mini)mini.innerHTML=miniCell('条目',all.length)+miniCell('节点',all.filter(x=>x.kind==='node').length)+miniCell('工作流',all.filter(x=>x.kind==='workflow').length)+miniCell('下载',all.reduce((a,x)=>a+(Number(x.downloads)||0),0))+miniCell('安装',all.reduce((a,x)=>a+(Number(x.installs)||0),0))+miniCell('官方',official);
+}
+function marketEdit(id){
+  const x=id?(S.market.items||[]).find(i=>i.id===id)||{}:{};
+  const isNew=!id;
+  const body='<form data-form="market-save" id="marketForm" data-id="'+attr(id||'')+'"><div class="formgrid">'
+    +'<div class="field full"><label for="mId">ID'+(isNew?'（留空自动生成）':'')+'</label><input class="input" id="mId" name="id" value="'+attr(x.id||'')+'" '+(isNew?'':'readonly')+'></div>'
+    +'<div class="field full"><label for="mTitle">标题 *</label><input class="input" id="mTitle" name="title" value="'+attr(x.title||'')+'" required></div>'
+    +'<div class="field"><label for="mKind">类型</label><select class="select" id="mKind" name="kind"><option value="node"'+(x.kind!=='workflow'?' selected':'')+'>节点</option><option value="workflow"'+(x.kind==='workflow'?' selected':'')+'>工作流</option></select></div>'
+    +'<div class="field"><label for="mStatus">状态</label><select class="select" id="mStatus" name="status"><option value="active"'+(String(x.status)!=='inactive'?' selected':'')+'>上架</option><option value="inactive"'+(String(x.status)==='inactive'?' selected':'')+'>下架</option></select></div>'
+    +'<div class="field"><label for="mOfficial">来源</label><select class="select" id="mOfficial" name="official"><option value="false"'+(String(x.official)!=='true'?' selected':'')+'>社区</option><option value="true"'+(String(x.official)==='true'?' selected':'')+'>官方</option></select></div>'
+    +'<div class="field"><label for="mPrice">价格（积分）</label><input class="input" id="mPrice" name="price" type="number" min="0" value="'+attr(x.price!=null?x.price:0)+'"></div>'
+    +'<div class="field"><label for="mVersion">版本</label><input class="input" id="mVersion" name="version" value="'+attr(x.version||'1.0.0')+'"></div>'
+    +'<div class="field"><label for="mType">type_id</label><input class="input" id="mType" name="type_id" value="'+attr(x.type_id||'')+'"></div>'
+    +'<div class="field"><label for="mAuthor">作者</label><input class="input" id="mAuthor" name="author" value="'+attr(x.author||'')+'"></div>'
+    +'<div class="field"><label for="mSize">大小（字节）</label><input class="input" id="mSize" name="size" type="number" min="0" value="'+attr(x.size!=null?x.size:0)+'"></div>'
+    +'<div class="field"><label for="mMin">最低客户端版本</label><input class="input" id="mMin" name="min_client_version" value="'+attr(x.min_client_version||'')+'" placeholder="如 0.3.0"></div>'
+    +'<div class="field full"><label for="mUrl">下载 URL</label><input class="input" id="mUrl" name="download_url" value="'+attr(x.download_url||'')+'"></div>'
+    +'<div class="field full"><label for="mSha">sha256</label><input class="input" id="mSha" name="sha256" value="'+attr(x.sha256||'')+'"></div>'
+    +'<div class="field full"><label for="mTags">标签（逗号分隔）</label><input class="input" id="mTags" name="tags" value="'+attr((x.tags||[]).join(','))+'"></div>'
+    +'<div class="field full"><label for="mDesc">描述</label><textarea class="textarea" id="mDesc" name="description" rows="3">'+esc(x.description||'')+'</textarea></div>'
+    +'</div><div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px"><button class="btn sec" type="button" data-act="close-layer">取消</button><button class="btn pri" type="submit" id="marketSaveBtn">保存条目</button></div></form>';
+  openSheet({title:isNew?'新增条目':'编辑条目',sub:isNew?'/market/upsert':(x.id||''),width:680,body});
+}
+
+/* ---------- 审计 ---------- */
+async function viewAudit(seq){
+  const st=S.stats||{};
+  const main=$('#main');
+  main.innerHTML='<div class="page"><div class="panel"><div class="mini">'
+    +miniCell('授权事件',st.auth_events)+miniCell('邮件成功',st.mail_ok)+miniCell('邮件失败',st.mail_fail)+miniCell('管理会话',st.admin_sessions)+miniCell('今日注册',st.today_regs)+miniCell('7 日注册',st.weekly_regs)
+    +'</div><form class="toolbar" data-form="audit-filter">'
+      +'<div class="searchwrap">'+ICONS.search+'<input class="input" name="q" value="'+attr(S.audit.q)+'" placeholder="过滤邮箱 / IP" aria-label="过滤审计日志"></div>'
+      +'<select class="select" name="scene" aria-label="场景" style="width:150px"><option value="">全部场景</option><option value="admin_"'+(S.audit.scene==='admin_'?' selected':'')+'>管理操作</option><option value="login"'+(S.audit.scene==='login'?' selected':'')+'>登录</option><option value="register"'+(S.audit.scene==='register'?' selected':'')+'>注册</option><option value="verify"'+(S.audit.scene==='verify'?' selected':'')+'>授权校验</option><option value="activate"'+(S.audit.scene==='activate'?' selected':'')+'>激活</option><option value="reset_password"'+(S.audit.scene==='reset_password'?' selected':'')+'>重置密码</option><option value="issue_code"'+(S.audit.scene==='issue_code'?' selected':'')+'>发送验证码</option></select>'
+      +'<select class="select" name="result" aria-label="结果" style="width:100px"><option value="">全部结果</option><option value="ok"'+(S.audit.result==='ok'?' selected':'')+'>成功</option><option value="failed"'+(S.audit.result==='failed'?' selected':'')+'>失败</option><option value="sent"'+(S.audit.result==='sent'?' selected':'')+'>已发送</option></select>'
+      +'<button class="btn pri" type="submit">过滤</button><button class="btn ghost" type="button" data-act="audit-reset">重置</button>'
+      +'<span class="spacer"></span><button class="btn sec" type="button" data-act="audit-export">'+ICONS.download+'导出 CSV</button></form>'
+    +'<div id="auditBody" aria-busy="true">'+skeletonRows(8,6)+'</div></div></div>';
+  if(!S.stats)loadStats(true).then(()=>{if(seq===S.seq)viewAudit(seq)});
+  loadAudit(seq);
+}
+async function loadAudit(seq){
+  const box=$('#auditBody'); if(!box||seq!==S.seq)return;
+  box.setAttribute('aria-busy','true');box.innerHTML=skeletonRows(8,6);
+  const r=await api('/audit',{q:S.audit.q,scene:S.audit.scene,result:S.audit.result,page:S.audit.page,per_page:S.audit.per});
+  if(seq!==S.seq||!$('#auditBody'))return;
+  box.setAttribute('aria-busy','false');
+  if(!r.ok){box.innerHTML=errorState('审计加载失败',r.message||'','refresh');return}
+  S.audit.total=r.total||0;S.audit.pages=r.pages||1;S.audit.page=r.page||S.audit.page;
+  const list=r.logs||[];
+  box.innerHTML='<div class="tblwrap" style="max-height:calc(100dvh - 300px)"><table class="tbl"><caption class="sr-only">审计日志</caption><thead><tr><th>时间</th><th>对象</th><th>场景</th><th>IP</th><th>设备</th><th>结果</th><th>原因</th></tr></thead><tbody>'
+    +(list.length?list.map(x=>'<tr>'
+      +'<td class="mono" title="'+attr(fmt(x.created_at))+'">'+fmt(x.created_at)+'</td>'
+      +'<td><span class="trunc" title="'+attr(x.email||'')+'" style="max-width:190px">'+esc(x.email||'—')+'</span></td>'
+      +'<td>'+sceneTag(x.scene)+'</td>'
+      +'<td class="mono">'+esc(x.ip||'—')+'</td>'
+      +'<td class="mono"><span class="trunc" title="'+attr(x.device_id||'')+'" style="max-width:130px">'+esc(shortId(x.device_id||'—',16))+'</span></td>'
+      +'<td>'+resultText(x.result)+'</td>'
+      +'<td><span class="wraptext" title="'+attr(x.reason||'')+'">'+esc(x.reason||'—')+'</span></td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="7">'+emptyState('没有匹配的审计记录','调整关键词、场景或结果筛选。','<button class="btn sec sm" type="button" data-act="audit-reset">重置筛选</button>')+'</td></tr>')
+    +'</tbody></table></div>'+pagerHtml('audit',S.audit.page,S.audit.pages,S.audit.total,'条',S.audit.per,[50,100,200]);
+}
+
+/* ---------- 系统设置 ---------- */
+async function viewSettings(seq){
+  const main=$('#main');
+  main.innerHTML='<div class="page"><div class="settings-grid"><div class="panel">'+skeletonRows(6,2)+'</div><div class="panel">'+skeletonRows(6,2)+'</div></div></div>';
+  const r=await api('/settings/get',{});
+  if(seq!==S.seq)return;
+  if(!r.ok){main.innerHTML='<div class="page"><div class="panel">'+errorState('设置加载失败',r.message||'','refresh')+'</div></div>';return}
+  S.settings=r.settings||{};
+  const s=S.settings;
+  main.innerHTML='<div class="page"><div class="settings-grid">'
+    +'<div class="panel" id="securityPanel"><div class="ph"><span class="lbl">安全</span><span class="hint">管理密钥与登录会话</span><span class="right">'+ICONS.shield+'</span></div>'
+      +'<div class="pbody"><form data-form="rotate-key" id="rotateForm"><div class="formgrid">'
+        +'<div class="field"><label for="newKey">轮换管理密钥</label><input class="input" id="newKey" name="new_key" type="password" autocomplete="new-password" minlength="8" placeholder="新密钥（至少 8 位）"><span class="note">轮换后旧密钥立即失效，当前登录需要重新进入。</span></div>'
+        +'<div class="field" style="justify-content:end"><label>&nbsp;</label><button class="btn danger" type="submit">'+ICONS.key+'轮换并吊销</button></div>'
+      +'</div></form></div>'
+      +'<div class="pbody" style="padding-top:10px"><div class="sect-h"><span class="lbl">管理会话 Token</span><span class="hint">仅展示最近 100 个</span><span class="right"><span class="tag '+(s.admin_key_set?'brass':'')+'">'+(s.admin_key_set?'自定义密钥已设':'使用环境密钥')+'</span></span></div>'
+      +'<div id="tokenBox">'+skeletonRows(3,4)+'</div></div></div>'
+    +'<div class="panel"><div class="ph"><span class="lbl">访问控制</span><span class="hint">IP 白名单</span><span class="right">'+ICONS.device+'</span></div>'
+      +'<div class="pbody"><form data-form="save-access"><div class="field"><label for="allowIps">管理 IP 白名单</label><input class="input" id="allowIps" name="admin_allow_ips" value="'+attr(s.admin_allow_ips||'')+'" placeholder="如 1.2.3.4,127.0.0.1（留空 = 不限制）"><span class="note">逗号分隔；仅在服务端启用校验。留空表示不限制来源 IP。</span></div>'
+      +'<div style="margin-top:12px;display:flex;justify-content:flex-end"><button class="btn pri" type="submit">保存访问控制</button></div></form></div>'
+      +'<div class="pbody" style="padding-top:10px"><div class="sect-h"><span class="lbl">TOTP 二次验证</span><span class="hint">设置项保留，由服务端读取</span></div>'
+      +'<form data-form="save-access" style="display:flex;gap:10px;align-items:end"><div class="field" style="flex:1"><label for="totpSel">状态</label><select class="select" id="totpSel" name="totp_enabled"><option value="false"'+(!s.totp_enabled||s.totp_enabled==='false'?' selected':'')+'>关闭</option><option value="true"'+(s.totp_enabled==='true'?' selected':'')+'>开启</option></select></div><button class="btn sec" type="submit">保存</button></form></div></div>'
+    +'<div class="panel"><div class="ph"><span class="lbl">邮件与套餐</span><span class="hint">SMTP / 套餐模板 / 卡密前缀</span><span class="right">'+ICONS.cards+'</span></div>'
+      +'<div class="pbody"><form data-form="save-mail"><div class="formgrid">'
+        +'<div class="field full"><label for="smtp">SMTP 配置（JSON）</label><textarea class="textarea" id="smtp" name="smtp" rows="3" placeholder=\'{"host":"smtp.qq.com","port":465,"user":"","pass":""}\'>'+esc(s.smtp||'')+'</textarea></div>'
+        +'<div class="field full"><label for="plans">套餐模板（JSON）</label><textarea class="textarea" id="plans" name="plans" rows="3" placeholder=\'{"month":30,"quarter":90,"year":365}\'>'+esc(s.plans||'')+'</textarea></div>'
+        +'<div class="field"><label for="cardPrefix">卡密前缀</label><input class="input" id="cardPrefix" name="card_prefix" value="'+attr(s.card_prefix||'')+'" placeholder="默认 FW"></div>'
+        +'<div class="field" style="justify-content:end"><label>&nbsp;</label><button class="btn pri" type="submit">保存邮件与套餐</button></div>'
+      +'</div></form></div></div>'
+    +'<div class="panel"><div class="ph"><span class="lbl">运维接入</span><span class="hint">本地服务只读代理</span><span class="right">'+ICONS.ops+'</span></div>'
+      +'<div class="pbody"><form data-form="save-ops"><div class="formgrid">'
+        +'<div class="field"><label for="opsBase">本地服务地址</label><input class="input" id="opsBase" name="ops_base" value="'+attr(s.ops_base||'')+'" placeholder="http://127.0.0.1:8788"><span class="note">仅允许回环地址（127.0.0.1 / localhost）。</span></div>'
+        +'<div class="field"><label for="opsToken">本地令牌</label><input class="input" id="opsToken" name="ops_token" type="password" autocomplete="off" placeholder="'+(s.ops_token_set?'已配置，留空保持不变':'X-FW-Local-Token')+'"></div>'
+        +'<div class="field full" style="justify-items:end"><button class="btn pri" type="submit">保存运维接入</button></div>'
+      +'</div></form></div></div>'
+    +'<div class="panel span2"><div class="ph"><span class="lbl">数据备份</span><span class="hint">JSON 全量导出 / 覆盖式恢复</span><span class="right">'+ICONS.download+'</span></div>'
+      +'<div class="pbody"><div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center"><button class="btn pri" type="button" data-act="backup">'+ICONS.download+'导出备份 JSON</button><button class="btn sec" type="button" data-act="restore">恢复备份</button><input type="file" id="restoreFile" accept=".json,application/json" hidden>'
+      +'<span class="faint" style="font-size:10.5px">恢复会覆盖用户 / 卡密 / 审计 / 设备 / 商城数据；服务端会先自动生成数据库快照。</span></div>'
+      +'<div style="margin-top:10px;padding:8px 10px;border-left:2px solid var(--warn);background:var(--warn-soft);font-size:11px;color:var(--paper-dim);line-height:1.6">恢复操作不可撤销。确认文件来源可信，并在操作前导出当前备份。</div></div></div>'
+  +'</div></div>';
+  loadTokens();
+}
+async function loadTokens(){
+  const box=$('#tokenBox');if(!box)return;
+  const r=await api('/tokens',{});
+  if(!box.isConnected)return;
+  if(!r.ok){box.innerHTML=errorState('会话加载失败',r.message||'',null);return}
+  const list=r.tokens||[];
+  box.innerHTML='<div class="tblwrap"><table class="tbl"><caption class="sr-only">管理会话</caption><thead><tr><th>Token</th><th>创建</th><th>过期</th><th>状态</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+    +(list.length?list.map(x=>'<tr><td class="mono">'+esc(maskToken(x.token))+'</td><td class="mono">'+fmt(x.created_at)+'</td><td class="mono">'+fmt(x.expires_at)+'</td><td>'+(x.active?'<span class="st ok">有效</span>':'<span class="st err">已过期</span>')+'</td><td style="text-align:right">'+(x.active?'<button class="linkbtn danger" type="button" data-act="token-revoke" data-token="'+attr(x.token)+'">吊销</button>':'<span class="faint">—</span>')+'</td></tr>').join('')
+      :'<tr class="emptyrow"><td colspan="5">'+emptyState('暂无管理会话','登录后会话会出现在这里。')+'</td></tr>')
+    +'</tbody></table></div>';
+}
+
+/* ---------- 运维视图 ---------- */
+async function viewOps(seq){
+  const main=$('#main');
+  main.innerHTML='<div class="page"><div class="panel"><div class="ph"><span class="lbl">本地服务</span><span class="hint">只读代理 · /api/admin/ops</span><div class="right"><button class="btn sec sm" type="button" data-act="ops-refresh">'+ICONS.refresh+'重新检查</button><button class="linkbtn" type="button" data-nav="settings">配置接入</button></div></div>'
+    +'<div class="pbody"><div id="opsSource" class="faint" style="font-size:11px;margin-bottom:10px">正在确认本地服务地址…</div>'
+    +'<div class="toolbar" style="border:1px solid var(--line);border-radius:4px;padding:8px;background:var(--ink-850)">'
+      +opsBtn('health','健康','/api/health')+opsBtn('queue','队列','/api/queue')+opsBtn('history','历史','/api/history')+opsBtn('plugins','插件','/api/user_nodes/metrics')+opsBtn('llm','LLM 配置','/api/settings/llm')+opsBtn('specs','节点数','/api/object_info')
+    +'</div><div id="opsOut" style="margin-top:12px">'+skeletonRows(5,3)+'</div></div></div>'
+    +'</div><div class="summary-grid">'
+      +'<div class="panel"><div class="ph"><span class="lbl">接入信息</span><span class="hint">本地服务只读代理</span><span class="right">'+ICONS.shield+'</span></div><div class="pbody"><div class="kv" id="opsMeta" style="grid-template-columns:repeat(2,minmax(0,1fr))">'+skeletonRows(2,2)+'</div></div></div>'
+      +'<div class="panel"><div class="ph"><span class="lbl">可用接口</span><span class="hint">仅 GET /api/*</span></div><div class="pbody flush"><table class="tbl"><caption class="sr-only">运维代理接口</caption><thead><tr><th>接口</th><th>路径</th><th>说明</th><th style="text-align:right">操作</th></tr></thead><tbody>'
+        +opsRow('健康','/api/health','服务存活、版本与队列深度','health')
+        +opsRow('队列','/api/queue','任务队列、worker 与并发','queue')
+        +opsRow('历史','/api/history','最近任务执行记录','history')
+        +opsRow('插件','/api/user_nodes/metrics','节点与插件运行状态','plugins')
+        +opsRow('LLM 配置','/api/settings/llm','模型接入参数（只读）','llm')
+        +opsRow('节点数','/api/object_info','ComfyUI 节点类型清单','specs')
+      +'</tbody></table></div></div>'
+    +'</div></div>';
+  const st=await api('/settings/get',{});
+  if(seq!==S.seq)return;
+  let s={};
+  if(st.ok){
+    S.settings=st.settings||{};s=S.settings;
+    const src=$('#opsSource');
+    if(src)src.innerHTML=s.ops_base?('数据源 <span class="mono" style="color:var(--paper-dim)">'+esc(s.ops_base)+'</span> · 令牌 '+(s.ops_token_set?'已配置':'未配置')):'<span class="st warn">未配置本地服务地址</span> · 请到 <button class="linkbtn" type="button" data-nav="settings">系统设置</button> 填写 ops_base 与 ops_token';
+  }
+  const meta=$('#opsMeta');
+  if(meta){
+    meta.innerHTML=kv('数据源',s.ops_base?'<span class="mono">'+esc(s.ops_base)+'</span>':'<span class="st warn">未配置</span>')
+      +kv('本地令牌',s.ops_token_set?'<span class="st ok">已配置</span>':'<span class="st err">未配置</span>')
+      +kv('允许目标','<span class="mono">127.0.0.1 / localhost</span>')
+      +kv('代理超时','<span class="mono">15 秒</span>');
+  }
+  opsCall('health','/api/health',seq);
+}
+function opsRow(label,path,desc,tag){
+  return '<tr><td class="strong">'+esc(label)+'</td><td class="mono">'+esc(path)+'</td><td class="faint">'+esc(desc)+'</td><td style="text-align:right"><button class="linkbtn" type="button" data-act="ops-call" data-tag="'+attr(tag)+'" data-path="'+attr(path)+'">查询</button></td></tr>';
+}
+function opsBtn(tag,label,path){return '<button class="btn '+(S.ops.tag===tag?'pri':'sec')+' sm" type="button" data-act="ops-call" data-tag="'+tag+'" data-path="'+attr(path)+'">'+esc(label)+'</button>'}
+async function opsCall(tag,path,seq){
+  if(seq==null)seq=S.seq;
+  S.ops.tag=tag;S.ops.path=path;
+  $$('.toolbar [data-act="ops-call"]').forEach(b=>b.className='btn '+(b.dataset.tag===tag?'pri':'sec')+' sm');
+  const out=$('#opsOut');if(!out)return;
+  out.innerHTML='<div class="loadingline"><span class="spin"></span>加载 '+esc(path)+' …</div>';
+  const t0=performance.now();
+  const r=await api('/ops',{path});
+  if(seq!==S.seq||!$('#opsOut'))return;
+  const ms=Math.round(performance.now()-t0);
+  if(!r.ok){
+    if(/未配置/.test(r.message||'')){
+      out.innerHTML=emptyState('本地服务尚未接入',(r.message||'')+' 在系统设置中填写 ops_base 与 ops_token 后重新检查。','<div style="display:flex;gap:8px"><button class="btn pri sm" type="button" data-nav="settings">前往系统设置</button><button class="btn sec sm" type="button" data-act="ops-refresh">重新检查</button></div>');
+      return;
+    }
+    out.innerHTML=errorState('本地服务不可用',r.message||'请求失败','ops-refresh');
+    return;
+  }
+  const d=r.data;
+  S.ops.data=d;
+  out.innerHTML='<div class="faint" style="font-size:10.5px;margin-bottom:8px">GET <span class="mono">'+esc(path)+'</span> · HTTP 200 · '+ms+'ms</div>'+renderOpsData(tag,d);
+}
+function renderOpsData(tag,d){
+  if(tag==='health'&&d&&typeof d==='object'){
+    const ok=d.ok===true||d.status==='ok'||d.healthy===true;
+    return '<div class="kv" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><b>状态</b><span>'+(ok?'<span class="st ok">在线</span>':'<span class="st warn">已响应</span>')+'</span></div>'
+      +Object.entries(d).filter(([k])=>k!=='ok').slice(0,20).map(([k,v])=>'<div><b>'+esc(k)+'</b><span class="mono">'+esc(typeof v==='object'?JSON.stringify(v):v)+'</span></div>').join('')+'</div>'
+      +'<details style="margin-top:12px"><summary class="linkbtn" style="cursor:pointer">查看原始 JSON</summary><pre class="mono" style="margin-top:8px;max-height:320px;overflow:auto;background:var(--ink-600);border:1px solid var(--line);border-radius:4px;padding:10px;font-size:10.5px;line-height:1.6;color:var(--paper-dim);white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(d,null,2))+'</pre></details>';
+  }
+  if(tag==='history'){
+    const h=(d&&(d.history||d.items))||[];
+    if(Array.isArray(h)&&h.length){
+      return '<div class="tblwrap" style="max-height:480px"><table class="tbl"><thead><tr><th>task_id</th><th>工作流</th><th>模式</th><th>状态</th><th>完成时间</th></tr></thead><tbody>'
+        +h.slice(0,100).map(x=>'<tr><td class="mono">'+esc(shortId(x.task_id,20))+'</td><td class="mono">'+esc(x.workflow_id||'—')+'</td><td>'+esc(x.mode||'—')+'</td><td>'+(['success','ok','completed'].includes(String(x.status))?'<span class="st ok">'+esc(x.status)+'</span>':'<span class="st err">'+esc(x.status||'—')+'</span>')+'</td><td class="mono">'+fmt(x.finished_at||x.created_at)+'</td></tr>').join('')
+        +'</tbody></table></div>';
+    }
+    return emptyState('暂无历史记录','本地服务返回空列表。')+'<pre class="mono" style="margin-top:8px;max-height:320px;overflow:auto;background:var(--ink-600);border:1px solid var(--line);border-radius:4px;padding:10px;font-size:10.5px;line-height:1.6;color:var(--paper-dim);white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(d,null,2))+'</pre>';
+  }
+  if(tag==='plugins'){
+    const p=(d&&(d.plugins||d.items))||[];
+    if(Array.isArray(p)&&p.length){
+      return '<div class="tblwrap" style="max-height:480px"><table class="tbl"><thead><tr><th>插件</th><th>版本</th><th>状态</th></tr></thead><tbody>'
+        +p.slice(0,200).map(x=>'<tr><td class="mono">'+esc(x.type_id||x.pkg||x.name||'—')+'</td><td class="mono">'+esc(x.version||'—')+'</td><td>'+((['active','ok','enabled'].includes(String(x.state||x.status)))?'<span class="st ok">'+esc(x.state||x.status)+'</span>':'<span class="st plain">'+esc(x.state||x.status||'—')+'</span>')+'</td></tr>').join('')
+        +'</tbody></table></div>';
+    }
+  }
+  if(tag==='specs'&&d&&typeof d==='object'&&!Array.isArray(d)){
+    const keys=Object.keys(d);
+    return '<div class="mini" style="border:1px solid var(--line);border-radius:4px">'+miniCell('节点类型',keys.length)+miniCell('返回字段',Object.keys(d[keys[0]]||{}).length||0)+miniCell('字段样例','—')+'</div>'
+      +'<div class="tblwrap" style="margin-top:10px;max-height:420px"><table class="tbl"><thead><tr><th>节点</th><th>分类</th><th>输出</th></tr></thead><tbody>'
+      +keys.slice(0,60).map(k=>{const v=d[k]||{};return '<tr><td class="mono">'+esc(k)+'</td><td>'+esc(v.category||v.display_name||'—')+'</td><td class="mono">'+esc(Array.isArray(v.output)?v.output.join(', '):(v.output||'—'))+'</td></tr>'}).join('')
+      +'</tbody></table></div><div class="faint" style="font-size:10.5px;margin-top:6px">共 '+keys.length+' 个节点类型'+(keys.length>60?'，仅显示前 60':'')+'</div>'
+      +'<details style="margin-top:10px"><summary class="linkbtn" style="cursor:pointer">查看原始 JSON</summary><pre class="mono" style="margin-top:8px;max-height:320px;overflow:auto;background:var(--ink-600);border:1px solid var(--line);border-radius:4px;padding:10px;font-size:10.5px;line-height:1.6;color:var(--paper-dim);white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(d,null,2))+'</pre></details>';
+  }
+  return '<pre class="mono" style="margin:0;max-height:560px;overflow:auto;background:var(--ink-600);border:1px solid var(--line);border-radius:4px;padding:10px;font-size:10.5px;line-height:1.6;color:var(--paper-dim);white-space:pre-wrap;word-break:break-all">'+esc(JSON.stringify(d,null,2))+'</pre>';
+}
+
+/* ---------- 表单提交 ---------- */
+document.addEventListener('submit',async e=>{
+  const f=e.target.closest('form[data-form]'); if(!f)return;
+  e.preventDefault();
+  const kind=f.dataset.form;
+  if(kind==='login')return doLogin(f);
+  if(!S.token)return;
+  if(kind==='users-filter'){
+    S.users.q=(f.q.value||'').trim();S.users.status=parseInt(f.status.value,10);S.users.page=1;loadUsers(S.seq);return;
+  }
+  if(kind==='devices-filter'){
+    S.devices.q=(f.q.value||'').trim();S.devices.page=1;loadDevices(S.seq);return;
+  }
+  if(kind==='cards-filter'){
+    S.cards.q=(f.q.value||'').trim();S.cards.status=f.status.value;S.cards.page=1;loadCards(S.seq);return;
+  }
+  if(kind==='market-filter'){
+    S.market.q=(f.q.value||'').trim();S.market.kind=f.kind.value;S.market.page=1;loadMarket(S.seq);return;
+  }
+  if(kind==='audit-filter'){
+    S.audit.q=(f.q.value||'').trim();S.audit.scene=f.scene.value;S.audit.result=f.result.value;S.audit.page=1;loadAudit(S.seq);return;
+  }
+  if(kind==='extend')return submitExtend(f);
+  if(kind==='credits')return submitCredits(f);
+  if(kind==='issue')return submitIssue(f);
+  if(kind==='market-save')return submitMarket(f);
+  if(kind==='rotate-key')return submitRotate(f);
+  if(kind==='save-access')return submitSettings(f,['admin_allow_ips','totp_enabled']);
+  if(kind==='save-mail')return submitSettings(f,['smtp','plans','card_prefix']);
+  if(kind==='save-ops')return submitSettings(f,['ops_base','ops_token']);
+});
+async function doLogin(f){
+  if(S.loginBusy)return;
+  const key=(f.admin_key.value||'').trim();
+  const err=$('#loginErr'),btn=$('#loginSubmit');
+  if(!key){showLoginError('请输入管理密钥');return}
+  S.loginBusy=true; if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>登录中…'}
+  const r=await api('/login',{admin_key:key},{auth:false});
+  S.loginBusy=false;
+  if(btn){btn.disabled=false;btn.textContent='进入控制台'}
+  if(!r.ok){showLoginError(r.message||'登录失败');return}
+  S.token=r.token;try{localStorage.setItem(TOKEN_KEY,S.token)}catch(e){}
+  S.expiredNotified=false;
+  const errBox=$('#loginErr');if(errBox)errBox.hidden=true;
+  f.admin_key.value='';
+  showApp();
+  await loadStats(true);
+  if(location.hash&&TITLES[(location.hash.match(/^#\/([a-z]+)/)||[])[1]])route();else go('dash');
+  toast('已登录 · 管理会话 8 小时','ok');
+}
+function showLoginError(msg){
+  const err=$('#loginErr');if(err){err.textContent=msg;err.hidden=false}
+  const k=$('#adminKey');if(k){k.focus();k.select()}
+  toast(msg,'err');
+}
+async function submitExtend(f){
+  const btn=$('#extendBtn');const days=parseInt(f.days.value,10)||0;
+  if(days<1||days>3650){toast('加时时长需为 1–3650 天','err');return}
+  btn.disabled=true;btn.textContent='提交中…';
+  const r=await api('/user/extend',{email:f.dataset.email,days});
+  btn.disabled=false;btn.textContent='确认加时';
+  if(!r.ok){toast(r.message||'加时失败','err');return}
+  toast('已增加 '+r.days+' 天，新到期 '+fmt(r.expires_at),'ok');
+  const reopen=f.dataset.reopen==='1';
+  closeLayers(); await afterUserAction(f.dataset.email); if(reopen)openUserDetail(f.dataset.email);
+}
+async function submitCredits(f){
+  const btn=$('#creditsBtn');const delta=parseInt(f.delta.value,10)||0;
+  if(!delta||Math.abs(delta)>100000){toast('积分调整需非零且在 ±100,000 内','err');return}
+  btn.disabled=true;btn.textContent='保存中…';
+  const r=await api('/user/credits',{email:f.dataset.email,delta});
+  btn.disabled=false;btn.textContent='保存积分';
+  if(!r.ok){toast(r.message||'积分调整失败','err');return}
+  toast('积分已更新为 '+nfmt(r.credits)+'（'+(r.delta>0?'+':'')+r.delta+'）','ok');
+  const reopen=f.dataset.reopen==='1';
+  closeLayers(); await afterUserAction(f.dataset.email); if(reopen)openUserDetail(f.dataset.email);
+}
+async function afterUserAction(email){
+  await loadStats(true);
+  if(S.view==='users'){if(S.users.tab==='users')loadUsers(S.seq);else loadDevices(S.seq);loadUserSummary(S.seq)}
+  else if(S.view==='dash')renderView();
+}
+async function submitIssue(f){
+  const btn=$('#issueBtn');const plan=f.plan.value;const days=parseInt(f.days.value,10)||30;const count=clamp(parseInt(f.count.value,10)||1,1,50);
+  if(days<1||days>3650){toast('签发天数需为 1–3650 天','err');return}
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span>签发中…';
+  const r=await api('/issue-card',{plan,days,count});
+  btn.disabled=false;btn.textContent='签发卡密';
+  if(!r.ok){toast(r.message||'签发失败','err');return}
+  showIssued(r.cards||[]);toast('已签发 '+(r.cards||[]).length+' 张卡密','ok');
+  loadStats(true);loadCards(S.seq);loadCardCounts().then(()=>loadCardsSummary(S.seq));
+}
+async function submitMarket(f){
+  const btn=$('#marketSaveBtn');const o={};
+  ['id','title','kind','status','official','price','version','type_id','author','size','min_client_version','download_url','sha256','tags','description'].forEach(k=>{if(f[k])o[k]=f[k].value});
+  const item={id:(o.id||'').trim(),title:(o.title||'').trim(),kind:o.kind||'node',status:o.status||'active',official:String(o.official)==='true',price:parseInt(o.price,10)||0,version:(o.version||'1.0.0').trim(),type_id:(o.type_id||'').trim(),author:(o.author||'').trim(),size:parseInt(o.size,10)||0,min_client_version:(o.min_client_version||'').trim(),download_url:(o.download_url||'').trim(),sha256:(o.sha256||'').trim(),tags:(o.tags||'').split(',').map(t=>t.trim()).filter(Boolean),description:(o.description||'').trim()};
+  if(!item.title){toast('标题必填','err');return}
+  btn.disabled=true;btn.textContent='保存中…';
+  const r=await api('/market/upsert',{item});
+  btn.disabled=false;btn.textContent='保存条目';
+  if(!r.ok){toast(r.message||'保存失败','err');return}
+  toast('已保存 '+(r.item&&r.item.id||item.id||'条目'),'ok');closeLayers();loadMarket(S.seq);
+}
+async function submitRotate(f){
+  const key=(f.new_key.value||'').trim();if(key.length<8){toast('新密钥至少 8 位','err');return}
+  openModal({title:'轮换管理密钥',body:'轮换后旧密钥与当前管理会话立即失效，需要重新登录。',note:'将写入审计 admin_key_rotate。',danger:true,okLabel:'轮换并退出',onOk:async()=>{
+    const r=await api('/key/rotate',{new_key:key});
+    if(!r.ok){toast(r.message||'轮换失败','err');return}
+    toast(r.message||'管理密钥已轮换','ok');
+    S.token='';try{localStorage.removeItem(TOKEN_KEY)}catch(e){}
+    showLogin('管理密钥已轮换，请使用新密钥登录');
+  }});
+}
+function validJsonOrEmpty(text){
+  const t=(text||'').trim();if(!t)return {ok:true};
+  try{JSON.parse(t);return {ok:true}}catch(e){return {ok:false,message:e.message}}
+}
+async function submitSettings(f,keys){
+  const settings={};
+  keys.forEach(k=>{if(f[k])settings[k]=f[k].value});
+  if('smtp' in settings){const v=validJsonOrEmpty(settings.smtp);if(!v.ok){toast('SMTP JSON 格式错误：'+v.message,'err');return}}
+  if('plans' in settings){const v=validJsonOrEmpty(settings.plans);if(!v.ok){toast('套餐 JSON 格式错误：'+v.message,'err');return}}
+  const btn=f.querySelector('button[type="submit"]');
+  if(btn){btn.disabled=true;btn.dataset.old=btn.textContent;btn.textContent='保存中…'}
+  const r=await api('/settings',{settings});
+  if(btn){btn.disabled=false;btn.textContent=btn.dataset.old||'保存'}
+  if(!r.ok){toast(r.message||'保存失败','err');return}
+  S.settings=r.settings||S.settings;
+  toast('设置已保存','ok');
+  if('ops_base' in settings||'ops_token' in settings){/* 无需刷新整页 */}
+}
+
+/* ---------- 全局事件 ---------- */
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-act],[data-nav]'); if(!el)return;
+  const nav=el.dataset.nav;
+  if(nav){e.preventDefault();closeDrawer();go(nav);return}
+  const act=el.dataset.act;
+  if(!act)return;
+  switch(act){
+    case 'theme':applyTheme(currentTheme()==='light'?'dark':'light');return;
+    case 'toggle-pass':{
+      const inp=$('#adminKey');if(!inp)return;
+      const show=inp.type==='password';inp.type=show?'text':'password';
+      el.setAttribute('aria-pressed',show?'true':'false');el.setAttribute('aria-label',show?'隐藏管理密钥':'显示管理密钥');
+      const ic=el.querySelector('[data-pass-icon]');if(ic)ic.innerHTML=show?ICONS.eyeoff:ICONS.eye;
+      return;
+    }
+    case 'refresh':refreshCurrent();return;
+    case 'logout':{
+      openModal({title:'退出登录',body:'当前管理会话将被注销，需要重新输入管理密钥。',danger:false,okLabel:'退出登录',onOk:async()=>{
+        await api('/logout',{});S.token='';try{localStorage.removeItem(TOKEN_KEY)}catch(e){}
+        closeLayers();showLogin();toast('已退出登录','ok');
+      }});return;
+    }
+    case 'drawer-open':toggleDrawer(true);return;
+    case 'drawer-close':toggleDrawer(false);return;
+    case 'close-layer':closeLayers();return;
+    case 'users-tab':S.users.tab=el.dataset.tab;S.users.page=1;renderView();return;
+    case 'users-reset':S.users={q:'',status:-1,page:1,per:S.users.per,total:0,pages:1,tab:'users'};renderView();return;
+    case 'devices-reset':S.devices={q:'',page:1,per:S.devices.per,total:0,pages:1};renderView();return;
+    case 'users-export':exportUsers(el);return;
+    case 'user-detail':openUserDetail(el.dataset.email);return;
+    case 'user-extend':openExtend(el.dataset.email,el.dataset.reopen==='1');return;
+    case 'user-credits':openCredits(el.dataset.email,el.dataset.credits,el.dataset.reopen==='1');return;
+    case 'user-toggle':confirmUserToggle(el.dataset.email,parseInt(el.dataset.status,10),el.dataset.reopen==='1');return;
+    case 'user-kick':confirmUserKick(el.dataset.email,el.dataset.reopen==='1');return;
+    case 'device-reset':{
+      const r=await api('/device/reset',{email:el.dataset.email,device_id:el.dataset.device});toast(r.ok?'设备已重置解踢':(r.message||'操作失败'),r.ok?'ok':'err');if(r.ok)loadDevices(S.seq);return;
+    }
+    case 'set-days':{const i=$('#extDays');if(i)i.value=el.dataset.days;return}
+    case 'add-credits':{const i=$('#creditsDelta');if(i)i.value=String((parseInt(i.value,10)||0)+parseInt(el.dataset.days,10));return}
+    case 'set-card-days':{const i=$('#cardDays');if(i)i.value=el.dataset.days;return}
+    case 'cards-reset':S.cards={...S.cards,q:'',status:'',page:1};renderView();return;
+    case 'cards-filter-used':S.cards.status='used';S.cards.page=1;renderView();return;
+    case 'cards-export':exportCards();return;
+    case 'card-revoke':confirmCardRevoke(parseInt(el.dataset.id,10),el.dataset.card);return;
+    case 'copy':copyText(el.dataset.copy||'',el.dataset.copyMsg||'已复制到剪贴板');return;
+    case 'copy-issued':copyText(ISSUED_CARDS.join('\n'),'已复制 '+ISSUED_CARDS.length+' 张卡密');return;
+    case 'market-new':marketEdit(null);return;
+    case 'market-edit':marketEdit(el.dataset.id);return;
+    case 'market-toggle':confirmMarketToggle(el.dataset.id);return;
+    case 'market-reset':S.market={...S.market,q:'',kind:'',page:1};renderView();return;
+    case 'market-export':exportMarket();return;
+    case 'market-page':S.market.page=parseInt(el.dataset.page,10)||1;renderMarketTable();return;
+    case 'audit-reset':S.audit={...S.audit,q:'',scene:'',result:'',page:1};renderView();return;
+    case 'audit-export':exportAudit(el);return;
+    case 'token-revoke':confirmTokenRevoke(el.dataset.token);return;
+    case 'backup':doBackup(el);return;
+    case 'restore':pickRestore();return;
+    case 'ops-call':opsCall(el.dataset.tag,el.dataset.path);return;
+    case 'ops-refresh':renderView();return;
+    case 'pg':{
+      const kind=el.dataset.kind,page=parseInt(el.dataset.page,10);
+      if(kind==='users'){S.users.page=page;loadUsers(S.seq)}
+      else if(kind==='devices'){S.devices.page=page;loadDevices(S.seq)}
+      else if(kind==='cards'){S.cards.page=page;loadCards(S.seq)}
+      else if(kind==='audit'){S.audit.page=page;loadAudit(S.seq)}
+      return;
+    }
+    case 'pg-go':{
+      const kind=el.dataset.kind;const inp=$('#go-'+kind);const page=parseInt(inp&&inp.value,10)||1;
+      if(kind==='users'){S.users.page=page;loadUsers(S.seq)}
+      else if(kind==='devices'){S.devices.page=page;loadDevices(S.seq)}
+      else if(kind==='cards'){S.cards.page=page;loadCards(S.seq)}
+      else if(kind==='audit'){S.audit.page=page;loadAudit(S.seq)}
+      return;
+    }
+  }
+});
+document.addEventListener('change',e=>{
+  const el=e.target.closest('[data-change="per"]');if(!el)return;
+  const kind=el.dataset.kind,per=parseInt(el.value,10)||50;
+  if(kind==='users'){S.users.per=per;S.users.page=1;loadUsers(S.seq)}
+  else if(kind==='devices'){S.devices.per=per;S.devices.page=1;loadDevices(S.seq)}
+  else if(kind==='cards'){S.cards.per=per;S.cards.page=1;loadCards(S.seq)}
+  else if(kind==='audit'){S.audit.per=per;S.audit.page=1;loadAudit(S.seq)}
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if(layerOpen)closeLayers();else closeDrawer();return}
+  trapFocus(e);
+});
+window.addEventListener('hashchange',()=>{if(S.token)route()});
+window.addEventListener('resize',()=>{if(window.innerWidth>860)closeDrawer()});
+
+/* ---------- 抽屉 ---------- */
+function toggleDrawer(open){
+  const app=$('#app');if(!app)return;
+  app.classList.toggle('drawer-open',open);
+  const btn=$('[data-act="drawer-open"]');if(btn)btn.setAttribute('aria-expanded',open?'true':'false');
+}
+function closeDrawer(){toggleDrawer(false)}
+
+/* ---------- 用户操作 ---------- */
+function confirmUserToggle(email,status,reopen){
+  const disabling=status===1;
+  openModal({title:(disabling?'禁用':'启用')+'账号',body:'<b>'+esc(email)+'</b> 将被'+(disabling?'禁用':'启用')+'。',note:disabling?'禁用后该账号无法登录，授权校验会被拒绝。':'启用后账号可恢复登录与授权校验。',danger:disabling,okLabel:disabling?'禁用账号':'启用账号',onOk:async()=>{
+    const r=await api('/user/toggle',{email});
+    toast(r.ok?(r.status===1?'账号已启用':'账号已禁用'):(r.message||'操作失败'),r.ok?'ok':'err');
+    if(r.ok){await afterUserAction(email);if(reopen)openUserDetail(email)}
+  }});
+}
+function confirmUserKick(email,reopen){
+  openModal({title:'强制设备下线',body:'<b>'+esc(email)+'</b> 的全部设备将被强制下线。',note:'清空绑定设备并标记 devices.kicked=1；下次授权校验会触发 device_kick。',danger:true,okLabel:'全部踢下线',onOk:async()=>{
+    const r=await api('/user/kick',{email});
+    toast(r.ok?(r.message||'已强制下线'):(r.message||'操作失败'),r.ok?'ok':'err');
+    if(r.ok){await afterUserAction(email);if(reopen)openUserDetail(email)}
+  }});
+}
+function confirmCardRevoke(id,card){
+  openModal({title:'作废卡密 #'+id,body:'卡密 <span class="mono">'+esc(shortId(card,30))+'</span> 将被标记为已作废。',note:'作废后不可恢复；未使用的卡密将无法激活。',danger:true,okLabel:'作废卡密',onOk:async()=>{
+    const r=await api('/card/revoke',{id});toast(r.ok?'卡密已作废':(r.message||'作废失败'),r.ok?'ok':'err');
+    if(r.ok){loadCards(S.seq);loadCardCounts().then(()=>loadCardsSummary(S.seq));loadStats(true)}
+  }});
+}
+function confirmMarketToggle(id){
+  const x=(S.market.items||[]).find(i=>i.id===id);if(!x)return;
+  const next=x.status==='active'?'inactive':'active';
+  openModal({title:(next==='active'?'上架':'下架')+'条目',body:'<b>'+esc(x.title)+'</b>（<span class="mono">'+esc(id)+'</span>）将'+(next==='active'?'重新上架':'下架')+'。',note:next==='inactive'?'下架后客户端 download-auth 会拒绝该条目（item_disabled）。':'上架后客户端可重新下载与安装。',danger:next==='inactive',okLabel:next==='active'?'上架':'下架',onOk:async()=>{
+    const r=await api('/market/upsert',{item:{id,status:next}});toast(r.ok?(next==='active'?'条目已上架':'条目已下架'):(r.message||'操作失败'),r.ok?'ok':'err');
+    if(r.ok)loadMarket(S.seq);
+  }});
+}
+function confirmTokenRevoke(token){
+  openModal({title:'吊销管理会话',body:'Token <span class="mono">'+esc(maskToken(token))+'</span> 将立即失效。',note:'不能吊销当前登录所用的会话。',danger:true,okLabel:'吊销会话',onOk:async()=>{
+    const r=await api('/token/revoke',{token});toast(r.ok?'会话已吊销':(r.message||'吊销失败'),r.ok?'ok':'err');if(r.ok)loadTokens();
+  }});
+}
+
+/* ---------- 导出 / 备份 ---------- */
+async function exportUsers(btn){
+  btn.disabled=true;const old=btn.innerHTML;btn.innerHTML='<span class="spin"></span>导出中…';
+  const rows=[];let page=1,total=0,got=0;
+  do{
+    const r=await api('/users',{q:S.users.q,status:S.users.status,page,per_page:200});
+    if(!r.ok){toast(r.message||'导出失败','err');break}
+    total=r.total||0;const us=r.users||[];rows.push(...us);got+=us.length;page++;
+    if(!us.length)break;
+  }while(got<total&&page<=Math.ceil(total/200)+1);
+  btn.disabled=false;btn.innerHTML=old;
+  if(!rows.length){toast('没有可导出的用户','warn');return}
+  downloadFile('users.csv',csv([['email','user_id','plan','expires_at','credits','status','device_id','created_at','created_ip','last_verified','hash_type']].concat(rows.map(x=>[x.email,x.user_id,x.plan,x.expires_at,x.credits,x.status,x.device_id,x.created_at,x.created_ip||'',x.last_verified,x.hash_type]))),'text/csv;charset=utf-8');
+  toast('已导出 '+rows.length+' 位用户','ok');
+}
+async function exportCards(){
+  const rows=[];let page=1,total=0,got=0;
+  do{
+    const r=await api('/cards',{q:S.cards.q,status:S.cards.status,page,per_page:500});
+    if(!r.ok){toast(r.message||'导出失败','err');return}
+    total=r.total||0;const list=r.cards||[];rows.push(...list);got+=list.length;page++;
+    if(!list.length)break;
+  }while(got<total&&page<=Math.ceil(total/500)+1);
+  if(!rows.length){toast('没有可导出的卡密','warn');return}
+  downloadFile('cards.csv',csv([['id','card','plan','days','created_at','used_by','used_at','revoked']].concat(rows.map(x=>[x.id,x.card,x.plan,x.days,x.created_at,x.used_by||'',x.used_at||'',x.revoked]))),'text/csv;charset=utf-8');
+  toast('已导出 '+rows.length+' 张卡密','ok');
+}
+async function exportMarket(){
+  const r=await api('/market/list',{q:S.market.q,kind:S.market.kind});
+  if(!r.ok){toast(r.message||'导出失败','err');return}
+  const list=r.items||[];
+  downloadFile('market.csv',csv([['id','title','kind','author','price','version','status','official','downloads','installs','size','min_client_version']].concat(list.map(x=>[x.id,x.title,x.kind,x.author||'',x.price||0,x.version||'',x.status,x.official?'官方':'社区',x.downloads||0,x.installs||0,x.size||0,x.min_client_version||'']))),'text/csv;charset=utf-8');
+  toast('已导出 '+list.length+' 条','ok');
+}
+async function exportAudit(btn){
+  btn.disabled=true;const old=btn.innerHTML;btn.innerHTML='<span class="spin"></span>导出中…';
+  const rows=[];let page=1,total=0,got=0;
+  do{
+    const r=await api('/audit',{q:S.audit.q,scene:S.audit.scene,result:S.audit.result,page,per_page:500});
+    if(!r.ok){toast(r.message||'导出失败','err');break}
+    total=r.total||0;const logs=r.logs||[];rows.push(...logs);got+=logs.length;page++;
+    if(!logs.length)break;
+  }while(got<total&&page<=Math.ceil(total/500)+1&&got<5000);
+  btn.disabled=false;btn.innerHTML=old;
+  if(!rows.length){toast('没有可导出的审计记录','warn');return}
+  downloadFile('audit.csv',csv([['created_at','email','scene','ip','device_id','result','reason']].concat(rows.map(x=>[x.created_at,x.email||'',x.scene,x.ip||'',x.device_id||'',x.result,x.reason||'']))),'text/csv;charset=utf-8');
+  toast('已导出 '+rows.length+' 条审计'+(got>=5000?'（上限 5000）':''),'ok');
+}
+async function doBackup(btn){
+  btn.disabled=true;const old=btn.innerHTML;btn.innerHTML='<span class="spin"></span>导出中…';
+  const r=await api('/backup',{});
+  btn.disabled=false;btn.innerHTML=old;
+  if(!r.ok){toast(r.message||'备份失败','err');return}
+  const d=r.data||{};const d0=new Date();const stamp=d0.getFullYear()+pad(d0.getMonth()+1)+pad(d0.getDate())+pad(d0.getHours())+pad(d0.getMinutes())+pad(d0.getSeconds());
+  downloadFile('frameweave_backup_'+stamp+'.json',JSON.stringify(d),'application/json;charset=utf-8');
+  toast('备份已下载（'+(d.users||[]).length+' 用户 / '+(d.cards||[]).length+' 卡密）','ok');
+}
+function pickRestore(){
+  const input=$('#restoreFile');if(!input)return;
+  input.value='';
+  input.onchange=()=>{
+    const f=input.files&&input.files[0];if(!f)return;
+    f.text().then(txt=>{
+      let data;try{data=JSON.parse(txt)}catch(e){toast('备份文件不是有效 JSON','err');return}
+      if(!data||typeof data!=='object'||!Array.isArray(data.users)||!Array.isArray(data.cards)){toast('备份结构不完整','err');return}
+      const nu=data.users.length,nc=data.cards.length,na=(data.audit||[]).length;
+      openModal({title:'恢复备份数据',body:'将覆盖现有用户 / 卡密 / 审计 / 设备 / 商城数据。',note:'备份内容：用户 '+nu+' · 卡密 '+nc+' · 审计 '+na+' 条。恢复前服务端会自动生成数据库快照，但恢复本身不可撤销。',danger:true,okLabel:'覆盖并恢复',onOk:async()=>{
+        const r=await api('/restore',{data,confirm:'yes-i-understand'});
+        toast(r.ok?(r.message||'备份已恢复'):(r.message||'恢复失败'),r.ok?'ok':'err');
+        if(r.ok){await loadStats(true);renderView()}
+      }});
+    }).catch(()=>toast('读取文件失败','err'));
+  };
+  input.click();
+}
+
+/* ---------- 启动 ---------- */
+(function boot(){
+  applyTheme(currentTheme(),false);
+  try{S.token=localStorage.getItem(TOKEN_KEY)||''}catch(e){S.token=''}
+  const m=(location.hash||'').match(/^#\/([a-z]+)/);if(m&&TITLES[m[1]])S.view=m[1];
+  if(!S.token){showLogin();return}
+  showApp();
+  loadStats(true).then(()=>{route()});
+})();
+</script>
+</body>
+</html>

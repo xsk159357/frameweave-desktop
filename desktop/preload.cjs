@@ -16,7 +16,7 @@ const token = readLocalToken()
 
 contextBridge.exposeInMainWorld('frameweave', {
   backendPort: 8788,
-  version: '0.3.11',
+  version: '0.3.12',
   localToken: token,
   // 运行日志（黑匣子）：渲染进程写 debug.log
   log: (level, msg) => ipcRenderer.send('fw-log', { level, msg }),

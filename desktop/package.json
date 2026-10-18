@@ -1,6 +1,6 @@
 {
   "name": "frameweave-desktop",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
@@ -22,6 +22,7 @@
       "main.cjs",
       "preload.cjs",
       "integrity.json",
+      "build/icon.png",
       {
         "from": "../web/dist",
         "to": "web/dist",

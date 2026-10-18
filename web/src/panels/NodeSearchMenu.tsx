@@ -110,13 +110,13 @@ export function NodeSearchMenu() {
   return (
     <div className="fw-pro-search" style={{
       position: 'fixed', left: x, top: y, width: W, zIndex: 3000,
-      border: '1px solid var(--border-strong)', borderRadius: 13,
-      background: 'var(--glass-strong)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)',
-      boxShadow: 'var(--elev-3), 0 0 24px rgba(124,140,255,.14)',
+      border: '1px solid var(--line-strong)', borderRadius: 6,
+      background: 'var(--ink-700)',
+      boxShadow: 'var(--shadow-2)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       animation: 'fw-pop-in .16s var(--t-ease) both',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
         <Search size={13} color="var(--text-faint)" />
         <input
           ref={inputRef}
@@ -141,14 +141,14 @@ export function NodeSearchMenu() {
               onMouseEnter={() => setActive(i)}
               onClick={() => add(s.type_id)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer',
-                background: i === active ? 'var(--accent-soft)' : 'transparent',
-                border: i === active ? '1px solid var(--accent-strong)' : '1px solid transparent',
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 4, cursor: 'pointer',
+                background: i === active ? 'var(--brass-soft)' : 'transparent',
+                border: i === active ? '1px solid rgba(210,164,94,.35)' : '1px solid transparent',
                 fontSize: 12,
               }}>
               <span style={{
-                width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: col, color: '#fff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800,
+                width: 22, height: 22, borderRadius: 4, flexShrink: 0, background: col + '22', color: col,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, border: '1px solid ' + col + '44',
               }}>
                 {(s.type_id.split('/').pop() || s.title || '?').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '')[0]?.toUpperCase() || '?'}
               </span>
@@ -163,7 +163,7 @@ export function NodeSearchMenu() {
           )
         })}
       </div>
-      <div style={{ padding: '5px 10px', borderTop: '1px solid var(--border)', fontSize: 9.5, color: 'var(--text-faint)', display: 'flex', gap: 10 }}>
+      <div style={{ padding: '5px 10px', borderTop: '1px solid var(--line)', fontSize: 9, color: 'var(--text-faint)', display: 'flex', gap: 10, fontFamily: 'var(--font-mono)' }}>
         <span>↑↓ 选择</span><span>Enter 添加</span><span>Esc 关闭</span>
       </div>
     </div>
